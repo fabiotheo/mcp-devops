@@ -171,6 +171,27 @@ MCP Terminal Assistant can be configured by editing `~/.mcp-terminal/config.json
 - API calls are made only when necessary to analyze complex errors
 - All data is stored locally in `~/.mcp-terminal/`
 
+## 🤖 AI Providers
+
+MCP Terminal Assistant é compatível com múltiplos provedores de IA:
+
+### Claude (Anthropic)
+- Modelos disponíveis: claude-3-7-sonnet, claude-3-5-sonnet, claude-3-haiku
+- Requer uma [chave de API Anthropic](https://console.anthropic.com/)
+- Precisa: `anthropic_api_key`
+
+### GPT (OpenAI)
+- Modelos disponíveis: gpt-4o, gpt-4-turbo, gpt-3.5-turbo
+- Requer uma [chave de API OpenAI](https://platform.openai.com/api-keys)
+- Precisa: `openai_api_key`
+
+### Gemini (Google)
+- Modelos disponíveis: gemini-pro, gemini-pro-vision
+- Requer uma [chave de API Google AI](https://ai.google.dev/)
+- Precisa: `gemini_api_key`
+
+Durante a instalação, você será solicitado a escolher o provedor de IA e fornecer a chave API correspondente.
+
 ## 🧠 How It Works
 
 MCP Terminal Assistant uses a combination of techniques:

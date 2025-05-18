@@ -6,11 +6,13 @@ import SystemDetector from './system_detector.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { execSync } from 'child_process';
+import ModelFactory from './ai_models/model_factory.js';
 
 class MCPAssistant {
     constructor() {
         this.configPath = path.join(process.env.HOME, '.mcp-terminal/config.json');
         this.systemDetector = new SystemDetector();
+        this.aiModel = null;
         this.loadConfig();
     }
 
@@ -19,11 +21,22 @@ class MCPAssistant {
             const config = await fs.readFile(this.configPath, 'utf8');
             this.config = JSON.parse(config);
             
-            this.anthropic = new Anthropic({
-                apiKey: this.config.anthropic_api_key
-            });
+            // Inicializa o modelo de IA com base na configura√ß√£o
+            try {
+                this.aiModel = await ModelFactory.createModel(this.config);
+            } catch (error) {
+                console.error(`‚ùå Erro ao inicializar modelo de IA: ${error.message}`);
+                
+                // Fallback para Claude se configurado
+                if (this.config.anthropic_api_key) {
+                    this.anthropic = new Anthropic({
+                        apiKey: this.config.anthropic_api_key
+                    });
+                }
+            }
+            
         } catch (error) {
-            console.error('L Erro ao carregar configuraÁ„o:', error.message);
+            console.error('‚ùå Erro ao carregar configura√ß√£o:', error.message);
             console.error('Execute: mcp-setup --configure');
             process.exit(1);
         }
@@ -35,54 +48,64 @@ class MCPAssistant {
             const systemContext = this.systemDetector.getSystemContext();
             const currentDir = process.cwd();
             
-            // InformaÁıes adicionais do diretÛrio atual
+            // Informa√ß√µes adicionais do diret√≥rio atual
             const dirInfo = await this.getCurrentDirectoryInfo();
 
-            const prompt = `VocÍ È um assistente especializado em Linux/Unix que ajuda usu·rios a encontrar o comando correto para suas tarefas.
+            // Se estamos usando o novo sistema de modelos
+            if (this.aiModel) {
+                return await this.aiModel.askCommand(question, {
+                    ...systemContext,
+                    currentDir,
+                    dirInfo
+                });
+            }
+            
+            // Fallback para o sistema antigo (Claude direto)
+            const prompt = `Voc√™ √© um assistente especializado em Linux/Unix que ajuda usu√°rios a encontrar o comando correto para suas tarefas.
 
-INFORMA«’ES DO SISTEMA:
+INFORMA√á√ïES DO SISTEMA:
 - OS: ${systemContext.os}
-- DistribuiÁ„o: ${systemContext.distro}
-- Vers„o: ${systemContext.version}
+- Distribui√ß√£o: ${systemContext.distro}
+- Vers√£o: ${systemContext.version}
 - Package Manager: ${systemContext.packageManager}
 - Shell: ${systemContext.shell}
 - Arquitetura: ${systemContext.architecture}
 - Kernel: ${systemContext.kernel}
 - Capacidades: ${systemContext.capabilities.join(', ')}
 
-DIRET”RIO ATUAL: ${currentDir}
+DIRET√ìRIO ATUAL: ${currentDir}
 ${dirInfo}
 
-COMANDOS DISPONÕVEIS NESTE SISTEMA:
+COMANDOS DISPON√çVEIS NESTE SISTEMA:
 ${JSON.stringify(systemContext.commands, null, 2)}
 
-PERGUNTA DO USU¡RIO: ${question}
+PERGUNTA DO USU√ÅRIO: ${question}
 
-INSTRU«’ES:
-1. Analise a pergunta considerando o sistema especÌfico do usu·rio
-2. ForneÁa o comando exato para a distribuiÁ„o/sistema detectado
+INSTRU√á√ïES:
+1. Analise a pergunta considerando o sistema espec√≠fico do usu√°rio
+2. Forne√ßa o comando exato para a distribui√ß√£o/sistema detectado
 3. Explique brevemente o que o comando faz
-4. Se houver variaÁıes por distribuiÁ„o, mencione isso
-5. Inclua opÁıes ˙teis do comando
+4. Se houver varia√ß√µes por distribui√ß√£o, mencione isso
+5. Inclua op√ß√µes √∫teis do comando
 6. Se apropriado, sugira comandos relacionados
 
 FORMATO DA RESPOSTA:
-=' COMANDO:
+üîß COMANDO:
 \`comando exato aqui\`
 
-=› EXPLICA«√O:
-[ExplicaÁ„o clara do que faz]
+üìù EXPLICA√á√ÉO:
+[Explica√ß√£o clara do que faz]
 
-=° OP«’ES ⁄TEIS:
-[VariaÁıes ou opÁıes importantes]
+üí° OP√á√ïES √öTEIS:
+[Varia√ß√µes ou op√ß√µes importantes]
 
-† OBSERVA«’ES:
-[Avisos ou consideraÁıes especiais]
+‚ö†Ô∏è OBSERVA√á√ïES:
+[Avisos ou considera√ß√µes especiais]
 
-Responda de forma direta e pr·tica.`;
+Responda de forma direta e pr√°tica.`;
 
             const response = await this.anthropic.messages.create({
-                model: this.config.model,
+                model: this.config.claude_model || this.config.model || "claude-3-7-sonnet-20250219",
                 max_tokens: 2000,
                 messages: [{
                     role: 'user',
@@ -93,7 +116,7 @@ Responda de forma direta e pr·tica.`;
             return response.content[0].text;
         } catch (error) {
             console.error('Erro ao consultar assistente:', error);
-            return 'L Erro ao conectar com o assistente. Verifique sua configuraÁ„o.';
+            return '‚ùå Erro ao conectar com o assistente. Verifique sua configura√ß√£o.';
         }
     }
 
@@ -101,7 +124,7 @@ Responda de forma direta e pr·tica.`;
         try {
             const stats = await fs.stat('.');
             
-            // Lista alguns arquivos do diretÛrio atual
+            // Lista alguns arquivos do diret√≥rio atual
             let files = [];
             let dirs = [];
             
@@ -111,32 +134,32 @@ Responda de forma direta e pr·tica.`;
                 dirs = entries.filter(e => e.isDirectory()).map(e => e.name).slice(0, 5);
             } catch {}
 
-            // Verifica se È um projeto especÌfico
+            // Verifica se √© um projeto espec√≠fico
             let projectType = '';
             try {
-                if (await fs.access('package.json')) projectType += 'Node.js ';
-                if (await fs.access('Cargo.toml')) projectType += 'Rust ';
-                if (await fs.access('go.mod')) projectType += 'Go ';
-                if (await fs.access('requirements.txt')) projectType += 'Python ';
-                if (await fs.access('Makefile')) projectType += 'Make ';
-                if (await fs.access('.git')) projectType += 'Git ';
+                if (await fs.access('package.json').catch(() => false)) projectType += 'Node.js ';
+                if (await fs.access('Cargo.toml').catch(() => false)) projectType += 'Rust ';
+                if (await fs.access('go.mod').catch(() => false)) projectType += 'Go ';
+                if (await fs.access('requirements.txt').catch(() => false)) projectType += 'Python ';
+                if (await fs.access('Makefile').catch(() => false)) projectType += 'Make ';
+                if (await fs.access('.git').catch(() => false)) projectType += 'Git ';
             } catch {}
 
             return `
-INFORMA«’ES DO DIRET”RIO:
-- Tipo de projeto: ${projectType || 'GenÈrico'}
-- Arquivos: ${files.join(', ') || 'Nenhum visÌvel'}
-- DiretÛrios: ${dirs.join(', ') || 'Nenhum visÌvel'}`;
+INFORMA√á√ïES DO DIRET√ìRIO:
+- Tipo de projeto: ${projectType || 'Gen√©rico'}
+- Arquivos: ${files.join(', ') || 'Nenhum vis√≠vel'}
+- Diret√≥rios: ${dirs.join(', ') || 'Nenhum vis√≠vel'}`;
 
         } catch (error) {
             return '';
         }
     }
 
-    // MÈtodo para executar comando sugerido
+    // M√©todo para executar comando sugerido
     async executeCommand(command, confirm = true) {
         if (confirm) {
-            console.log(`\n= Comando sugerido: ${command}`);
+            console.log(`\nüîç Comando sugerido: ${command}`);
             console.log('Executar? (y/N): ');
             
             const readline = require('readline').createInterface({
@@ -160,7 +183,7 @@ INFORMA«’ES DO DIRET”RIO:
                             resolve(false);
                         }
                     } else {
-                        console.log('Comando n„o executado.');
+                        console.log('Comando n√£o executado.');
                         resolve(false);
                     }
                 });
@@ -168,7 +191,7 @@ INFORMA«’ES DO DIRET”RIO:
         }
     }
 
-    // HistÛrico de comandos sugeridos
+    // Hist√≥rico de comandos sugeridos
     async saveCommandHistory(question, command) {
         const historyPath = path.join(process.env.HOME, '.mcp-terminal/command-history.json');
         
@@ -183,16 +206,32 @@ INFORMA«’ES DO DIRET”RIO:
                 timestamp: new Date().toISOString(),
                 question,
                 command,
-                system: this.systemDetector.systemInfo
+                system: this.systemDetector.systemInfo,
+                provider: this.aiModel ? this.aiModel.getProviderName() : 'anthropic'
             });
 
-            // Manter apenas os ˙ltimos 100
+            // Manter apenas os √∫ltimos 100
             history = history.slice(0, 100);
 
             await fs.writeFile(historyPath, JSON.stringify(history, null, 2));
         } catch (error) {
-            console.error('Erro ao salvar histÛrico:', error);
+            console.error('Erro ao salvar hist√≥rico:', error);
         }
+    }
+    
+    // Retorna informa√ß√µes sobre o provedor de IA atual
+    getProviderInfo() {
+        if (this.aiModel) {
+            return {
+                provider: this.aiModel.getProviderName(),
+                model: this.aiModel.getModelName()
+            };
+        }
+        
+        return {
+            provider: 'Claude (Anthropic)',
+            model: this.config.claude_model || this.config.model || 'claude-3-7-sonnet-20250219'
+        };
     }
 }
 
@@ -202,18 +241,19 @@ async function main() {
     
     if (args.length === 0) {
         console.log(`
-> MCP Terminal Assistant
+ü§ñ MCP Terminal Assistant
 
 USO:
   ask "como listar arquivos por tamanho"
   ask "como encontrar processo usando porta 3000"
   ask "como instalar nodejs"
-  ask --history                    # Ver histÛrico
+  ask --history                    # Ver hist√≥rico
   ask --system-info               # Info do sistema
+  ask --provider-info             # Info do provedor de IA
 
 EXEMPLOS:
   ask "listar todas as pastas por ordem de tamanho em ./"
-  ask "como parar um serviÁo systemd"
+  ask "como parar um servi√ßo systemd"
   ask "comando para ver logs do nginx"
         `);
         process.exit(0);
@@ -225,28 +265,40 @@ EXEMPLOS:
         const historyPath = path.join(process.env.HOME, '.mcp-terminal/command-history.json');
         try {
             const history = JSON.parse(await fs.readFile(historyPath, 'utf8'));
-            console.log('\n=⁄ ⁄ltimos comandos sugeridos:\n');
+            console.log('\nüìö √öltimos comandos sugeridos:\n');
             history.slice(0, 10).forEach((entry, i) => {
                 console.log(`${i + 1}. ${entry.question}`);
-                console.log(`   =ª ${entry.command}`);
-                console.log(`   =≈ ${new Date(entry.timestamp).toLocaleString()}`);
+                console.log(`   üíª ${entry.command}`);
+                console.log(`   üìÖ ${new Date(entry.timestamp).toLocaleString()}`);
+                if (entry.provider) {
+                    console.log(`   ü§ñ ${entry.provider}`);
+                }
                 console.log('');
             });
         } catch {
-            console.log('Nenhum histÛrico encontrado.');
+            console.log('Nenhum hist√≥rico encontrado.');
         }
         return;
     }
 
     if (args[0] === '--system-info') {
         const info = assistant.systemDetector.getSystemContext();
-        console.log('\n=•  InformaÁıes do Sistema:\n');
+        console.log('\nüñ•Ô∏è  Informa√ß√µes do Sistema:\n');
         console.log(JSON.stringify(info, null, 2));
+        return;
+    }
+    
+    if (args[0] === '--provider-info') {
+        const providerInfo = assistant.getProviderInfo();
+        console.log('\nü§ñ Provedor de IA:\n');
+        console.log(`Provedor: ${providerInfo.provider}`);
+        console.log(`Modelo: ${providerInfo.model}`);
+        console.log('\nPara trocar o provedor, execute: node setup.js --configure-model');
         return;
     }
 
     const question = args.join(' ');
-    console.log('> Analisando sua pergunta...\n');
+    console.log('ü§î Analisando sua pergunta...\n');
     
     const response = await assistant.askCommand(question);
     console.log(response);
@@ -257,7 +309,7 @@ EXEMPLOS:
         const command = commandMatch[1];
         await assistant.saveCommandHistory(question, command);
         
-        console.log('\nS Deseja executar o comando agora? (y/N): ');
+        console.log('\n‚ùì Deseja executar o comando agora? (y/N): ');
         const readline = require('readline').createInterface({
             input: process.stdin,
             output: process.stdout
@@ -266,11 +318,11 @@ EXEMPLOS:
         readline.question('', async (answer) => {
             readline.close();
             if (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
-                console.log(`\n∂  Executando: ${command}\n`);
+                console.log(`\n‚ñ∂Ô∏è  Executando: ${command}\n`);
                 try {
                     execSync(command, { stdio: 'inherit' });
                 } catch (error) {
-                    console.error(`\nL Erro: ${error.message}`);
+                    console.error(`\n‚ùå Erro: ${error.message}`);
                 }
             }
         });

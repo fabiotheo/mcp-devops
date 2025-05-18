@@ -1,6 +1,11 @@
 {
+  "ai_provider": "claude",
   "anthropic_api_key": "YOUR_API_KEY_HERE",
+  "openai_api_key": "",
+  "gemini_api_key": "",
   "model": "claude-3-5-haiku-20241022",
+  "openai_model": "gpt-4o",
+  "gemini_model": "gemini-pro",
   "max_calls_per_hour": 100,
   "enable_monitoring": true,
   "enable_assistant": true,

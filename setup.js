@@ -83,6 +83,8 @@ class MCPSetup {
                 "type": "module",
                 "dependencies": {
                     "@anthropic-ai/sdk": "^0.21.1",
+                    "openai": "^4.29.0",
+                    "@google/generative-ai": "^0.2.1",
                     "minimist": "^1.2.8",
                     "chalk": "^5.3.0"
                 }
@@ -103,52 +105,179 @@ class MCPSetup {
         } catch (error) {
             throw new Error('Falha ao instalar dependências npm');
         }
+        
+        // Copiar arquivos de modelos de IA
+        console.log('  📂 Copiando arquivos de modelos de IA...');
+        const aiModelsDir = path.join(this.mcpDir, 'ai_models');
+        
+        try {
+            await fs.mkdir(aiModelsDir, { recursive: true });
+            
+            const sourceDir = path.join(process.cwd(), 'ai_models');
+            const sourceFiles = [
+                'base_model.js', 
+                'claude_model.js', 
+                'openai_model.js', 
+                'gemini_model.js', 
+                'model_factory.js'
+            ];
+            
+            for (const file of sourceFiles) {
+                try {
+                    const content = await fs.readFile(path.join(sourceDir, file), 'utf8');
+                    await fs.writeFile(path.join(aiModelsDir, file), content);
+                } catch (err) {
+                    console.log(`  ⚠ Não foi possível copiar ${file}: ${err.message}`);
+                }
+            }
+            
+            console.log('  ✓ Arquivos de modelo copiados');
+        } catch (error) {
+            console.log(`  ⚠ Aviso: ${error.message}`);
+        }
     }
 
     async configureAPI() {
         console.log('\n🔑 Configurando API...');
         
-        // Verifica se já existe configuração
+        // Carrega template de configuração
+        const templatePath = path.join(process.cwd(), 'config_template.json');
+        let config = {};
+        
         try {
-            const existingConfig = await fs.readFile(this.configPath, 'utf8');
-            const config = JSON.parse(existingConfig);
+            const template = await fs.readFile(templatePath, 'utf8');
+            config = JSON.parse(template);
+        } catch (error) {
+            // Caso o template não seja encontrado, usa configuração padrão
+            config = {
+                "ai_provider": "claude",
+                "anthropic_api_key": "",
+                "openai_api_key": "",
+                "gemini_api_key": "",
+                "claude_model": "claude-3-7-sonnet-20250219",
+                "openai_model": "gpt-4o",
+                "gemini_model": "gemini-pro",
+                "max_calls_per_hour": 100,
+                "enable_monitoring": true,
+                "enable_assistant": true,
+                "monitor_commands": ["npm", "yarn", "git", "docker", "make", "cargo", "go", "apt", "pacman", "systemctl"],
+                "quick_fixes": true,
+                "auto_detect_fixes": false,
+                "log_level": "info",
+                "cache_duration_hours": 24
+            };
+        }
+        
+        // Verifica se já existe configuração
+        let existingConfig = null;
+        try {
+            const existingContent = await fs.readFile(this.configPath, 'utf8');
+            existingConfig = JSON.parse(existingContent);
             
-            if (config.anthropic_api_key && config.anthropic_api_key !== 'YOUR_API_KEY_HERE') {
-                console.log('  ✓ API key já configurada');
-                return;
+            // Preserva configurações existentes
+            if (existingConfig) {
+                config = { ...config, ...existingConfig };
             }
         } catch {}
 
-        // Solicita API key
         const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout
         });
 
-        const apiKey = await new Promise(resolve => {
-            rl.question('🔐 Digite sua Anthropic API key: ', resolve);
+        // Seleciona o provedor de IA
+        const provider = await new Promise(resolve => {
+            console.log('\n📋 Escolha o provedor de IA:');
+            console.log('  1. Claude (Anthropic)');
+            console.log('  2. GPT (OpenAI)');
+            console.log('  3. Gemini (Google)');
+            rl.question('Escolha uma opção (1-3): ', answer => {
+                switch (answer.trim()) {
+                    case '2':
+                        resolve('openai');
+                        break;
+                    case '3':
+                        resolve('gemini');
+                        break;
+                    default:
+                        resolve('claude');
+                }
+            });
         });
+        
+        config.ai_provider = provider;
+        console.log(`  ✓ Provedor selecionado: ${provider}`);
+
+        // Solicita API key apropriada
+        let apiKeyPrompt, apiKeyField;
+        switch (provider) {
+            case 'openai':
+                apiKeyPrompt = '🔐 Digite sua OpenAI API key: ';
+                apiKeyField = 'openai_api_key';
+                break;
+            case 'gemini':
+                apiKeyPrompt = '🔐 Digite sua Google Gemini API key: ';
+                apiKeyField = 'gemini_api_key';
+                break;
+            default:
+                apiKeyPrompt = '🔐 Digite sua Anthropic API key: ';
+                apiKeyField = 'anthropic_api_key';
+        }
+
+        // Preserva a API key existente se disponível
+        if (existingConfig && existingConfig[apiKeyField] && 
+            existingConfig[apiKeyField] !== `YOUR_${apiKeyField.toUpperCase()}_HERE`) {
+            console.log(`  ✓ ${apiKeyField} já configurada`);
+        } else {
+            const apiKey = await new Promise(resolve => {
+                rl.question(apiKeyPrompt, resolve);
+            });
+
+            if (!apiKey || apiKey.length < 10) {
+                rl.close();
+                throw new Error('API key inválida');
+            }
+
+            config[apiKeyField] = apiKey;
+        }
+
+        // Seleciona o modelo específico
+        let modelOptions, modelField;
+        switch (provider) {
+            case 'openai':
+                modelOptions = ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'];
+                modelField = 'openai_model';
+                break;
+            case 'gemini':
+                modelOptions = ['gemini-pro', 'gemini-pro-vision'];
+                modelField = 'gemini_model';
+                break;
+            default:
+                modelOptions = ['claude-3-7-sonnet-20250219', 'claude-3-5-sonnet-20240620', 'claude-3-haiku-20240307'];
+                modelField = 'claude_model';
+        }
+
+        const modelChoice = await new Promise(resolve => {
+            console.log('\n📋 Escolha o modelo específico:');
+            modelOptions.forEach((model, index) => {
+                console.log(`  ${index + 1}. ${model}`);
+            });
+            rl.question(`Escolha uma opção (1-${modelOptions.length}): `, answer => {
+                const index = parseInt(answer.trim()) - 1;
+                if (index >= 0 && index < modelOptions.length) {
+                    resolve(modelOptions[index]);
+                } else {
+                    resolve(modelOptions[0]);
+                }
+            });
+        });
+
+        config[modelField] = modelChoice;
+        console.log(`  ✓ Modelo selecionado: ${modelChoice}`);
 
         rl.close();
 
-        if (!apiKey || apiKey.length < 10) {
-            throw new Error('API key inválida');
-        }
-
-        // Cria configuração
-        const config = {
-            "anthropic_api_key": apiKey,
-            "model": "claude-3-7-sonnet-20250219",
-            "max_calls_per_hour": 100,
-            "enable_monitoring": true,
-            "enable_assistant": true,
-            "monitor_commands": ["npm", "yarn", "git", "docker", "make", "cargo", "go", "apt", "pacman", "systemctl"],
-            "quick_fixes": true,
-            "auto_detect_fixes": false,
-            "log_level": "info",
-            "cache_duration_hours": 24
-        };
-
+        // Salva a configuração
         await fs.writeFile(this.configPath, JSON.stringify(config, null, 2));
         console.log('  ✓ Configuração salva');
     }

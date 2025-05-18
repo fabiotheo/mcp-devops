@@ -6,6 +6,7 @@ import SystemDetector from './system_detector.js';
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
+import ModelFactory from './ai_models/model_factory.js';
 
 class MCPClient {
     constructor() {
@@ -13,6 +14,7 @@ class MCPClient {
         this.cachePath = path.join(process.env.HOME, '.mcp-terminal/cache');
         this.patternsPath = path.join(process.env.HOME, '.mcp-terminal/patterns');
         this.systemDetector = new SystemDetector();
+        this.aiModel = null;
         this.loadConfig();
         this.loadPatterns();
     }
@@ -21,12 +23,22 @@ class MCPClient {
         try {
             const config = await fs.readFile(this.configPath, 'utf8');
             this.config = JSON.parse(config);
-            
-            this.anthropic = new Anthropic({
-                apiKey: this.config.anthropic_api_key
-            });
+
+            // Inicializa o modelo de IA com base na configura√ß√£o
+            try {
+                this.aiModel = await ModelFactory.createModel(this.config);
+            } catch (error) {
+                console.error(`‚ùå Erro ao inicializar modelo de IA: ${error.message}`);
+
+                // Fallback para Claude se configurado
+                if (this.config.anthropic_api_key) {
+                    this.anthropic = new Anthropic({
+                        apiKey: this.config.anthropic_api_key
+                    });
+                }
+            }
         } catch (error) {
-            console.error('L Erro ao carregar configuraÁ„o.');
+            console.error('‚ùå Erro ao carregar configura√ß√£o.');
             process.exit(1);
         }
     }
@@ -49,13 +61,13 @@ class MCPClient {
                 },
                 {
                     pattern: /Module not found: Error: Can't resolve '(.+)'/,
-                    solution: (match) => `MÛdulo '${match[1]}' n„o encontrado.`,
+                    solution: (match) => `M√≥dulo '${match[1]}' n√£o encontrado.`,
                     command: (match) => `npm install ${match[1]}`,
                     confidence: 0.95
                 },
                 {
                     pattern: /npm ERR! peer dep missing/,
-                    solution: "DependÍncia peer n„o instalada.",
+                    solution: "Depend√™ncia peer n√£o instalada.",
                     command: "npm install --save-peer",
                     confidence: 0.8
                 }
@@ -63,19 +75,19 @@ class MCPClient {
             git: [
                 {
                     pattern: /fatal: not a git repository/,
-                    solution: "N„o È um repositÛrio Git.",
+                    solution: "N√£o √© um reposit√≥rio Git.",
                     command: "git init",
                     confidence: 0.95
                 },
                 {
                     pattern: /Your branch is behind .+ by (\d+) commits/,
-                    solution: "Seu branch est· atrasado.",
+                    solution: "Seu branch est√° atrasado.",
                     command: "git pull origin main",
                     confidence: 0.9
                 },
                 {
                     pattern: /nothing to commit, working tree clean/,
-                    solution: "Nenhuma alteraÁ„o para commit.",
+                    solution: "Nenhuma altera√ß√£o para commit.",
                     command: null,
                     confidence: 1.0
                 }
@@ -83,13 +95,13 @@ class MCPClient {
             docker: [
                 {
                     pattern: /docker: Cannot connect to the Docker daemon/,
-                    solution: "Docker daemon n„o est· rodando.",
+                    solution: "Docker daemon n√£o est√° rodando.",
                     command: "sudo systemctl start docker",
                     confidence: 0.95
                 },
                 {
                     pattern: /manifest unknown/,
-                    solution: "Imagem n„o encontrada.",
+                    solution: "Imagem n√£o encontrada.",
                     command: "docker pull <image>",
                     confidence: 0.8
                 }
@@ -97,21 +109,21 @@ class MCPClient {
             systemd: [
                 {
                     pattern: /Failed to start (.+)\.service/,
-                    solution: (match) => `Falha ao iniciar serviÁo ${match[1]}.`,
+                    solution: (match) => `Falha ao iniciar servi√ßo ${match[1]}.`,
                     command: (match) => `sudo systemctl status ${match[1]}`,
                     confidence: 0.9
                 }
             ]
         };
 
-        // Adiciona patterns especÌficos do sistema
+        // Adiciona patterns espec√≠ficos do sistema
         const systemCommands = this.systemDetector.getSystemCommands();
-        
-        if (systemCommands.install.includes('apt')) {
+
+        if (systemCommands.install && systemCommands.install.includes('apt')) {
             this.localPatterns.apt = [
                 {
                     pattern: /E: Unable to locate package (.+)/,
-                    solution: (match) => `Pacote '${match[1]}' n„o encontrado.`,
+                    solution: (match) => `Pacote '${match[1]}' n√£o encontrado.`,
                     command: "sudo apt update",
                     confidence: 0.8
                 },
@@ -124,15 +136,37 @@ class MCPClient {
             ];
         }
 
-        if (systemCommands.install.includes('pacman')) {
+        if (systemCommands.install && systemCommands.install.includes('pacman')) {
             this.localPatterns.pacman = [
                 {
                     pattern: /error: target not found: (.+)/,
-                    solution: (match) => `Pacote '${match[1]}' n„o encontrado.`,
+                    solution: (match) => `Pacote '${match[1]}' n√£o encontrado.`,
                     command: "sudo pacman -Sy",
                     confidence: 0.8
                 }
             ];
+        }
+
+        // Carrega padr√µes de arquivos JSON no diret√≥rio patterns
+        try {
+            const patternFiles = await fs.readdir(this.patternsPath);
+            for (const file of patternFiles) {
+                if (file.endsWith('.json')) {
+                    try {
+                        const content = await fs.readFile(path.join(this.patternsPath, file), 'utf8');
+                        const patternData = JSON.parse(content);
+
+                        if (patternData.patterns && Array.isArray(patternData.patterns)) {
+                            const category = file.replace('.json', '');
+                            this.localPatterns[category] = [...(this.localPatterns[category] || []), ...patternData.patterns];
+                        }
+                    } catch (err) {
+                        console.error(`Erro ao carregar padr√£o ${file}:`, err.message);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Erro ao carregar padr√µes:', error.message);
         }
     }
 
@@ -144,7 +178,7 @@ class MCPClient {
             return;
         }
 
-        // 2. Busca soluÁ„o local
+        // 2. Busca solu√ß√£o local
         const localSolution = await this.analyzeLocally(command, stdout, stderr);
         if (localSolution && localSolution.confidence > 0.7) {
             this.displaySolution(localSolution, 'local');
@@ -159,7 +193,7 @@ class MCPClient {
             return;
         }
 
-        // 4. An·lise com LLM
+        // 4. An√°lise com LLM
         if (this.config.enable_monitoring) {
             const llmSolution = await this.analyzeWithLLM({
                 command, exitCode, stdout, stderr, duration
@@ -179,10 +213,10 @@ class MCPClient {
         // Ignora comandos simples
         const ignoredCommands = ['ls', 'cd', 'pwd', 'clear', 'echo', 'cat'];
         const baseCommand = command.split(' ')[0];
-        
+
         if (ignoredCommands.includes(baseCommand)) return false;
 
-        // Verifica se o comando est· na lista de monitoramento
+        // Verifica se o comando est√° na lista de monitoramento
         const monitorCommands = this.config.monitor_commands || [];
         return monitorCommands.some(cmd => command.startsWith(cmd));
     }
@@ -198,10 +232,10 @@ class MCPClient {
         for (const pattern of this.localPatterns[baseCommand]) {
             const match = output.match(pattern.pattern);
             if (match) {
-                const solution = typeof pattern.solution === 'function' 
-                    ? pattern.solution(match) 
+                const solution = typeof pattern.solution === 'function'
+                    ? pattern.solution(match)
                     : pattern.solution;
-                
+
                 const suggestedCommand = typeof pattern.command === 'function'
                     ? pattern.command(match)
                     : pattern.command;
@@ -222,43 +256,54 @@ class MCPClient {
     async analyzeWithLLM(commandData) {
         try {
             const systemContext = this.systemDetector.getSystemContext();
-            const { command, exitCode, stdout, stderr, duration } = commandData;
 
-            const prompt = `VocÍ È um especialista em Linux que analisa comandos que falharam.
+            // Se estamos usando o novo sistema de modelos
+            if (this.aiModel) {
+                return await this.aiModel.analyzeCommand({
+                    ...commandData,
+                    systemContext
+                });
+            }
+
+            // Fallback para o sistema antigo (Claude direto)
+            // Destructure commandData to avoid redeclaration error
+            const { command: cmdStr, exitCode: exitC, stdout: stdOut, stderr: stdErr, duration: dur } = commandData;
+
+            const prompt = `Voc√™ √© um especialista em Linux que analisa comandos que falharam.
 
 SISTEMA:
 - OS: ${systemContext.os}
-- DistribuiÁ„o: ${systemContext.distro} ${systemContext.version}
+- Distribui√ß√£o: ${systemContext.distro} ${systemContext.version}
 - Package Manager: ${systemContext.packageManager}
 - Shell: ${systemContext.shell}
 
-COMANDO EXECUTADO: ${command}
-EXIT CODE: ${exitCode}
-TEMPO DE EXECU«√O: ${duration}s
+COMANDO EXECUTADO: ${cmdStr}
+EXIT CODE: ${exitC}
+TEMPO DE EXECU√á√ÉO: ${dur}s
 
 STDOUT:
-${stdout || '(vazio)'}
+${stdOut || '(vazio)'}
 
 STDERR:
-${stderr || '(vazio)'}
+${stdErr || '(vazio)'}
 
-AN¡LISE NECESS¡RIA:
+AN√ÅLISE NECESS√ÅRIA:
 1. Identifique o problema principal
 2. Explique a causa do erro
-3. ForneÁa uma soluÁ„o especÌfica para este sistema Linux
-4. Sugira um comando para corrigir (se aplic·vel)
+3. Forne√ßa uma solu√ß√£o espec√≠fica para este sistema Linux
+4. Sugira um comando para corrigir (se aplic√°vel)
 5. Inclua comandos preventivos se relevante
 
 FORMATO DA RESPOSTA:
-= PROBLEMA: [DescriÁ„o clara do problema]
-=‡  SOLU«√O: [ExplicaÁ„o da soluÁ„o]
-=ª COMANDO: [Comando especÌfico para corrigir, se aplic·vel]
-†  PREVEN«√O: [Como evitar no futuro]
+üîç PROBLEMA: [Descri√ß√£o clara do problema]
+üõ†Ô∏è  SOLU√á√ÉO: [Explica√ß√£o da solu√ß√£o]
+üíª COMANDO: [Comando espec√≠fico para corrigir, se aplic√°vel]
+‚ö†Ô∏è  PREVEN√á√ÉO: [Como evitar no futuro]
 
-Seja conciso e especÌfico para o sistema detectado.`;
+Seja conciso e espec√≠fico para o sistema detectado.`;
 
             const response = await this.anthropic.messages.create({
-                model: this.config.model,
+                model: this.config.claude_model || this.config.model || "claude-3-7-sonnet-20250219",
                 max_tokens: 1500,
                 messages: [{
                     role: 'user',
@@ -267,47 +312,47 @@ Seja conciso e especÌfico para o sistema detectado.`;
             });
 
             const analysis = response.content[0].text;
-            
+
             // Extrai comando sugerido da resposta
-            const commandMatch = analysis.match(/=ª COMANDO: (.+?)(?:\n|$)/);
-            const command = commandMatch ? commandMatch[1].replace(/`/g, '').trim() : null;
+            const commandMatch = analysis.match(/üíª COMANDO: (.+?)(?:\n|$)/);
+            const suggestedCommand = commandMatch ? commandMatch[1].replace(/`/g, '').trim() : null;
 
             return {
                 description: analysis,
-                command: command,
+                command: suggestedCommand,
                 confidence: 0.8,
                 category: 'llm_analysis',
-                source: 'anthropic'
+                source: this.aiModel ? this.aiModel.getProviderName() : 'anthropic'
             };
 
         } catch (error) {
-            console.error('Erro na an·lise LLM:', error);
+            console.error('Erro na an√°lise LLM:', error);
             return null;
         }
     }
 
     displaySolution(solution, source) {
         console.log('\n' + '='.repeat(60));
-        console.log('= MCP Terminal Analysis');
+        console.log('üîç MCP Terminal Analysis');
         console.log('='.repeat(60));
-        
+
         if (source === 'local') {
-            console.log('=À SoluÁ„o local encontrada:');
+            console.log('üìã Solu√ß√£o local encontrada:');
         } else if (source === 'cached') {
-            console.log('=æ SoluÁ„o em cache:');
+            console.log('üíæ Solu√ß√£o em cache:');
         } else {
-            console.log('> An·lise IA:');
+            console.log('ü§ñ An√°lise IA:');
         }
 
         console.log('\n' + solution.description);
-        
+
         if (solution.command) {
-            console.log('\n=' Comando sugerido:');
+            console.log('\nüîß Comando sugerido:');
             console.log(`   ${solution.command}`);
-            
+
             if (this.config.quick_fixes && solution.confidence > 0.8) {
-                console.log('\nS Executar automaticamente? (y/N):');
-                // ImplementaÁ„o de execuÁ„o autom·tica seria aqui
+                console.log('\n‚ùì Executar automaticamente? (y/N):');
+                // Implementa√ß√£o de execu√ß√£o autom√°tica seria aqui
             }
         }
 
@@ -318,7 +363,7 @@ Seja conciso e especÌfico para o sistema detectado.`;
         try {
             const hash = this.hashCommand(command, exitCode);
             const cacheFile = path.join(this.cachePath, `${hash}.json`);
-            
+
             const cacheData = {
                 command,
                 exitCode,
@@ -329,7 +374,7 @@ Seja conciso e especÌfico para o sistema detectado.`;
 
             await fs.writeFile(cacheFile, JSON.stringify(cacheData, null, 2));
         } catch (error) {
-            console.error('Erro ao cachear soluÁ„o:', error);
+            console.error('Erro ao cachear solu√ß√£o:', error);
         }
     }
 
@@ -337,11 +382,11 @@ Seja conciso e especÌfico para o sistema detectado.`;
         try {
             const hash = this.hashCommand(command, exitCode);
             const cacheFile = path.join(this.cachePath, `${hash}.json`);
-            
+
             const content = await fs.readFile(cacheFile, 'utf8');
             const cached = JSON.parse(content);
-            
-            // Verifica se n„o est· expirado
+
+            // Verifica se n√£o est√° expirado
             const ageHours = (Date.now() - cached.timestamp) / (1000 * 60 * 60);
             if (ageHours > this.config.cache_duration_hours) {
                 await fs.unlink(cacheFile);
@@ -362,7 +407,7 @@ Seja conciso e especÌfico para o sistema detectado.`;
             .substring(0, 16);
     }
 
-    // MÈtodo para limpar cache antigo
+    // M√©todo para limpar cache antigo
     async cleanOldCache() {
         try {
             const files = await fs.readdir(this.cachePath);
@@ -374,12 +419,12 @@ Seja conciso e especÌfico para o sistema detectado.`;
                 try {
                     const content = await fs.readFile(filePath, 'utf8');
                     const data = JSON.parse(content);
-                    
+
                     if (now - data.timestamp > maxAge) {
                         await fs.unlink(filePath);
                     }
                 } catch {
-                    // Arquivo inv·lido, remove
+                    // Arquivo inv√°lido, remove
                     await fs.unlink(filePath);
                 }
             }
@@ -388,7 +433,7 @@ Seja conciso e especÌfico para o sistema detectado.`;
         }
     }
 
-    // Gera estatÌsticas de uso
+    // Gera estat√≠sticas de uso
     async getStats() {
         try {
             const files = await fs.readdir(this.cachePath);
@@ -404,16 +449,16 @@ Seja conciso e especÌfico para o sistema detectado.`;
                     const filePath = path.join(this.cachePath, file);
                     const content = await fs.readFile(filePath, 'utf8');
                     const data = JSON.parse(content);
-                    
+
                     // Por categoria
                     const category = data.solution.category || 'unknown';
                     stats.byCategory[category] = (stats.byCategory[category] || 0) + 1;
-                    
+
                     // Por comando
                     const baseCommand = data.command.split(' ')[0];
                     stats.byCommand[baseCommand] = (stats.byCommand[baseCommand] || 0) + 1;
-                    
-                    // An·lises recentes
+
+                    // An√°lises recentes
                     stats.recentAnalyses.push({
                         command: data.command,
                         timestamp: data.timestamp,
@@ -422,19 +467,19 @@ Seja conciso e especÌfico para o sistema detectado.`;
                 } catch {}
             }
 
-            // Ordena an·lises recentes
+            // Ordena an√°lises recentes
             stats.recentAnalyses.sort((a, b) => b.timestamp - a.timestamp);
             stats.recentAnalyses = stats.recentAnalyses.slice(0, 10);
 
             return stats;
         } catch (error) {
-            console.error('Erro ao gerar estatÌsticas:', error);
+            console.error('Erro ao gerar estat√≠sticas:', error);
             return null;
         }
     }
 }
 
-// CLI para an·lise manual
+// CLI para an√°lise manual
 async function main() {
     const minimist = (await import('minimist')).default;
     const args = minimist(process.argv.slice(2));
@@ -442,26 +487,26 @@ async function main() {
     const client = new MCPClient();
 
     if (args.clean) {
-        console.log('>˘ Limpando cache antigo...');
+        console.log('üßπ Limpando cache antigo...');
         await client.cleanOldCache();
-        console.log(' Cache limpo!');
+        console.log('‚úÖ Cache limpo!');
         return;
     }
 
     if (args.stats) {
-        console.log('=  EstatÌsticas do MCP:');
+        console.log('üìä Estat√≠sticas do MCP:');
         const stats = await client.getStats();
         if (stats) {
-            console.log(`\n=» Total de soluÁıes: ${stats.totalSolutions}`);
-            console.log('\n=À Por categoria:');
+            console.log(`\nüìà Total de solu√ß√µes: ${stats.totalSolutions}`);
+            console.log('\nüìã Por categoria:');
             Object.entries(stats.byCategory).forEach(([cat, count]) => {
                 console.log(`   ${cat}: ${count}`);
             });
-            console.log('\n=ª Por comando:');
+            console.log('\nüíª Por comando:');
             Object.entries(stats.byCommand).forEach(([cmd, count]) => {
                 console.log(`   ${cmd}: ${count}`);
             });
-            console.log('\n=≈ An·lises recentes:');
+            console.log('\nüìÖ An√°lises recentes:');
             stats.recentAnalyses.forEach((analysis, i) => {
                 const date = new Date(analysis.timestamp).toLocaleString();
                 console.log(`   ${i + 1}. ${analysis.command} (${analysis.source}) - ${date}`);
@@ -470,7 +515,7 @@ async function main() {
         return;
     }
 
-    // An·lise manual
+    // An√°lise manual
     const commandData = {
         command: args.command || 'unknown',
         exitCode: parseInt(args['exit-code']) || 1,

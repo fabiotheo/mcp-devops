@@ -1,0 +1,17 @@
+{
+  "name": "mcp-terminal",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.21.1",
+    "openai": "^4.17.0",
+    "@google/generative-ai": "^0.3.0",
+    "minimist": "^1.2.8",
+    "chalk": "^5.3.0"
+  },
+  "bin": {
+    "mcp-setup": "./setup.js",
+    "ask": "./mcp-assistant.js",
+    "mcp-monitor": "./mcp-client.js"
+  }
+}

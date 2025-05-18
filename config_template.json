@@ -1,0 +1,17 @@
+{
+  "ai_provider": "claude",
+  "anthropic_api_key": "YOUR_ANTHROPIC_API_KEY_HERE",
+  "openai_api_key": "YOUR_OPENAI_API_KEY_HERE",
+  "gemini_api_key": "YOUR_GEMINI_API_KEY_HERE",
+  "claude_model": "claude-3-7-sonnet-20250219",
+  "openai_model": "gpt-4o",
+  "gemini_model": "gemini-pro",
+  "max_calls_per_hour": 100,
+  "enable_monitoring": true,
+  "enable_assistant": true,
+  "monitor_commands": ["npm", "yarn", "git", "docker", "make", "cargo", "go", "apt", "pacman", "systemctl"],
+  "quick_fixes": true,
+  "auto_detect_fixes": false,
+  "log_level": "info",
+  "cache_duration_hours": 24
+}

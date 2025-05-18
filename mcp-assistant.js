@@ -7,6 +7,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { execSync } from 'child_process';
 import ModelFactory from './ai_models/model_factory.js';
+import readline from 'readline';
 
 class MCPAssistant {
     constructor() {
@@ -162,14 +163,14 @@ INFORMAÇÕES DO DIRETÓRIO:
             console.log(`\n🔍 Comando sugerido: ${command}`);
             console.log('Executar? (y/N): ');
             
-            const readline = require('readline').createInterface({
+            const rl = readline.createInterface({
                 input: process.stdin,
                 output: process.stdout
             });
 
             return new Promise((resolve) => {
-                readline.question('', (answer) => {
-                    readline.close();
+                rl.question('', (answer) => {
+                    rl.close();
                     if (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
                         try {
                             const result = execSync(command, { 
@@ -310,13 +311,13 @@ EXEMPLOS:
         await assistant.saveCommandHistory(question, command);
         
         console.log('\n❓ Deseja executar o comando agora? (y/N): ');
-        const readline = require('readline').createInterface({
+        const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout
         });
 
-        readline.question('', async (answer) => {
-            readline.close();
+        rl.question('', async (answer) => {
+            rl.close();
             if (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
                 console.log(`\n▶️  Executando: ${command}\n`);
                 try {

@@ -7,6 +7,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 import ModelFactory from './ai_models/model_factory.js';
+import { createRequire } from 'module';
 
 class MCPClient {
     constructor() {
@@ -481,7 +482,8 @@ Seja conciso e específico para o sistema detectado.`;
 
 // CLI para análise manual
 async function main() {
-    const minimist = (await import('minimist')).default;
+    const require = createRequire(import.meta.url);
+    const minimist = require('minimist');
     const args = minimist(process.argv.slice(2));
 
     const client = new MCPClient();

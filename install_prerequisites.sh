@@ -58,7 +58,7 @@ detect_os() {
         OS=$(uname -s)
         VER=$(uname -r)
     fi
-    
+
     print_message "Sistema detectado: $OS $VER ($ID)"
 }
 
@@ -67,31 +67,40 @@ command_exists() {
     command -v "$@" >/dev/null 2>&1
 }
 
+# Função para usar sudo apenas quando não for root
+maybe_sudo() {
+    if [ "$EUID" -eq 0 ]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
 # Instalar Zsh
 install_zsh() {
     if command_exists zsh; then
         print_success "Zsh já está instalado: $(zsh --version | head -n1)"
         return 0
     fi
-    
+
     print_message "Instalando Zsh..."
-    
+
     case $ID in
         debian|ubuntu|pop|mint|kali)
-            sudo apt-get update
-            sudo apt-get install -y zsh
+            maybe_sudo apt-get update
+            maybe_sudo apt-get install -y zsh
             ;;
         fedora|rhel|centos|rocky|almalinux)
-            sudo dnf install -y zsh
+            maybe_sudo dnf install -y zsh
             ;;
         amzn)
-            sudo yum install -y zsh
+            maybe_sudo yum install -y zsh
             ;;
         arch|manjaro|endeavouros)
-            sudo pacman -Sy --noconfirm zsh
+            maybe_sudo pacman -Sy --noconfirm zsh
             ;;
         opensuse*|suse*)
-            sudo zypper install -y zsh
+            maybe_sudo zypper install -y zsh
             ;;
         *)
             print_error "Não foi possível identificar o gerenciador de pacotes para instalar Zsh."
@@ -99,7 +108,7 @@ install_zsh() {
             return 1
             ;;
     esac
-    
+
     if [ $? -eq 0 ]; then
         print_success "Zsh instalado com sucesso: $(zsh --version | head -n1)"
     else
@@ -114,7 +123,7 @@ install_nodejs() {
         NODE_VER=$(node -v)
         NPM_VER=$(npm -v)
         print_success "Node.js já está instalado: $NODE_VER (npm $NPM_VER)"
-        
+
         # Verificar se é LTS
         if [[ "$NODE_VER" =~ ^v[0-9]*\.[0-9]*\.[0-9]*$ ]]; then
             NODE_MAJOR=$(echo $NODE_VER | cut -d. -f1 | tr -d 'v')
@@ -134,54 +143,70 @@ install_nodejs() {
             fi
         fi
     fi
-    
+
     print_message "Instalando Node.js LTS..."
-    
+
     case $ID in
         debian|ubuntu|pop|mint|kali)
             # Instalar Node.js usando NodeSource
             if ! command_exists curl; then
-                sudo apt-get update
-                sudo apt-get install -y curl
+                maybe_sudo apt-get update
+                maybe_sudo apt-get install -y curl
             fi
-            
-            curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-            sudo apt-get install -y nodejs
+
+            if [ "$EUID" -eq 0 ]; then
+                curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+            else
+                curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+            fi
+            maybe_sudo apt-get install -y nodejs
             ;;
         fedora)
             # Fedora tem versões de Node.js nos repos oficiais, mas podemos usar o NodeSource
             if ! command_exists curl; then
-                sudo dnf install -y curl
+                maybe_sudo dnf install -y curl
             fi
-            
-            curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash -
-            sudo dnf install -y nodejs
+
+            if [ "$EUID" -eq 0 ]; then
+                curl -fsSL https://rpm.nodesource.com/setup_lts.x | bash -
+            else
+                curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash -
+            fi
+            maybe_sudo dnf install -y nodejs
             ;;
         rhel|centos|rocky|almalinux)
             # RHEL/CentOS
             if ! command_exists curl; then
-                sudo yum install -y curl
+                maybe_sudo yum install -y curl
             fi
-            
-            curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash -
-            sudo yum install -y nodejs
+
+            if [ "$EUID" -eq 0 ]; then
+                curl -fsSL https://rpm.nodesource.com/setup_lts.x | bash -
+            else
+                curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash -
+            fi
+            maybe_sudo yum install -y nodejs
             ;;
         amzn)
             # Amazon Linux 2023
             if ! command_exists curl; then
-                sudo dnf install -y curl
+                maybe_sudo dnf install -y curl
             fi
-            
-            curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash -
-            sudo dnf install -y nodejs
+
+            if [ "$EUID" -eq 0 ]; then
+                curl -fsSL https://rpm.nodesource.com/setup_lts.x | bash -
+            else
+                curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash -
+            fi
+            maybe_sudo dnf install -y nodejs
             ;;
         arch|manjaro|endeavouros)
             # Arch Linux
-            sudo pacman -Sy --noconfirm nodejs npm
+            maybe_sudo pacman -Sy --noconfirm nodejs npm
             ;;
         opensuse*|suse*)
             # openSUSE
-            sudo zypper install -y nodejs npm
+            maybe_sudo zypper install -y nodejs npm
             ;;
         *)
             print_error "Não foi possível identificar o gerenciador de pacotes para instalar Node.js."
@@ -189,7 +214,7 @@ install_nodejs() {
             return 1
             ;;
     esac
-    
+
     if command_exists node && command_exists npm; then
         print_success "Node.js instalado com sucesso: $(node -v) (npm $(npm -v))"
     else
@@ -202,17 +227,21 @@ install_nodejs() {
 set_zsh_default() {
     if [ "$SHELL" != "$(which zsh)" ]; then
         print_message "Configurando Zsh como shell padrão..."
-        
+
         # Verificar se o arquivo /etc/shells contém o path do zsh
         ZSH_PATH=$(which zsh)
         if ! grep -Fxq "$ZSH_PATH" /etc/shells; then
             print_message "Adicionando $ZSH_PATH ao /etc/shells..."
-            echo "$ZSH_PATH" | sudo tee -a /etc/shells > /dev/null
+            if [ "$EUID" -eq 0 ]; then
+                echo "$ZSH_PATH" >> /etc/shells
+            else
+                echo "$ZSH_PATH" | sudo tee -a /etc/shells > /dev/null
+            fi
         fi
-        
+
         # Mudar shell padrão
         chsh -s "$ZSH_PATH"
-        
+
         print_success "Zsh configurado como shell padrão. Por favor, reinicie sua sessão de terminal."
         print_warning "Você precisará fazer login novamente para que a mudança tenha efeito."
     else
@@ -223,14 +252,20 @@ set_zsh_default() {
 # Verificar se é root
 check_root() {
     if [ "$EUID" -eq 0 ]; then
-        print_error "Este script não deve ser executado como root diretamente."
-        print_error "Utilize um usuário normal. O script usará sudo quando necessário."
-        exit 1
+        print_warning "Este script está sendo executado como root."
+        print_warning "Normalmente, é recomendado utilizar um usuário normal com sudo."
+        print_warning "Continuando a execução como root..."
     fi
 }
 
 # Verificar sudo
 check_sudo() {
+    # Se estiver rodando como root, sudo não é necessário
+    if [ "$EUID" -eq 0 ]; then
+        print_warning "Executando como root, sudo não será necessário."
+        return 0
+    fi
+
     if ! command_exists sudo; then
         print_error "O comando 'sudo' não está disponível. Instale-o antes de continuar."
         exit 1
@@ -240,42 +275,42 @@ check_sudo() {
 # Instalar pacotes adicionais úteis
 install_additional_packages() {
     local packages=()
-    
+
     # Verificar se git está instalado
     if ! command_exists git; then
         packages+=("git")
     fi
-    
+
     # Verificar se bc está instalado (usado em scripts para cálculos)
     if ! command_exists bc; then
         packages+=("bc")
     fi
-    
+
     # Se nenhum pacote adicional é necessário, sair
     if [ ${#packages[@]} -eq 0 ]; then
         print_success "Todos os pacotes adicionais necessários já estão instalados."
         return 0
     fi
-    
+
     print_message "Instalando pacotes adicionais: ${packages[*]}..."
-    
+
     case $ID in
         debian|ubuntu|pop|mint|kali)
-            sudo apt-get update
-            sudo apt-get install -y "${packages[@]}"
+            maybe_sudo apt-get update
+            maybe_sudo apt-get install -y "${packages[@]}"
             ;;
         fedora|rhel|centos|rocky|almalinux|amzn)
             if [ "$ID" = "fedora" ] || [ "$ID" = "amzn" ]; then
-                sudo dnf install -y "${packages[@]}"
+                maybe_sudo dnf install -y "${packages[@]}"
             else
-                sudo yum install -y "${packages[@]}"
+                maybe_sudo yum install -y "${packages[@]}"
             fi
             ;;
         arch|manjaro|endeavouros)
-            sudo pacman -Sy --noconfirm "${packages[@]}"
+            maybe_sudo pacman -Sy --noconfirm "${packages[@]}"
             ;;
         opensuse*|suse*)
-            sudo zypper install -y "${packages[@]}"
+            maybe_sudo zypper install -y "${packages[@]}"
             ;;
         *)
             print_warning "Não foi possível instalar pacotes adicionais automaticamente."
@@ -283,7 +318,7 @@ install_additional_packages() {
             return 1
             ;;
     esac
-    
+
     print_success "Pacotes adicionais instalados com sucesso."
 }
 
@@ -297,22 +332,22 @@ main() {
     print_message "- Zsh (shell interativo)"
     print_message "- Pacotes adicionais necessários"
     echo
-    
+
     # Verificações iniciais
     check_root
     check_sudo
     detect_os
-    
+
     # Instalar componentes
     install_additional_packages
     install_nodejs || { print_error "Falha ao instalar Node.js. Abortando."; exit 1; }
     install_zsh || { print_error "Falha ao instalar Zsh. Abortando."; exit 1; }
-    
+
     echo
     print_message "============================================="
     print_message "   Todos os pré-requisitos foram instalados  "
     print_message "============================================="
-    
+
     # Perguntar se o usuário quer mudar o shell padrão
     read -p "Deseja configurar Zsh como seu shell padrão? (s/N): " -n 1 -r
     echo
@@ -322,7 +357,7 @@ main() {
         print_warning "Zsh não foi configurado como shell padrão."
         print_warning "Para usar o MCP Terminal Assistant, você precisará iniciar o Zsh manualmente."
     fi
-    
+
     echo
     print_success "Instalação de pré-requisitos concluída!"
     print_message "Agora você pode instalar o MCP Terminal Assistant com:"

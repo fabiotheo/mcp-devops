@@ -74,11 +74,11 @@ Seja conciso e específico para o sistema detectado.`;
             
             // Extrai comando sugerido da resposta
             const commandMatch = analysis.match(/💻 COMANDO: (.+?)(?:\n|$)/);
-            const command = commandMatch ? commandMatch[1].replace(/`/g, '').trim() : null;
+            const suggestedCommand = commandMatch ? commandMatch[1].replace(/`/g, '').trim() : null;
 
             return {
                 description: analysis,
-                command: command,
+                command: suggestedCommand,
                 confidence: 0.8,
                 category: 'llm_analysis',
                 source: 'anthropic_claude'

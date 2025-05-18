@@ -114,24 +114,304 @@ class MCPSetup {
             await fs.mkdir(aiModelsDir, { recursive: true });
             
             const sourceDir = path.join(process.cwd(), 'ai_models');
-            const sourceFiles = [
-                'base_model.js', 
-                'claude_model.js', 
-                'openai_model.js', 
-                'gemini_model.js', 
-                'model_factory.js'
-            ];
             
-            for (const file of sourceFiles) {
-                try {
-                    const content = await fs.readFile(path.join(sourceDir, file), 'utf8');
-                    await fs.writeFile(path.join(aiModelsDir, file), content);
-                } catch (err) {
-                    console.log(`  ⚠ Não foi possível copiar ${file}: ${err.message}`);
+            // Verificar se o diretório de origem existe
+            try {
+                await fs.access(sourceDir);
+                
+                const sourceFiles = [
+                    'base_model.js', 
+                    'claude_model.js', 
+                    'openai_model.js', 
+                    'gemini_model.js', 
+                    'model_factory.js'
+                ];
+                
+                for (const file of sourceFiles) {
+                    try {
+                        const content = await fs.readFile(path.join(sourceDir, file), 'utf8');
+                        await fs.writeFile(path.join(aiModelsDir, file), content);
+                        console.log(`  ✓ Arquivo ${file} copiado`);
+                    } catch (err) {
+                        console.log(`  ⚠ Não foi possível copiar ${file}: ${err.message}`);
+                    }
                 }
-            }
+                
+                console.log('  ✓ Arquivos de modelo copiados');
+            } catch (err) {
+                console.log(`  ⚠ Diretório ai_models não encontrado: ${err.message}`);
+                
+                // Criar arquivos de modelo padrão
+                console.log('  📝 Criando arquivos de modelo padrão...');
+                
+                // base_model.js
+                await fs.writeFile(path.join(aiModelsDir, 'base_model.js'), 
+                `// ~/.mcp-terminal/ai_models/base_model.js
+// Classe base para todos os modelos de IA
+
+export default class BaseAIModel {
+    constructor(config) {
+        this.config = config;
+    }
+
+    // Método para inicializar o cliente da API
+    async initialize() {
+        throw new Error('Método initialize() deve ser implementado pela classe filha');
+    }
+
+    // Método para analisar comando com falha
+    async analyzeCommand(commandData) {
+        throw new Error('Método analyzeCommand() deve ser implementado pela classe filha');
+    }
+
+    // Método para responder perguntas sobre comandos
+    async askCommand(question, systemContext) {
+        throw new Error('Método askCommand() deve ser implementado pela classe filha');
+    }
+
+    // Retorna o nome do provedor
+    getProviderName() {
+        throw new Error('Método getProviderName() deve ser implementado pela classe filha');
+    }
+
+    // Retorna o nome do modelo atual
+    getModelName() {
+        throw new Error('Método getModelName() deve ser implementado pela classe filha');
+    }
+
+    // Método para validar API key (retorna true se válida)
+    async validateApiKey() {
+        throw new Error('Método validateApiKey() deve ser implementado pela classe filha');
+    }
+}`);
+
+                // claude_model.js
+                await fs.writeFile(path.join(aiModelsDir, 'claude_model.js'), 
+                `// ~/.mcp-terminal/ai_models/claude_model.js
+// Implementação do modelo Claude da Anthropic
+
+import { Anthropic } from '@anthropic-ai/sdk';
+import BaseAIModel from './base_model.js';
+
+export default class ClaudeModel extends BaseAIModel {
+    constructor(config) {
+        super(config);
+        this.apiKey = config.anthropic_api_key;
+        this.modelName = config.claude_model || 'claude-3-7-sonnet-20250219';
+        this.client = null;
+    }
+
+    async initialize() {
+        if (!this.apiKey) {
+            throw new Error('Chave de API da Anthropic não configurada');
+        }
+
+        this.client = new Anthropic({
+            apiKey: this.apiKey
+        });
+        
+        return this;
+    }
+
+    async analyzeCommand(commandData) {
+        try {
+            const { command, exitCode, stdout, stderr, duration, systemContext } = commandData;
+
+            const prompt = \`Você é um especialista em Linux que analisa comandos que falharam.
+
+SISTEMA:
+- OS: \${systemContext.os}
+- Distribuição: \${systemContext.distro} \${systemContext.version}
+- Package Manager: \${systemContext.packageManager}
+- Shell: \${systemContext.shell}
+
+COMANDO EXECUTADO: \${command}
+EXIT CODE: \${exitCode}
+TEMPO DE EXECUÇÃO: \${duration}s
+
+STDOUT:
+\${stdout || '(vazio)'}
+
+STDERR:
+\${stderr || '(vazio)'}
+
+ANÁLISE NECESSÁRIA:
+1. Identifique o problema principal
+2. Explique a causa do erro
+3. Forneça uma solução específica para este sistema Linux
+4. Sugira um comando para corrigir (se aplicável)
+5. Inclua comandos preventivos se relevante
+
+FORMATO DA RESPOSTA:
+🔍 PROBLEMA: [Descrição clara do problema]
+🛠️  SOLUÇÃO: [Explicação da solução]
+💻 COMANDO: [Comando específico para corrigir, se aplicável]
+⚠️  PREVENÇÃO: [Como evitar no futuro]
+
+Seja conciso e específico para o sistema detectado.\`;
+
+            const response = await this.client.messages.create({
+                model: this.modelName,
+                max_tokens: 1500,
+                messages: [{
+                    role: 'user',
+                    content: prompt
+                }]
+            });
+
+            const analysis = response.content[0].text;
             
-            console.log('  ✓ Arquivos de modelo copiados');
+            // Extrai comando sugerido da resposta
+            const commandMatch = analysis.match(/💻 COMANDO: (.+?)(?:\\n|$)/);
+            const command = commandMatch ? commandMatch[1].replace(/\`/g, '').trim() : null;
+
+            return {
+                description: analysis,
+                command: command,
+                confidence: 0.8,
+                category: 'llm_analysis',
+                source: 'anthropic_claude'
+            };
+
+        } catch (error) {
+            console.error('Erro na análise com Claude:', error);
+            return null;
+        }
+    }
+
+    async askCommand(question, systemContext) {
+        try {
+            const prompt = \`Você é um assistente especializado em Linux/Unix que ajuda usuários a encontrar o comando correto para suas tarefas.
+
+INFORMAÇÕES DO SISTEMA:
+- OS: \${systemContext.os}
+- Distribuição: \${systemContext.distro}
+- Versão: \${systemContext.version}
+- Package Manager: \${systemContext.packageManager}
+- Shell: \${systemContext.shell}
+- Arquitetura: \${systemContext.architecture}
+- Kernel: \${systemContext.kernel}
+- Capacidades: \${systemContext.capabilities.join(', ')}
+
+COMANDOS DISPONÍVEIS NESTE SISTEMA:
+\${JSON.stringify(systemContext.commands, null, 2)}
+
+PERGUNTA DO USUÁRIO: \${question}
+
+INSTRUÇÕES:
+1. Analise a pergunta considerando o sistema específico do usuário
+2. Forneça o comando exato para a distribuição/sistema detectado
+3. Explique brevemente o que o comando faz
+4. Se houver variações por distribuição, mencione isso
+5. Inclua opções úteis do comando
+6. Se apropriado, sugira comandos relacionados
+
+FORMATO DA RESPOSTA:
+🔧 COMANDO:
+\\\`comando exato aqui\\\`
+
+📝 EXPLICAÇÃO:
+[Explicação clara do que faz]
+
+💡 OPÇÕES ÚTEIS:
+[Variações ou opções importantes]
+
+⚠️ OBSERVAÇÕES:
+[Avisos ou considerações especiais]
+
+Responda de forma direta e prática.\`;
+
+            const response = await this.client.messages.create({
+                model: this.modelName,
+                max_tokens: 2000,
+                messages: [{
+                    role: 'user',
+                    content: prompt
+                }]
+            });
+
+            return response.content[0].text;
+        } catch (error) {
+            console.error('Erro ao consultar Claude:', error);
+            return \`❌ Erro ao conectar com o assistente Claude. Verifique sua configuração da API Anthropic.\`;
+        }
+    }
+
+    getProviderName() {
+        return 'Claude (Anthropic)';
+    }
+
+    getModelName() {
+        return this.modelName;
+    }
+
+    async validateApiKey() {
+        try {
+            // Tenta fazer uma chamada simples para validar a API key
+            const response = await this.client.messages.create({
+                model: this.modelName,
+                max_tokens: 10,
+                messages: [{
+                    role: 'user',
+                    content: 'Hello'
+                }]
+            });
+            
+            return true;
+        } catch (error) {
+            console.error('Erro ao validar API key do Claude:', error);
+            return false;
+        }
+    }
+}`);
+
+                // model_factory.js
+                await fs.writeFile(path.join(aiModelsDir, 'model_factory.js'), 
+                `// ~/.mcp-terminal/ai_models/model_factory.js
+// Factory para criar a instância do modelo de IA adequado
+
+import ClaudeModel from './claude_model.js';
+
+export default class ModelFactory {
+    // Cria e inicializa uma instância do modelo de IA apropriado com base na configuração
+    static async createModel(config) {
+        const provider = config.ai_provider || 'claude';
+        
+        let model;
+        
+        // Por enquanto, apenas suporta Claude
+        model = new ClaudeModel(config);
+        
+        try {
+            return await model.initialize();
+        } catch (error) {
+            console.error(\`Erro ao inicializar modelo \${provider}:\`, error.message);
+            throw error;
+        }
+    }
+    
+    // Retorna os modelos suportados
+    static getSupportedProviders() {
+        return [
+            {
+                id: 'claude',
+                name: 'Claude (Anthropic)',
+                models: [
+                    'claude-3-7-sonnet-20250219',
+                    'claude-3-5-sonnet-20240620',
+                    'claude-3-haiku-20240307'
+                ]
+            }
+        ];
+    }
+    
+    // Retorna as dependências npm necessárias para cada provedor
+    static getDependencies(provider) {
+        return ['@anthropic-ai/sdk'];
+    }
+}`);
+                console.log('  ✓ Arquivos de modelo básicos criados');
+            }
         } catch (error) {
             console.log(`  ⚠ Aviso: ${error.message}`);
         }
@@ -312,12 +592,56 @@ class MCPSetup {
     }
 
     async makeExecutable() {
-        console.log('\n🔧 Tornando scripts executáveis...');
+        console.log('\n🔧 Copiando e configurando scripts...');
+        
+        // Lista de arquivos a serem copiados
+        const filesToCopy = [
+            { src: 'mcp-client.js', dest: 'mcp-client.js' },
+            { src: 'mcp-assistant.js', dest: 'mcp-assistant.js' }, 
+            { src: 'system_detector.js', dest: 'system_detector.js' },
+            { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' }
+        ];
+        
+        // Copiar arquivos principais
+        for (const file of filesToCopy) {
+            try {
+                const srcPath = path.join(process.cwd(), file.src);
+                const destPath = path.join(this.mcpDir, file.dest);
+                
+                try {
+                    const content = await fs.readFile(srcPath, 'utf8');
+                    await fs.writeFile(destPath, content);
+                    console.log(`  ✓ Arquivo ${file.dest} copiado`);
+                } catch (err) {
+                    console.log(`  ⚠ Não foi possível copiar ${file.src}: ${err.message}`);
+                }
+            } catch (error) {
+                console.log(`  ⚠ Erro ao processar ${file.src}: ${error.message}`);
+            }
+        }
+        
+        // Copiar padrões
+        try {
+            const patternsDir = path.join(process.cwd(), 'patterns');
+            const destPatternsDir = path.join(this.mcpDir, 'patterns');
+            
+            const patternFiles = await fs.readdir(patternsDir);
+            for (const file of patternFiles) {
+                if (file.endsWith('.json')) {
+                    const srcPath = path.join(patternsDir, file);
+                    const destPath = path.join(destPatternsDir, file);
+                    const content = await fs.readFile(srcPath, 'utf8');
+                    await fs.writeFile(destPath, content);
+                }
+            }
+            console.log(`  ✓ Arquivos de padrões copiados`);
+        } catch (error) {
+            console.log(`  ⚠ Erro ao copiar padrões: ${error.message}`);
+        }
         
         const scripts = [
             'mcp-client.js',
-            'mcp-assistant.js',
-            'setup.js'
+            'mcp-assistant.js'
         ];
 
         for (const script of scripts) {
@@ -393,7 +717,7 @@ class MCPSetup {
         // Remove integração do .zshrc
         try {
             const zshrc = await fs.readFile(this.zshrcPath, 'utf8');
-            const newZshrc = zshrc.replace(/\n# MCP Terminal Integration\nsource ~\/\.mcp-terminal\/zsh-integration\.sh\n/g, '');
+            const newZshrc = zshrc.replace(/\n# MCP Terminal Integration\nsource ~\/\.mcp-terminal\/zsh_integration\.sh\n/g, '');
             await fs.writeFile(this.zshrcPath, newZshrc);
             console.log('  ✓ Integração removida do .zshrc');
         } catch {}

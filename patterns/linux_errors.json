@@ -1,0 +1,64 @@
+{
+  "patterns": [
+    {
+      "pattern": "command not found",
+      "message": "Comando não encontrado no sistema.",
+      "fix": null,
+      "confidence": 0.95
+    },
+    {
+      "pattern": "permission denied",
+      "message": "Permissão negada.",
+      "fix": "sudo $COMMAND",
+      "confidence": 0.9
+    },
+    {
+      "pattern": "no such file or directory",
+      "message": "Arquivo ou diretório não encontrado.",
+      "fix": null,
+      "confidence": 0.85
+    },
+    {
+      "pattern": "cannot access '(.+)': No such file or directory",
+      "message": "Arquivo não encontrado.",
+      "fix": null,
+      "confidence": 0.9
+    },
+    {
+      "pattern": "too many arguments",
+      "message": "Muitos argumentos fornecidos para o comando.",
+      "fix": null,
+      "confidence": 0.8
+    },
+    {
+      "pattern": "No space left on device",
+      "message": "Sem espaço no dispositivo.",
+      "fix": "df -h",
+      "confidence": 0.95
+    },
+    {
+      "pattern": "invalid option",
+      "message": "Opção inválida para o comando.",
+      "fix": "$COMMAND --help",
+      "confidence": 0.8
+    },
+    {
+      "pattern": "connection timed out",
+      "message": "Tempo esgotado na conexão de rede.",
+      "fix": "ping -c 3 8.8.8.8",
+      "confidence": 0.85
+    },
+    {
+      "pattern": "(.+) is currently used by process (.+)",
+      "message": "Arquivo ou recurso está em uso por outro processo.",
+      "fix": "lsof | grep $1",
+      "confidence": 0.8
+    },
+    {
+      "pattern": "command terminated with exit code",
+      "message": "Comando terminou com código de erro.",
+      "fix": null,
+      "confidence": 0.7
+    }
+  ]
+}

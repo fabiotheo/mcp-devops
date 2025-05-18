@@ -1,0 +1,52 @@
+{
+  "patterns": [
+    {
+      "pattern": "docker: Cannot connect to the Docker daemon",
+      "message": "Docker daemon não está rodando.",
+      "fix": "sudo systemctl start docker",
+      "confidence": 0.95
+    },
+    {
+      "pattern": "manifest unknown",
+      "message": "Imagem não encontrada.",
+      "fix": "docker pull <image>",
+      "confidence": 0.8
+    },
+    {
+      "pattern": "Error response from daemon: Conflict",
+      "message": "Conflito ao criar contêiner, ele já existe.",
+      "fix": "docker rm <container_name> && docker run <image>",
+      "confidence": 0.9
+    },
+    {
+      "pattern": "Error response from daemon: port is already allocated",
+      "message": "Porta já está em uso.",
+      "fix": "docker ps -a",
+      "confidence": 0.85
+    },
+    {
+      "pattern": "permission denied while trying to connect",
+      "message": "Permissão negada ao conectar ao daemon.",
+      "fix": "sudo usermod -aG docker $USER && newgrp docker",
+      "confidence": 0.9
+    },
+    {
+      "pattern": "Error response from daemon: Get \"(.+)\": dial tcp: lookup (.+): no such host",
+      "message": "Erro de DNS, não foi possível resolver o host do registry.",
+      "fix": null,
+      "confidence": 0.85
+    },
+    {
+      "pattern": "Error response from daemon: OCI runtime create failed",
+      "message": "Falha ao criar contêiner.",
+      "fix": "docker system prune",
+      "confidence": 0.7
+    },
+    {
+      "pattern": "requested access to the resource is denied",
+      "message": "Acesso negado à imagem ou repositório.",
+      "fix": "docker login",
+      "confidence": 0.9
+    }
+  ]
+}

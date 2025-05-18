@@ -1,0 +1,12 @@
+{
+  "anthropic_api_key": "YOUR_API_KEY_HERE",
+  "model": "claude-3-5-haiku-20241022",
+  "max_calls_per_hour": 100,
+  "enable_monitoring": true,
+  "enable_assistant": true,
+  "monitor_commands": ["npm", "yarn", "git", "docker", "make", "cargo", "go"],
+  "quick_fixes": true,
+  "auto_detect_fixes": false,
+  "log_level": "info",
+  "cache_duration_hours": 24
+}

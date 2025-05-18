@@ -8,6 +8,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 import ModelFactory from './ai_models/model_factory.js';
 import readline from 'readline';
+import { createRequire } from 'module';
 
 class MCPAssistant {
     constructor() {
@@ -160,6 +161,7 @@ INFORMAÇÕES DO DIRETÓRIO:
     // Método para executar comando sugerido
     async executeCommand(command, confirm = true) {
         if (confirm) {
+            const require = createRequire(import.meta.url);
             console.log(`\n🔍 Comando sugerido: ${command}`);
             console.log('Executar? (y/N): ');
             
@@ -238,6 +240,7 @@ INFORMAÇÕES DO DIRETÓRIO:
 
 // CLI
 async function main() {
+    const require = createRequire(import.meta.url);
     const args = process.argv.slice(2);
     
     if (args.length === 0) {
@@ -311,6 +314,7 @@ EXEMPLOS:
         await assistant.saveCommandHistory(question, command);
         
         console.log('\n❓ Deseja executar o comando agora? (y/N): ');
+        const require = createRequire(import.meta.url);
         const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout

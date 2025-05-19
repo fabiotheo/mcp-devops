@@ -75,9 +75,13 @@ class MCPAssistant {
     }
 
     async askCommand(question) {
+        console.log('🔍 askCommand called with question:', question);
+
         if (!this.aiModel && !this.anthropic) {
+            console.log('⚠️ No AI model or Anthropic client initialized, loading config...');
             // This might happen if loadConfig hasn't completed or failed critically
             await this.loadConfig(); // Ensure config is loaded
+            console.log('✅ Config loaded, AI model initialized:', !!this.aiModel, 'Anthropic fallback:', !!this.anthropic);
         }
 
         try {
@@ -86,6 +90,13 @@ class MCPAssistant {
             const isAsteriskQuery = this.isAsteriskQuery(question);
             const isPM2Query = this.isPM2Query(question);
             const isAWSS3Query = this.isAWSS3Query(question);
+
+            console.log('📊 Query type detection:', {
+                isFirewallQuery,
+                isAsteriskQuery,
+                isPM2Query,
+                isAWSS3Query
+            });
 
             // Obtém o contexto do sistema, incluindo IPs bloqueados se for uma consulta de firewall
             let systemContext = this.systemDetector.getSystemContext(isFirewallQuery);
@@ -111,26 +122,35 @@ class MCPAssistant {
             }
 
             if (this.aiModel && !this.usingFallbackAI) {
+                console.log('🤖 Using AI model:', this.aiModel.getModelName());
                 // Ensure we have the installed packages information
                 if (!systemContext.installedPackages) {
+                    console.log('📦 Detecting installed packages...');
                     this.systemDetector.detectInstalledPackages();
                     // Update systemContext with the latest information
                     systemContext = this.systemDetector.getSystemContext();
+                    console.log('✅ Packages detected');
                 }
 
-                return await this.aiModel.askCommand(question, {
+                console.log('🔄 Sending question to AI model...');
+                const response = await this.aiModel.askCommand(question, {
                     ...systemContext,
                     currentDir,
                     dirInfo,
                     formattedPackages: this.formatInstalledPackages(systemContext.installedPackages),
                     webSearchResults: webSearchResults
                 });
+                console.log('✅ Received response from AI model');
+                return response;
             }
 
             // Fallback para o sistema antigo (Claude direto via Anthropic SDK)
             if (!this.anthropic) {
+                console.log('❌ Anthropic fallback client not initialized');
                 return '❌ Erro: Cliente Anthropic (fallback) não inicializado. Verifique sua API key.';
             }
+
+            console.log('🔄 Using Anthropic fallback client');
 
             // Format web search results if available
             let webSearchSection = '';
@@ -262,16 +282,31 @@ Se a pergunta for sobre AWS S3, use este formato adicional:
 [Comandos específicos para operações com buckets, sincronização, upload/download]`;
 
             const modelToUse = this.config.claude_model || this.config.model || "claude-3-sonnet-20240229"; // Exemplo de nome de modelo válido
-            const response = await this.anthropic.messages.create({
-                model: modelToUse,
-                max_tokens: 2000,
-                messages: [{ role: 'user', content: prompt }],
-            });
+            console.log('🤖 Using Anthropic model:', modelToUse);
 
-            return response.content[0].text;
+            try {
+                console.log('🔄 Sending request to Anthropic API...');
+                const response = await this.anthropic.messages.create({
+                    model: modelToUse,
+                    max_tokens: 2000,
+                    messages: [{ role: 'user', content: prompt }],
+                });
+
+                console.log('✅ Received response from Anthropic API');
+                if (response && response.content && response.content.length > 0) {
+                    return response.content[0].text;
+                } else {
+                    console.log('⚠️ Empty or invalid response from Anthropic API:', response);
+                    return '❌ Erro: Resposta vazia ou inválida da API Anthropic.';
+                }
+            } catch (apiError) {
+                console.error('❌ Anthropic API error:', apiError);
+                return `❌ Erro na API Anthropic: ${apiError.message}`;
+            }
         } catch (error) {
             console.error('❌ Erro ao consultar assistente:', error.message);
-            return '❌ Erro ao conectar com o assistente. Verifique sua configuração e a API key.';
+            console.error('Stack trace:', error.stack);
+            return `❌ Erro ao conectar com o assistente: ${error.message}\nVerifique sua configuração e a API key.`;
         }
     }
 
@@ -1301,18 +1336,41 @@ EXEMPLOS:
             default: // Assume it's a question for the AI
                 const question = args.join(' ');
                 console.log('\n🤔 Analisando sua pergunta com a IA...\n');
-                const response = await assistant.askCommand(question);
-                console.log(response);
+                console.log('📝 Pergunta completa:', question);
+
+                let response = null;
+                let success = false;
+
+                try {
+                    console.log('🔄 Chamando assistant.askCommand()...');
+                    response = await assistant.askCommand(question);
+                    console.log('✅ Resposta recebida do assistant.askCommand()');
+
+                    if (!response) {
+                        console.log('⚠️ Resposta vazia recebida do assistant.askCommand()');
+                        console.log('❌ Não foi possível obter uma resposta da IA. Por favor, tente novamente.');
+                    } else {
+                        console.log(response);
+                        success = true;
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao chamar assistant.askCommand():', error);
+                    console.error('Stack trace:', error.stack);
+                    console.log('❌ Ocorreu um erro ao processar sua pergunta. Por favor, tente novamente.');
+                }
 
                 // Extract command using a more specific regex for the ```bash ... ``` block or the `COMANDO: \`...\`` format
                 let extractedCommand = null;
-                const bashBlockMatch = response.match(/```bash\s*([\s\S]+?)\s*```/m);
-                if (bashBlockMatch && bashBlockMatch[1]) {
-                    extractedCommand = bashBlockMatch[1].trim();
-                } else {
-                    const legacyCommandMatch = response.match(/🔧 COMANDO:\s*`([^`]+)`/m);
-                    if (legacyCommandMatch && legacyCommandMatch[1]) {
-                        extractedCommand = legacyCommandMatch[1].trim();
+
+                if (success && response) {
+                    const bashBlockMatch = response.match(/```bash\s*([\s\S]+?)\s*```/m);
+                    if (bashBlockMatch && bashBlockMatch[1]) {
+                        extractedCommand = bashBlockMatch[1].trim();
+                    } else {
+                        const legacyCommandMatch = response.match(/🔧 COMANDO:\s*`([^`]+)`/m);
+                        if (legacyCommandMatch && legacyCommandMatch[1]) {
+                            extractedCommand = legacyCommandMatch[1].trim();
+                        }
                     }
                 }
 

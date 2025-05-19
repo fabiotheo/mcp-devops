@@ -15,16 +15,16 @@ mcp_preexec() {
 # Função para analisar após execução
 mcp_precmd() {
     local exit_code=$?
-    
+
     # Só processa se houve um comando e ele falhou
     if [[ -n "$MCP_COMMAND" ]] && [[ $exit_code -ne 0 ]]; then
         local end_time=$(date +%s.%N)
         local duration=$(echo "$end_time - $MCP_START_TIME" | bc 2>/dev/null || echo "0")
-        
+
         # Captura stdout/stderr dos últimos comandos (usando history)
         local stdout=""
         local stderr=""
-        
+
         # Envia para análise em background (não bloqueia terminal)
         (
             node ~/.mcp-terminal/mcp-client.js \
@@ -34,10 +34,10 @@ mcp_precmd() {
                 --stderr "$stderr" \
                 --duration "$duration" 2>/dev/null
         ) &
-        
+
         MCP_PID=$!
     fi
-    
+
     # Limpa variáveis
     unset MCP_COMMAND
     unset MCP_START_TIME
@@ -55,8 +55,14 @@ ask() {
         echo "Exemplo: ask \"como listar arquivos por tamanho\""
         return 1
     fi
-    
+
+    echo "🚀 Executando: node ~/.mcp-terminal/mcp-assistant.js \"$@\""
     node ~/.mcp-terminal/mcp-assistant.js "$@"
+    local exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
+        echo "❌ O comando falhou com código de saída: $exit_code"
+    fi
+    return $exit_code
 }
 
 # Alias úteis com MCP
@@ -71,29 +77,29 @@ mcp-run() {
         echo "Uso: mcp-run <comando>"
         return 1
     fi
-    
+
     local cmd="$*"
     local output_file="/tmp/mcp_output_$$"
     local start_time=$(date +%s.%N)
-    
+
     echo "🔍 MCP monitorando: $cmd"
-    
+
     # Executa comando e captura output
     script -q -e -c "$cmd" "$output_file" >/dev/null 2>&1
     local exit_code=$?
     local end_time=$(date +%s.%N)
     local duration=$(echo "$end_time - $start_time" | bc)
-    
+
     # Lê output capturado
     local output=""
     if [[ -f "$output_file" ]]; then
         output=$(cat "$output_file")
         rm -f "$output_file"
     fi
-    
+
     # Mostra output original
     echo "$output"
-    
+
     # Analisa se houve erro
     if [[ $exit_code -ne 0 ]]; then
         echo ""
@@ -104,7 +110,7 @@ mcp-run() {
             --stderr "$output" \
             --duration "$duration"
     fi
-    
+
     return $exit_code
 }
 

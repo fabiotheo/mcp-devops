@@ -19,28 +19,28 @@ class MCPSetup {
         try {
             // 1. Criar diretórios
             await this.createDirectories();
-            
+
             // 2. Configurar dependências
             await this.setupDependencies();
-            
+
             // 3. Configurar API key
             await this.configureAPI();
-            
+
             // 4. Configurar integração Zsh
             await this.setupZshIntegration();
-            
+
             // 5. Tornar scripts executáveis
             await this.makeExecutable();
-            
+
             // 6. Teste inicial
             await this.runTests();
-            
+
             console.log('\n✅ Instalação concluída com sucesso!');
             console.log('\n📋 Próximos passos:');
             console.log('1. Reinicie seu terminal ou execute: source ~/.zshrc');
             console.log('2. Teste com: ask "como listar arquivos por tamanho"');
             console.log('3. Execute um comando que falhe para ver o monitoramento');
-            
+
         } catch (error) {
             console.error('\n❌ Erro durante a instalação:', error.message);
             process.exit(1);
@@ -49,7 +49,7 @@ class MCPSetup {
 
     async createDirectories() {
         console.log('📁 Criando diretórios...');
-        
+
         const dirs = [
             this.mcpDir,
             path.join(this.mcpDir, 'cache'),
@@ -70,9 +70,9 @@ class MCPSetup {
 
     async setupDependencies() {
         console.log('\n📦 Configurando dependências...');
-        
+
         const packageJsonPath = path.join(this.mcpDir, 'package.json');
-        
+
         try {
             await fs.access(packageJsonPath);
             console.log('  ✓ package.json já existe');
@@ -89,7 +89,7 @@ class MCPSetup {
                     "chalk": "^5.3.0"
                 }
             };
-            
+
             await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
             console.log('  ✓ package.json criado');
         }
@@ -97,36 +97,36 @@ class MCPSetup {
         // Instalar dependências
         console.log('  📦 Instalando dependências npm...');
         try {
-            execSync('npm install', { 
-                cwd: this.mcpDir, 
-                stdio: 'inherit' 
+            execSync('npm install', {
+                cwd: this.mcpDir,
+                stdio: 'inherit'
             });
             console.log('  ✓ Dependências instaladas');
         } catch (error) {
             throw new Error('Falha ao instalar dependências npm');
         }
-        
+
         // Copiar arquivos de modelos de IA
         console.log('  📂 Copiando arquivos de modelos de IA...');
         const aiModelsDir = path.join(this.mcpDir, 'ai_models');
-        
+
         try {
             await fs.mkdir(aiModelsDir, { recursive: true });
-            
+
             const sourceDir = path.join(process.cwd(), 'ai_models');
-            
+
             // Verificar se o diretório de origem existe
             try {
                 await fs.access(sourceDir);
-                
+
                 const sourceFiles = [
-                    'base_model.js', 
-                    'claude_model.js', 
-                    'openai_model.js', 
-                    'gemini_model.js', 
+                    'base_model.js',
+                    'claude_model.js',
+                    'openai_model.js',
+                    'gemini_model.js',
                     'model_factory.js'
                 ];
-                
+
                 for (const file of sourceFiles) {
                     try {
                         const content = await fs.readFile(path.join(sourceDir, file), 'utf8');
@@ -136,16 +136,16 @@ class MCPSetup {
                         console.log(`  ⚠ Não foi possível copiar ${file}: ${err.message}`);
                     }
                 }
-                
+
                 console.log('  ✓ Arquivos de modelo copiados');
             } catch (err) {
                 console.log(`  ⚠ Diretório ai_models não encontrado: ${err.message}`);
-                
+
                 // Criar arquivos de modelo padrão
                 console.log('  📝 Criando arquivos de modelo padrão...');
-                
+
                 // base_model.js
-                await fs.writeFile(path.join(aiModelsDir, 'base_model.js'), 
+                await fs.writeFile(path.join(aiModelsDir, 'base_model.js'),
                 `// ~/.mcp-terminal/ai_models/base_model.js
 // Classe base para todos os modelos de IA
 
@@ -186,7 +186,7 @@ export default class BaseAIModel {
 }`);
 
                 // claude_model.js
-                await fs.writeFile(path.join(aiModelsDir, 'claude_model.js'), 
+                await fs.writeFile(path.join(aiModelsDir, 'claude_model.js'),
                 `// ~/.mcp-terminal/ai_models/claude_model.js
 // Implementação do modelo Claude da Anthropic
 
@@ -209,7 +209,7 @@ export default class ClaudeModel extends BaseAIModel {
         this.client = new Anthropic({
             apiKey: this.apiKey
         });
-        
+
         return this;
     }
 
@@ -260,7 +260,7 @@ Seja conciso e específico para o sistema detectado.\`;
             });
 
             const analysis = response.content[0].text;
-            
+
             // Extrai comando sugerido da resposta
             const commandMatch = analysis.match(/💻 COMANDO: (.+?)(?:\\n|$)/);
             const suggestedCommand = commandMatch ? commandMatch[1].replace(/\`/g, '').trim() : null;
@@ -356,7 +356,7 @@ Responda de forma direta e prática.\`;
                     content: 'Hello'
                 }]
             });
-            
+
             return true;
         } catch (error) {
             console.error('Erro ao validar API key do Claude:', error);
@@ -366,7 +366,7 @@ Responda de forma direta e prática.\`;
 }`);
 
                 // model_factory.js
-                await fs.writeFile(path.join(aiModelsDir, 'model_factory.js'), 
+                await fs.writeFile(path.join(aiModelsDir, 'model_factory.js'),
                 `// ~/.mcp-terminal/ai_models/model_factory.js
 // Factory para criar a instância do modelo de IA adequado
 
@@ -376,12 +376,12 @@ export default class ModelFactory {
     // Cria e inicializa uma instância do modelo de IA apropriado com base na configuração
     static async createModel(config) {
         const provider = config.ai_provider || 'claude';
-        
+
         let model;
-        
+
         // Por enquanto, apenas suporta Claude
         model = new ClaudeModel(config);
-        
+
         try {
             return await model.initialize();
         } catch (error) {
@@ -389,7 +389,7 @@ export default class ModelFactory {
             throw error;
         }
     }
-    
+
     // Retorna os modelos suportados
     static getSupportedProviders() {
         return [
@@ -404,7 +404,7 @@ export default class ModelFactory {
             }
         ];
     }
-    
+
     // Retorna as dependências npm necessárias para cada provedor
     static getDependencies(provider) {
         return ['@anthropic-ai/sdk'];
@@ -419,11 +419,11 @@ export default class ModelFactory {
 
     async configureAPI() {
         console.log('\n🔑 Configurando API...');
-        
+
         // Carrega template de configuração
         const templatePath = path.join(process.cwd(), 'config_template.json');
         let config = {};
-        
+
         try {
             const template = await fs.readFile(templatePath, 'utf8');
             config = JSON.parse(template);
@@ -447,13 +447,13 @@ export default class ModelFactory {
                 "cache_duration_hours": 24
             };
         }
-        
+
         // Verifica se já existe configuração
         let existingConfig = null;
         try {
             const existingContent = await fs.readFile(this.configPath, 'utf8');
             existingConfig = JSON.parse(existingContent);
-            
+
             // Preserva configurações existentes
             if (existingConfig) {
                 config = { ...config, ...existingConfig };
@@ -484,7 +484,7 @@ export default class ModelFactory {
                 }
             });
         });
-        
+
         config.ai_provider = provider;
         console.log(`  ✓ Provedor selecionado: ${provider}`);
 
@@ -505,7 +505,7 @@ export default class ModelFactory {
         }
 
         // Preserva a API key existente se disponível
-        if (existingConfig && existingConfig[apiKeyField] && 
+        if (existingConfig && existingConfig[apiKeyField] &&
             existingConfig[apiKeyField] !== `YOUR_${apiKeyField.toUpperCase()}_HERE`) {
             console.log(`  ✓ ${apiKeyField} já configurada`);
         } else {
@@ -564,22 +564,22 @@ export default class ModelFactory {
 
     async setupZshIntegration() {
         console.log('\n🐚 Configurando integração Zsh...');
-        
+
         const integrationLine = 'source ~/.mcp-terminal/zsh_integration.sh';
-        
+
         try {
             const zshrc = await fs.readFile(this.zshrcPath, 'utf8');
-            
+
             if (zshrc.includes(integrationLine)) {
                 console.log('  ✓ Integração já configurada no .zshrc');
                 return;
             }
-            
+
             // Adiciona integração ao .zshrc
             const newZshrc = zshrc + '\n\n# MCP Terminal Integration\n' + integrationLine + '\n';
             await fs.writeFile(this.zshrcPath, newZshrc);
             console.log('  ✓ Integração adicionada ao .zshrc');
-            
+
         } catch (error) {
             // Se .zshrc não existe, cria
             if (error.code === 'ENOENT') {
@@ -593,21 +593,21 @@ export default class ModelFactory {
 
     async makeExecutable() {
         console.log('\n🔧 Copiando e configurando scripts...');
-        
+
         // Lista de arquivos a serem copiados
         const filesToCopy = [
             { src: 'mcp-client.js', dest: 'mcp-client.js' },
-            { src: 'mcp-assistant.js', dest: 'mcp-assistant.js' }, 
+            { src: 'mcp-assistant.js', dest: 'mcp-assistant.js' },
             { src: 'system_detector.js', dest: 'system_detector.js' },
             { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' }
         ];
-        
+
         // Copiar arquivos principais
         for (const file of filesToCopy) {
             try {
                 const srcPath = path.join(process.cwd(), file.src);
                 const destPath = path.join(this.mcpDir, file.dest);
-                
+
                 try {
                     const content = await fs.readFile(srcPath, 'utf8');
                     await fs.writeFile(destPath, content);
@@ -619,12 +619,12 @@ export default class ModelFactory {
                 console.log(`  ⚠ Erro ao processar ${file.src}: ${error.message}`);
             }
         }
-        
+
         // Copiar padrões
         try {
             const patternsDir = path.join(process.cwd(), 'patterns');
             const destPatternsDir = path.join(this.mcpDir, 'patterns');
-            
+
             const patternFiles = await fs.readdir(patternsDir);
             for (const file of patternFiles) {
                 if (file.endsWith('.json')) {
@@ -638,7 +638,50 @@ export default class ModelFactory {
         } catch (error) {
             console.log(`  ⚠ Erro ao copiar padrões: ${error.message}`);
         }
-        
+
+        // Copiar web_search e web_scraper
+        try {
+            // Copiar web_search
+            const webSearchDir = path.join(process.cwd(), 'web_search');
+            const destWebSearchDir = path.join(this.mcpDir, 'web_search');
+
+            // Criar diretório web_search se não existir
+            await fs.mkdir(destWebSearchDir, { recursive: true });
+
+            // Copiar arquivos de web_search
+            const webSearchFiles = await fs.readdir(webSearchDir);
+            for (const file of webSearchFiles) {
+                if (file.endsWith('.js')) {
+                    const srcPath = path.join(webSearchDir, file);
+                    const destPath = path.join(destWebSearchDir, file);
+                    const content = await fs.readFile(srcPath, 'utf8');
+                    await fs.writeFile(destPath, content);
+                }
+            }
+            console.log(`  ✓ Arquivos de web_search copiados`);
+
+            // Copiar web_scraper
+            const webScraperDir = path.join(process.cwd(), 'web_scraper');
+            const destWebScraperDir = path.join(this.mcpDir, 'web_scraper');
+
+            // Criar diretório web_scraper se não existir
+            await fs.mkdir(destWebScraperDir, { recursive: true });
+
+            // Copiar arquivos de web_scraper
+            const webScraperFiles = await fs.readdir(webScraperDir);
+            for (const file of webScraperFiles) {
+                if (file.endsWith('.js')) {
+                    const srcPath = path.join(webScraperDir, file);
+                    const destPath = path.join(destWebScraperDir, file);
+                    const content = await fs.readFile(srcPath, 'utf8');
+                    await fs.writeFile(destPath, content);
+                }
+            }
+            console.log(`  ✓ Arquivos de web_scraper copiados`);
+        } catch (error) {
+            console.log(`  ⚠ Erro ao copiar web_search ou web_scraper: ${error.message}`);
+        }
+
         const scripts = [
             'mcp-client.js',
             'mcp-assistant.js'
@@ -658,7 +701,7 @@ export default class ModelFactory {
         const binDir = path.join(process.env.HOME, '.local/bin');
         try {
             await fs.mkdir(binDir, { recursive: true });
-            
+
             const links = [
                 { from: path.join(this.mcpDir, 'mcp-assistant.js'), to: path.join(binDir, 'ask') },
                 { from: path.join(this.mcpDir, 'mcp-client.js'), to: path.join(binDir, 'mcp-monitor') }
@@ -668,7 +711,7 @@ export default class ModelFactory {
                 try {
                     await fs.unlink(link.to);
                 } catch {}
-                
+
                 await fs.symlink(link.from, link.to);
                 console.log(`  ✓ Link criado: ${link.to}`);
             }
@@ -679,7 +722,7 @@ export default class ModelFactory {
 
     async runTests() {
         console.log('\n🧪 Executando testes...');
-        
+
         // Teste 1: Verifica se a API key funciona
         try {
             const test1 = execSync(`node ${path.join(this.mcpDir, 'mcp-assistant.js')} --system-info`, {
@@ -713,7 +756,7 @@ export default class ModelFactory {
 
     async uninstall() {
         console.log('🗑️  Desinstalando MCP Terminal...');
-        
+
         // Remove integração do .zshrc
         try {
             const zshrc = await fs.readFile(this.zshrcPath, 'utf8');

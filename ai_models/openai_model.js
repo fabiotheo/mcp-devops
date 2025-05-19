@@ -20,13 +20,13 @@ export default class OpenAIModel extends BaseAIModel {
         this.client = new OpenAI({
             apiKey: this.apiKey
         });
-        
+
         return this;
     }
 
     async analyzeCommand(commandData) {
         try {
-            const { command, exitCode, stdout, stderr, duration, systemContext } = commandData;
+            const { command: executedCommand, exitCode, stdout, stderr, duration, systemContext } = commandData;
 
             const prompt = `Você é um especialista em Linux que analisa comandos que falharam.
 
@@ -36,7 +36,7 @@ SISTEMA:
 - Package Manager: ${systemContext.packageManager}
 - Shell: ${systemContext.shell}
 
-COMANDO EXECUTADO: ${command}
+COMANDO EXECUTADO: ${executedCommand}
 EXIT CODE: ${exitCode}
 TEMPO DE EXECUÇÃO: ${duration}s
 
@@ -71,14 +71,14 @@ Seja conciso e específico para o sistema detectado.`;
             });
 
             const analysis = response.choices[0].message.content;
-            
+
             // Extrai comando sugerido da resposta
             const commandMatch = analysis.match(/💻 COMANDO: (.+?)(?:\n|$)/);
-            const command = commandMatch ? commandMatch[1].replace(/`/g, '').trim() : null;
+            const suggestedCommand = commandMatch ? commandMatch[1].replace(/`/g, '').trim() : null;
 
             return {
                 description: analysis,
-                command: command,
+                command: suggestedCommand,
                 confidence: 0.8,
                 category: 'llm_analysis',
                 source: 'openai_gpt'
@@ -166,7 +166,7 @@ Responda de forma direta e prática.`;
                 ],
                 max_tokens: 10
             });
-            
+
             return true;
         } catch (error) {
             console.error('Erro ao validar API key da OpenAI:', error);

@@ -55,7 +55,7 @@ npm install @anthropic-ai/sdk minimist chalk >/dev/null 2>&1
 mkdir -p /usr/local/bin
 ln -sf $MCP_DIR/mcp-assistant.js /usr/local/bin/mcp-ask
 echo '#!/bin/bash
-node /root/.mcp-terminal/mcp-assistant.js "$@"
+cd /root && NODE_PATH=/root/.mcp-terminal/node_modules exec node /root/.mcp-terminal/mcp-assistant.js "$@"
 ' > /usr/local/bin/ask
 chmod +x /usr/local/bin/ask
 

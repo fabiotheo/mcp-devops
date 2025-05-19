@@ -1,80 +1,52 @@
 #!/bin/bash
-# Script para corrigir o problema de exibição do MCP Assistant - versão final
+# Script final para corrigir o problema do MCP Assistant
 
 # Diretório de instalação do MCP
 MCP_DIR=~/.mcp-terminal
 
 # Backup do arquivo original
-cp $MCP_DIR/mcp-assistant.js $MCP_DIR/mcp-assistant.js.bak
-echo "✅ Backup criado em $MCP_DIR/mcp-assistant.js.bak"
+if [ ! -f $MCP_DIR/mcp-assistant.js.original ]; then
+  cp $MCP_DIR/mcp-assistant.js $MCP_DIR/mcp-assistant.js.original
+  echo "✅ Backup original criado como mcp-assistant.js.original"
+fi
 
 # Copiar o script simplificado para o diretório de instalação
 cp /home/ipcom/mcp/mcp-devops/mcp-simple.js $MCP_DIR/mcp-simple.js
 chmod +x $MCP_DIR/mcp-simple.js
 echo "✅ Script mcp-simple.js copiado e configurado"
 
-# Criar script auxiliar simple-ask.sh no diretório de instalação
-cat > $MCP_DIR/simple-ask.sh << 'EOF'
-#!/bin/bash
-# Script para usar a versão simplificada do MCP Assistant
+# Substituir o conteúdo do mcp-assistant.js por um redirecionador
+cat > $MCP_DIR/mcp-assistant.js << 'EOF'
+#!/usr/bin/env node
+// Script para redirecionar para o mcp-simple.js
 
-# Verifica se foi fornecido um argumento
-if [ $# -eq 0 ]; then
-  echo "❌ Erro: Nenhuma pergunta fornecida"
-  echo "Uso: simple-ask.sh \"como listar arquivos por tamanho\""
-  exit 1
-fi
+import { spawn } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-# Executa o mcp-simple.js com os argumentos fornecidos
-node ~/.mcp-terminal/mcp-simple.js "$*"
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const simplePath = path.join(__dirname, 'mcp-simple.js');
+
+// Obter os argumentos da linha de comando
+const args = process.argv.slice(2);
+
+// Executar o script simplificado com os mesmos argumentos
+const child = spawn('node', [simplePath, ...args], {
+  stdio: 'inherit', // Importante para mostrar saída corretamente
+});
+
+// Aguardar a conclusão
+child.on('exit', (code) => {
+  process.exit(code);
+});
 EOF
 
-chmod +x $MCP_DIR/simple-ask.sh
-echo "✅ Script simple-ask.sh criado e configurado"
+chmod +x $MCP_DIR/mcp-assistant.js
+echo "✅ Script mcp-assistant.js substituído por um redirecionador"
 
-# Modificar a integração Zsh para usar o script simplificado
-INTEGRATION_FILE=$MCP_DIR/zsh_integration.sh
-cp $INTEGRATION_FILE ${INTEGRATION_FILE}.bak
-echo "✅ Backup de zsh_integration.sh criado"
-
-# Modificar a função ask() para usar o script simplificado
-sed -i '/^ask()/,/^}/c\
-# Comando ask para assistente (usando o script simplificado)\
-ask() {\
-    if [[ $# -eq 0 ]]; then\
-        echo "Uso: ask \"sua pergunta sobre Linux\""\
-        echo "Exemplo: ask \"como listar arquivos por tamanho\""\
-        return 1\
-    fi\
-\
-    ~/.mcp-terminal/simple-ask.sh "$*"\
-    return $?\
-}' $INTEGRATION_FILE
-
-echo "✅ Função ask() atualizada para usar o script simplificado"
-
-# Limpar o .zshrc de possíveis duplicações
-cp ~/.zshrc ~/.zshrc.bak
-ZSHRC=~/.zshrc
-
-# Remover linhas duplicadas de integração do MCP
-sed -i '/# MCP Terminal Integration/,+1{//!d;/# MCP Terminal Integration/d;}' $ZSHRC
-echo "✅ Entradas duplicadas em .zshrc removidas"
-
-# Certificar-se de que apenas uma linha de integração está presente
-grep -q "source ~/.mcp-terminal/zsh_integration.sh" $ZSHRC
-if [ $? -ne 0 ]; then
-  # Se não houver nenhuma linha de integração, adicionar uma
-  echo -e "\n# MCP Terminal Integration\nsource ~/.mcp-terminal/zsh_integration.sh" >> $ZSHRC
-  echo "✅ Linha de integração adicionada ao .zshrc"
-fi
-
-echo "✅ Correção concluída com sucesso"
+echo "✅ Correção final concluída com sucesso"
 echo ""
-echo "📋 Próximos passos:"
-echo "1. Reinicie seu terminal ou execute: source ~/.zshrc"
-echo "2. Teste com: ask \"como listar arquivos por tamanho\""
-echo "3. Verifique se o resultado é mostrado corretamente"
-echo ""
-echo "📋 Caso ainda tenha problemas após reiniciar o terminal,"
-echo "   tente usar diretamente: ~/.mcp-terminal/simple-ask.sh \"sua pergunta\""
+echo "📋 Teste com: ask \"como listar arquivos por tamanho\""
+echo "📋 Se você quiser restaurar o original, execute:"
+echo "   cp $MCP_DIR/mcp-assistant.js.original $MCP_DIR/mcp-assistant.js"

@@ -102,25 +102,33 @@ Responda de forma direta e prática.`;
           console.error('⚠️ Erro ao salvar histórico:', err.message);
         }
         
-        // Perguntar se o usuário quer executar o comando
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
+        // Perguntar se o usuário quer executar o comando usando o módulo readline diretamente
+        process.stdout.write(`\n❓ Deseja executar o comando sugerido: \`${command}\` ? (y/N): `);
+        
+        // Leitura síncrona para garantir que o processo não termine antes da resposta
+        const answer = await new Promise(resolve => {
+          const onData = (data) => {
+            const input = data.toString().trim().toLowerCase();
+            process.stdin.removeListener('data', onData);
+            process.stdin.pause();
+            resolve(input);
+          };
+          
+          process.stdin.resume();
+          process.stdin.setEncoding('utf8');
+          process.stdin.on('data', onData);
         });
         
-        rl.question(`\n❓ Deseja executar o comando sugerido: \`${command}\` ? (y/N): `, (answer) => {
-          if (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
-            console.log(`\n▶️  Executando: ${command}\n`);
-            try {
-              execSync(command, { stdio: 'inherit' });
-            } catch (execError) {
-              console.error(`\n❌ Erro ao executar comando: ${execError.message}`);
-            }
-          } else {
-            console.log('Comando não executado.');
+        if (answer === 'y' || answer === 'yes') {
+          console.log(`\n▶️  Executando: ${command}\n`);
+          try {
+            execSync(command, { stdio: 'inherit' });
+          } catch (execError) {
+            console.error(`\n❌ Erro ao executar comando: ${execError.message}`);
           }
-          rl.close();
-        });
+        } else {
+          console.log('Comando não executado.');
+        }
       }
     } else {
       console.log('❌ Resposta vazia ou inválida da API.');

@@ -1,75 +1,80 @@
 #!/bin/bash
+# Script para corrigir o problema de exibição do MCP Assistant - versão final
 
-# Fix MCP Terminal Assistant - Script para corrigir problemas
-echo "🔧 Corrigindo instalação do MCP Terminal Assistant..."
+# Diretório de instalação do MCP
+MCP_DIR=~/.mcp-terminal
 
-# Verificar se está rodando como root
-if [ "$EUID" -ne 0 ]; then
-  echo "❌ Este script precisa ser executado como root (sudo)."
+# Backup do arquivo original
+cp $MCP_DIR/mcp-assistant.js $MCP_DIR/mcp-assistant.js.bak
+echo "✅ Backup criado em $MCP_DIR/mcp-assistant.js.bak"
+
+# Copiar o script simplificado para o diretório de instalação
+cp /home/ipcom/mcp/mcp-devops/mcp-simple.js $MCP_DIR/mcp-simple.js
+chmod +x $MCP_DIR/mcp-simple.js
+echo "✅ Script mcp-simple.js copiado e configurado"
+
+# Criar script auxiliar simple-ask.sh no diretório de instalação
+cat > $MCP_DIR/simple-ask.sh << 'EOF'
+#!/bin/bash
+# Script para usar a versão simplificada do MCP Assistant
+
+# Verifica se foi fornecido um argumento
+if [ $# -eq 0 ]; then
+  echo "❌ Erro: Nenhuma pergunta fornecida"
+  echo "Uso: simple-ask.sh \"como listar arquivos por tamanho\""
   exit 1
 fi
 
-# Configurar diretório MCP
-MCP_DIR="/root/.mcp-terminal"
-mkdir -p $MCP_DIR/cache
-mkdir -p $MCP_DIR/logs
-mkdir -p $MCP_DIR/patterns
-mkdir -p $MCP_DIR/ai_models
+# Executa o mcp-simple.js com os argumentos fornecidos
+node ~/.mcp-terminal/mcp-simple.js "$*"
+EOF
 
-# Atualizar arquivo de configuração
-echo '{
-  "ai_provider": "claude",
-  "anthropic_api_key": "sk-ant-api03-X_PrP_I8YQ0j4Eu8_RoWEA",
-  "model": "claude-3-5-haiku-20241022",
-  "max_calls_per_hour": 100,
-  "enable_monitoring": true,
-  "enable_assistant": true,
-  "monitor_commands": ["npm", "yarn", "git", "docker", "make", "cargo", "go"],
-  "quick_fixes": true,
-  "auto_detect_fixes": false,
-  "log_level": "info",
-  "cache_duration_hours": 24
-}' > $MCP_DIR/config.json
+chmod +x $MCP_DIR/simple-ask.sh
+echo "✅ Script simple-ask.sh criado e configurado"
 
-# Copiar arquivos necessários
-echo "📂 Copiando arquivos..."
-cp -f /home/ipcom/mcp/mcp-devops/mcp-assistant.js $MCP_DIR/
-cp -f /home/ipcom/mcp/mcp-devops/mcp-client.js $MCP_DIR/
-cp -f /home/ipcom/mcp/mcp-devops/system_detector.js $MCP_DIR/
-cp -f /home/ipcom/mcp/mcp-devops/zsh_integration.sh $MCP_DIR/
+# Modificar a integração Zsh para usar o script simplificado
+INTEGRATION_FILE=$MCP_DIR/zsh_integration.sh
+cp $INTEGRATION_FILE ${INTEGRATION_FILE}.bak
+echo "✅ Backup de zsh_integration.sh criado"
 
-# Copiar modelos de IA
-cp -f /home/ipcom/mcp/mcp-devops/ai_models/*.js $MCP_DIR/ai_models/
+# Modificar a função ask() para usar o script simplificado
+sed -i '/^ask()/,/^}/c\
+# Comando ask para assistente (usando o script simplificado)\
+ask() {\
+    if [[ $# -eq 0 ]]; then\
+        echo "Uso: ask \"sua pergunta sobre Linux\""\
+        echo "Exemplo: ask \"como listar arquivos por tamanho\""\
+        return 1\
+    fi\
+\
+    ~/.mcp-terminal/simple-ask.sh "$*"\
+    return $?\
+}' $INTEGRATION_FILE
 
-# Tornar executáveis
-chmod +x $MCP_DIR/mcp-assistant.js
-chmod +x $MCP_DIR/mcp-client.js
+echo "✅ Função ask() atualizada para usar o script simplificado"
 
-# Instalar dependências
-echo "📦 Instalando dependências..."
-cd $MCP_DIR
-npm init -y >/dev/null 2>&1
-npm install @anthropic-ai/sdk minimist chalk >/dev/null 2>&1
+# Limpar o .zshrc de possíveis duplicações
+cp ~/.zshrc ~/.zshrc.bak
+ZSHRC=~/.zshrc
 
-# Criar links para execução fácil
-mkdir -p /usr/local/bin
-ln -sf $MCP_DIR/mcp-assistant.js /usr/local/bin/mcp-ask
-echo '#!/bin/bash
-cd /root && NODE_PATH=/root/.mcp-terminal/node_modules exec node /root/.mcp-terminal/mcp-assistant.js "$@"
-' > /usr/local/bin/ask
-chmod +x /usr/local/bin/ask
+# Remover linhas duplicadas de integração do MCP
+sed -i '/# MCP Terminal Integration/,+1{//!d;/# MCP Terminal Integration/d;}' $ZSHRC
+echo "✅ Entradas duplicadas em .zshrc removidas"
 
-# Adicionar integração do Zsh
-if [ -f "/root/.zshrc" ]; then
-  if ! grep -q "source $MCP_DIR/zsh_integration.sh" /root/.zshrc; then
-    echo -e "\n# MCP Terminal Integration\nsource $MCP_DIR/zsh_integration.sh\n" >> /root/.zshrc
-  fi
+# Certificar-se de que apenas uma linha de integração está presente
+grep -q "source ~/.mcp-terminal/zsh_integration.sh" $ZSHRC
+if [ $? -ne 0 ]; then
+  # Se não houver nenhuma linha de integração, adicionar uma
+  echo -e "\n# MCP Terminal Integration\nsource ~/.mcp-terminal/zsh_integration.sh" >> $ZSHRC
+  echo "✅ Linha de integração adicionada ao .zshrc"
 fi
 
-echo "✅ MCP Terminal Assistant corrigido com sucesso!"
+echo "✅ Correção concluída com sucesso"
 echo ""
-echo "📋 Instruções de uso:"
-echo "1. Use o comando 'ask \"sua pergunta\"' para fazer perguntas"
-echo "2. Exemplo: ask \"como listar arquivos por tamanho\""
+echo "📋 Próximos passos:"
+echo "1. Reinicie seu terminal ou execute: source ~/.zshrc"
+echo "2. Teste com: ask \"como listar arquivos por tamanho\""
+echo "3. Verifique se o resultado é mostrado corretamente"
 echo ""
-echo "🔄 Reinicie seu terminal ou execute 'source ~/.zshrc' para ativar completamente"
+echo "📋 Caso ainda tenha problemas após reiniciar o terminal,"
+echo "   tente usar diretamente: ~/.mcp-terminal/simple-ask.sh \"sua pergunta\""

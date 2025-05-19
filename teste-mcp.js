@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
+// Importações usando ESM (ECMAScript Modules)
 import fs from 'fs/promises';
+import { existsSync, readFileSync } from 'fs';
+import path from 'path';
 import { Anthropic } from '@anthropic-ai/sdk';
+import { spawnSync, execSync } from 'child_process';
 
 // Função para ler a configuração
 async function lerConfig() {

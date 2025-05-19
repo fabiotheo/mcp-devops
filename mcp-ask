@@ -1,0 +1,12 @@
+#!/bin/bash
+# Script mcp-ask - Versão alternativa do ask para o MCP Terminal Assistant
+
+# Verifica se foi fornecido um argumento
+if [ $# -eq 0 ]; then
+  echo "❌ Erro: Nenhuma pergunta fornecida"
+  echo "Uso: mcp-ask \"como listar arquivos por tamanho\""
+  exit 1
+fi
+
+# Executa o mcp-simple.js diretamente
+node /home/ipcom/mcp/mcp-devops/mcp-simple.js "$*"

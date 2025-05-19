@@ -294,7 +294,8 @@ Se a pergunta for sobre AWS S3, use este formato adicional:
 
                 console.log('✅ Received response from Anthropic API');
                 if (response && response.content && response.content.length > 0) {
-                    return response.content[0].text;
+                    const responseText = response.content[0].text;
+                    return responseText;
                 } else {
                     console.log('⚠️ Empty or invalid response from Anthropic API:', response);
                     return '❌ Erro: Resposta vazia ou inválida da API Anthropic.';
@@ -1041,12 +1042,11 @@ EXEMPLOS:
         output: process.stdout,
     });
 
+    // Função simplificada de confirmação para evitar problemas com promises assincronas
     const askConfirmation = (prompt) => {
-        return new Promise((resolve) => {
-            rl.question(prompt, (answer) => {
-                resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-            });
-        });
+        process.stdout.write(prompt);
+        const answer = rl.question('');
+        return answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes';
     };
 
     try {
@@ -1350,7 +1350,8 @@ EXEMPLOS:
                         console.log('⚠️ Resposta vazia recebida do assistant.askCommand()');
                         console.log('❌ Não foi possível obter uma resposta da IA. Por favor, tente novamente.');
                     } else {
-                        console.log(response);
+                        // Imprimir a resposta diretamente para o usuário com formatação adequada
+                        console.log('\n' + response + '\n');
                         success = true;
                     }
                 } catch (error) {

@@ -81,7 +81,14 @@ class MCPAssistant {
         }
 
         try {
-            let systemContext = this.systemDetector.getSystemContext();
+            // Verifica o tipo de consulta
+            const isFirewallQuery = this.isFirewallBlockQuery(question);
+            const isAsteriskQuery = this.isAsteriskQuery(question);
+            const isPM2Query = this.isPM2Query(question);
+            const isAWSS3Query = this.isAWSS3Query(question);
+
+            // Obtém o contexto do sistema, incluindo IPs bloqueados se for uma consulta de firewall
+            let systemContext = this.systemDetector.getSystemContext(isFirewallQuery);
             const currentDir = process.cwd();
             const dirInfo = await this.getCurrentDirectoryInfo();
 
@@ -139,6 +146,29 @@ ${webSearchResults.results.map((result, index) =>
 `;
             }
 
+            // Formata informações detalhadas com base no tipo de consulta
+            let detailedSection = '';
+
+            // Informações de firewall para consultas de firewall
+            if (isFirewallQuery && systemContext.firewallDetails && systemContext.firewallDetails.blockedIPs) {
+                detailedSection = this.formatFirewallBlockedIPs(systemContext.firewallDetails);
+            }
+
+            // Informações de Asterisk para consultas de VoIP
+            if (isAsteriskQuery && systemContext.installedPackages && systemContext.installedPackages.asterisk) {
+                detailedSection += this.formatAsteriskDetails(systemContext.installedPackages.asterisk);
+            }
+
+            // Informações de PM2 para consultas de gerenciamento de processos Node.js
+            if (isPM2Query && systemContext.installedPackages && systemContext.installedPackages.pm2) {
+                detailedSection += this.formatPM2Details(systemContext.installedPackages.pm2);
+            }
+
+            // Informações de AWS S3 para consultas relacionadas a S3
+            if (isAWSS3Query && systemContext.installedPackages && systemContext.installedPackages.awsCLI) {
+                detailedSection += this.formatAWSS3Details(systemContext.installedPackages.awsCLI);
+            }
+
             const prompt = `Você é um assistente especializado em Linux/Unix que ajuda usuários a encontrar o comando correto para suas tarefas.
 
 INFORMAÇÕES DO SISTEMA:
@@ -153,6 +183,7 @@ INFORMAÇÕES DO SISTEMA:
 
 PACOTES INSTALADOS:
 ${this.formatInstalledPackages(systemContext.installedPackages)}
+${detailedSection}
 
 DIRETÓRIO ATUAL: ${currentDir}
 ${dirInfo}
@@ -170,6 +201,10 @@ INSTRUÇÕES:
 5. Se houver variações por distribuição ou pacote instalado, mencione isso.
 6. Inclua opções úteis do comando.
 7. Se apropriado, sugira comandos relacionados.
+8. Se a pergunta for sobre IPs bloqueados ou firewalls, forneça uma resposta detalhada com base nas informações de firewall disponíveis.
+9. Se a pergunta for sobre Asterisk (VoIP), forneça comandos específicos para gerenciar ramais, chamadas, peers SIP, etc.
+10. Se a pergunta for sobre PM2 (gerenciador de processos Node.js), forneça comandos para monitorar, reiniciar ou gerenciar aplicações.
+11. Se a pergunta for sobre AWS S3, forneça comandos específicos para operações com buckets, sincronização, upload/download, etc.
 
 FORMATO DA RESPOSTA (use este formato estritamente):
 🔧 COMANDO:
@@ -186,7 +221,45 @@ comando exato aqui
 ⚠️ OBSERVAÇÕES:
 [Avisos ou considerações especiais]
 
-Responda de forma direta e prática. Se o comando for multi-linha, coloque cada parte em uma nova linha dentro do bloco de código bash.`;
+Responda de forma direta e prática. Se o comando for multi-linha, coloque cada parte em uma nova linha dentro do bloco de código bash.
+
+FORMATOS ESPECIAIS PARA CONSULTAS ESPECÍFICAS:
+
+1. PARA CONSULTAS DE FIREWALL/IPS BLOQUEADOS:
+Se a pergunta for sobre IPs bloqueados, use este formato adicional:
+
+🛡️ IPS BLOQUEADOS:
+[Lista formatada de IPs bloqueados por firewall]
+
+🔧 COMANDOS PARA GERENCIAR:
+[Comandos para desbloquear IPs ou gerenciar regras]
+
+2. PARA CONSULTAS DE ASTERISK (VoIP):
+Se a pergunta for sobre Asterisk ou telefonia VoIP, use este formato adicional:
+
+📞 STATUS DO ASTERISK:
+[Informações sobre status, versão, peers registrados, canais ativos]
+
+🔧 COMANDOS ESPECÍFICOS:
+[Comandos específicos para a tarefa solicitada]
+
+3. PARA CONSULTAS DE PM2 (GERENCIADOR DE PROCESSOS):
+Se a pergunta for sobre PM2 ou aplicações Node.js, use este formato adicional:
+
+📊 APLICAÇÕES EM EXECUÇÃO:
+[Lista de aplicações, status, uso de recursos]
+
+🔧 COMANDOS DE GERENCIAMENTO:
+[Comandos específicos para monitorar, reiniciar ou gerenciar aplicações]
+
+4. PARA CONSULTAS DE AWS S3:
+Se a pergunta for sobre AWS S3, use este formato adicional:
+
+☁️ INFORMAÇÕES DE S3:
+[Informações sobre buckets, configuração, região]
+
+🔧 COMANDOS S3:
+[Comandos específicos para operações com buckets, sincronização, upload/download]`;
 
             const modelToUse = this.config.claude_model || this.config.model || "claude-3-sonnet-20240229"; // Exemplo de nome de modelo válido
             const response = await this.anthropic.messages.create({
@@ -281,6 +354,369 @@ INFORMAÇÕES DO DIRETÓRIO:
         };
     }
 
+    // Verifica se a pergunta é sobre IPs bloqueados ou firewalls
+    isFirewallBlockQuery(question) {
+        const firewallKeywords = [
+            'firewall', 'ips bloqueados', 'ip bloqueado', 'bloqueio', 'bloqueados',
+            'ufw', 'iptables', 'firewalld', 'fail2ban', 'csf', 'shorewall', 'pf',
+            'regras de bloqueio', 'conexões bloqueadas', 'endereços bloqueados',
+            'bloquear ip', 'listar bloqueios', 'mostrar bloqueios', 'ver bloqueios'
+        ];
+
+        // Versão em inglês para compatibilidade
+        const englishKeywords = [
+            'blocked ip', 'blocked ips', 'firewall block', 'ip block', 'blocked address',
+            'list blocks', 'show blocks', 'view blocks', 'blocked connections'
+        ];
+
+        const normalizedQuestion = question.toLowerCase();
+
+        // Verifica se alguma das palavras-chave está presente na pergunta
+        return [...firewallKeywords, ...englishKeywords].some(keyword =>
+            normalizedQuestion.includes(keyword)
+        );
+    }
+
+    // Verifica se a pergunta é sobre Asterisk (VoIP)
+    isAsteriskQuery(question) {
+        const asteriskKeywords = [
+            'asterisk', 'voip', 'telefonia', 'telefone', 'ramal', 'ramais', 'sip',
+            'chamada', 'chamadas', 'ligação', 'ligações', 'pabx', 'pbx', 'canal',
+            'canais', 'extensão', 'extensões', 'registro sip', 'registros sip',
+            'peer', 'peers', 'trunk', 'trunks', 'dialplan', 'codec', 'codecs'
+        ];
+
+        // Versão em inglês para compatibilidade
+        const englishKeywords = [
+            'extension', 'extensions', 'phone', 'call', 'calls', 'sip register',
+            'sip registry', 'voip server', 'pbx', 'channel', 'channels'
+        ];
+
+        const normalizedQuestion = question.toLowerCase();
+
+        // Verifica se alguma das palavras-chave está presente na pergunta
+        return [...asteriskKeywords, ...englishKeywords].some(keyword =>
+            normalizedQuestion.includes(keyword)
+        );
+    }
+
+    // Verifica se a pergunta é sobre PM2 (Process Manager)
+    isPM2Query(question) {
+        const pm2Keywords = [
+            'pm2', 'process manager', 'gerenciador de processo', 'node.js', 'nodejs',
+            'aplicação node', 'aplicações node', 'app node', 'apps node',
+            'monitorar processo', 'monitorar processos', 'monitoramento de processo',
+            'reiniciar app', 'reiniciar aplicação', 'logs de aplicação', 'logs de app',
+            'memória de aplicação', 'cpu de aplicação', 'aplicação travando',
+            'aplicação caindo', 'aplicação reiniciando', 'ecosystem', 'ecossistema'
+        ];
+
+        // Versão em inglês para compatibilidade
+        const englishKeywords = [
+            'node app', 'node application', 'process monitoring', 'restart app',
+            'application logs', 'app logs', 'app memory', 'app cpu', 'app crashing',
+            'app restarting', 'node process'
+        ];
+
+        const normalizedQuestion = question.toLowerCase();
+
+        // Verifica se alguma das palavras-chave está presente na pergunta
+        return [...pm2Keywords, ...englishKeywords].some(keyword =>
+            normalizedQuestion.includes(keyword)
+        );
+    }
+
+    // Verifica se a pergunta é sobre AWS S3
+    isAWSS3Query(question) {
+        const s3Keywords = [
+            's3', 'aws', 'amazon s3', 'bucket', 'buckets', 'aws cli', 'cli aws',
+            'sincronizar s3', 'sincronizar com s3', 'upload s3', 'download s3',
+            'copiar para s3', 'copiar do s3', 'backup s3', 'backup para s3',
+            'armazenamento em nuvem', 'armazenamento na nuvem', 'objeto s3',
+            'objetos s3', 'url temporária', 'url pré-assinada', 'presigned url'
+        ];
+
+        // Versão em inglês para compatibilidade
+        const englishKeywords = [
+            'cloud storage', 's3 sync', 'sync to s3', 's3 upload', 's3 download',
+            'copy to s3', 'copy from s3', 's3 backup', 'backup to s3', 's3 object',
+            's3 objects', 'temporary url', 'presigned url'
+        ];
+
+        const normalizedQuestion = question.toLowerCase();
+
+        // Verifica se alguma das palavras-chave está presente na pergunta
+        return [...s3Keywords, ...englishKeywords].some(keyword =>
+            normalizedQuestion.includes(keyword)
+        );
+    }
+
+    // Formata informações de IPs bloqueados para o prompt
+    formatFirewallBlockedIPs(firewallDetails) {
+        if (!firewallDetails || !firewallDetails.blockedIPs) {
+            return '';
+        }
+
+        let result = "\n\nINFORMAÇÕES DE FIREWALL DETALHADAS:";
+        result += `\n- Firewalls ativos: ${firewallDetails.activeFirewalls.join(', ')}`;
+
+        // Para cada firewall, formata os IPs bloqueados
+        for (const [firewallName, firewallData] of Object.entries(firewallDetails.blockedIPs)) {
+            if (!firewallData.success) {
+                result += `\n\n${firewallName.toUpperCase()}: Erro ao obter informações (${firewallData.error || 'Erro desconhecido'})`;
+                continue;
+            }
+
+            if (!firewallData.blockedIPs || firewallData.blockedIPs.length === 0) {
+                result += `\n\n${firewallName.toUpperCase()}: Nenhum IP bloqueado encontrado`;
+                continue;
+            }
+
+            result += `\n\n${firewallName.toUpperCase()} (${firewallData.blockedIPs.length} IPs bloqueados):`;
+
+            // Limita a quantidade de IPs mostrados para não sobrecarregar o prompt
+            const maxIPsToShow = 15;
+            const ipsToShow = firewallData.blockedIPs.slice(0, maxIPsToShow);
+
+            for (const blockedIP of ipsToShow) {
+                result += `\n- IP: ${blockedIP.ip}`;
+                if (blockedIP.direction) result += `, Direção: ${blockedIP.direction}`;
+                if (blockedIP.type) result += `, Tipo: ${blockedIP.type}`;
+                if (blockedIP.formattedTime) result += `, Expira em: ${blockedIP.formattedTime}`;
+                if (blockedIP.comment) result += `, Comentário: ${blockedIP.comment}`;
+            }
+
+            if (firewallData.blockedIPs.length > maxIPsToShow) {
+                result += `\n- ... e mais ${firewallData.blockedIPs.length - maxIPsToShow} IPs (omitidos para brevidade)`;
+            }
+
+            // Adiciona comandos específicos para este firewall
+            result += `\n\nComandos para ${firewallName}:`;
+            switch (firewallName) {
+                case 'ufw':
+                    result += `
+- Listar regras: ufw status numbered
+- Desbloquear IP: ufw delete deny from <ip>
+- Ver logs: grep "BLOCK" /var/log/ufw.log`;
+                    break;
+                case 'firewalld':
+                    result += `
+- Listar regras: firewall-cmd --list-all
+- Desbloquear IP: firewall-cmd --permanent --remove-rich-rule='rule family="ipv4" source address="<ip>" reject'
+- Ver logs: journalctl -u firewalld`;
+                    break;
+                case 'iptables':
+                    result += `
+- Listar regras: iptables -L -n -v
+- Desbloquear IP: iptables -D INPUT -s <ip> -j DROP
+- Ver logs: grep "DROP" /var/log/kern.log`;
+                    break;
+                case 'fail2ban':
+                    result += `
+- Listar jails: fail2ban-client status
+- Desbloquear IP: fail2ban-client set <jail> unbanip <ip>
+- Ver logs: tail -f /var/log/fail2ban.log`;
+                    break;
+                case 'csf':
+                    result += `
+- Listar bloqueios: cat /etc/csf/csf.deny
+- Desbloquear IP: csf -dr <ip>
+- Ver logs: grep <ip> /var/log/lfd.log`;
+                    break;
+                case 'shorewall':
+                    result += `
+- Listar regras: shorewall show blacklists
+- Desbloquear IP: shorewall allow <ip>
+- Ver logs: grep <ip> /var/log/messages`;
+                    break;
+                case 'pf':
+                    result += `
+- Listar regras: pfctl -s rules
+- Desbloquear IP: pfctl -t <table> -T delete <ip>
+- Ver logs: tcpdump -n -e -ttt -i pflog0`;
+                    break;
+                default:
+                    result += `
+- Consulte a documentação específica para este firewall`;
+            }
+        }
+
+        return result;
+    }
+
+    // Formata informações detalhadas do Asterisk para o prompt
+    formatAsteriskDetails(asterisk) {
+        if (!asterisk) {
+            return '';
+        }
+
+        let result = "\n\nINFORMAÇÕES DETALHADAS DO ASTERISK:";
+        result += `\n- Status: ${asterisk.active ? 'Ativo' : 'Inativo'}`;
+        if (asterisk.version) {
+            result += `\n- Versão: ${asterisk.version}`;
+        }
+
+        // Adiciona informações de peers e canais
+        if (asterisk.registeredPeers > 0) {
+            result += `\n- Peers SIP registrados: ${asterisk.registeredPeers}`;
+        } else {
+            result += `\n- Peers SIP registrados: Nenhum ou não disponível`;
+        }
+
+        if (asterisk.activeChannels > 0) {
+            result += `\n- Canais ativos: ${asterisk.activeChannels}`;
+        } else {
+            result += `\n- Canais ativos: Nenhum`;
+        }
+
+        // Adiciona detalhes de configuração se disponíveis
+        if (asterisk.configDetails) {
+            result += `\n- Diretório de configuração: ${asterisk.configDetails.configPath || '/etc/asterisk'}`;
+            result += `\n- Diretório de logs: ${asterisk.configDetails.logPath || '/var/log/asterisk'}`;
+            if (asterisk.configDetails.uptime) {
+                result += `\n- Uptime: ${asterisk.configDetails.uptime}`;
+            }
+        }
+
+        // Adiciona comandos úteis para Asterisk
+        result += `\n\nCOMANDOS ÚTEIS PARA ASTERISK:`;
+        result += `
+- Verificar status: systemctl status asterisk
+- Ver peers SIP: asterisk -rx "sip show peers"
+- Ver registros SIP: asterisk -rx "sip show registry"
+- Ver canais ativos: asterisk -rx "core show channels"
+- Recarregar configuração SIP: asterisk -rx "sip reload"
+- Reiniciar sem derrubar chamadas: asterisk -rx "core restart gracefully"
+- Ver logs em tempo real: tail -f /var/log/asterisk/full
+- Verificar configuração: asterisk -T
+- Ver versão: asterisk -rx "core show version"
+- Ver uptime: asterisk -rx "core show uptime"
+- Ver módulos carregados: asterisk -rx "module show"
+- Ver dialplan: asterisk -rx "dialplan show"`;
+
+        return result;
+    }
+
+    // Formata informações detalhadas do PM2 para o prompt
+    formatPM2Details(pm2) {
+        if (!pm2) {
+            return '';
+        }
+
+        let result = "\n\nINFORMAÇÕES DETALHADAS DO PM2:";
+        result += `\n- Status: ${pm2.active ? 'Ativo' : 'Instalado mas sem aplicações ativas'}`;
+        if (pm2.version) {
+            result += `\n- Versão: ${pm2.version}`;
+        }
+
+        // Adiciona informações de aplicações
+        if (pm2.runningApps > 0) {
+            result += `\n- Aplicações em execução: ${pm2.runningApps}`;
+
+            // Adiciona detalhes das aplicações se disponíveis
+            if (pm2.appDetails && pm2.appDetails.apps && pm2.appDetails.apps.length > 0) {
+                result += `\n\nAPLICAÇÕES EM EXECUÇÃO:`;
+                for (const app of pm2.appDetails.apps) {
+                    result += `\n- Nome: ${app.name}`;
+                    result += `, Status: ${app.status}`;
+                    if (app.memory) result += `, Memória: ${typeof app.memory === 'number' ? `${Math.round(app.memory / (1024 * 1024))} MB` : app.memory}`;
+                    if (app.cpu) result += `, CPU: ${app.cpu}%`;
+                    if (app.restarts) result += `, Restarts: ${app.restarts}`;
+                }
+
+                if (pm2.appDetails.apps.length < pm2.runningApps) {
+                    result += `\n- ... e mais ${pm2.runningApps - pm2.appDetails.apps.length} aplicações (omitidas para brevidade)`;
+                }
+            }
+        } else {
+            result += `\n- Aplicações em execução: Nenhuma`;
+        }
+
+        // Adiciona comandos úteis para PM2
+        result += `\n\nCOMANDOS ÚTEIS PARA PM2:`;
+        result += `
+- Listar aplicações: pm2 list
+- Monitorar em tempo real: pm2 monit
+- Ver logs de todas as aplicações: pm2 logs
+- Ver logs de uma aplicação específica: pm2 logs [app-name]
+- Reiniciar aplicação: pm2 restart [app-name]
+- Recarregar aplicação (zero downtime): pm2 reload [app-name]
+- Parar aplicação: pm2 stop [app-name]
+- Remover aplicação: pm2 delete [app-name]
+- Configurar inicialização automática: pm2 startup
+- Salvar configuração atual: pm2 save
+- Ver detalhes de uma aplicação: pm2 show [app-name]
+- Iniciar nova aplicação: pm2 start app.js --name [app-name]
+- Iniciar com opções avançadas: pm2 start app.js --name [app-name] --watch --max-memory-restart 300M
+- Limpar logs: pm2 flush
+- Recarregar logs: pm2 reloadLogs
+- Verificar status do daemon: pm2 ping
+- Atualizar PM2: pm2 update
+- Gerar arquivo ecosystem: pm2 ecosystem
+- Iniciar usando ecosystem: pm2 start ecosystem.config.js`;
+
+        return result;
+    }
+
+    // Formata informações detalhadas do AWS S3 para o prompt
+    formatAWSS3Details(awsCLI) {
+        if (!awsCLI) {
+            return '';
+        }
+
+        let result = "\n\nINFORMAÇÕES DETALHADAS DO AWS CLI (S3):";
+        result += `\n- Status: ${awsCLI.configured ? 'Configurado' : 'Instalado mas não configurado'}`;
+        if (awsCLI.version) {
+            result += `\n- Versão: ${awsCLI.version}`;
+        }
+
+        // Adiciona informações de configuração
+        if (awsCLI.configured) {
+            result += `\n- Região padrão: ${awsCLI.defaultRegion || 'Não definida'}`;
+
+            // Adiciona detalhes de configuração se disponíveis
+            if (awsCLI.configDetails) {
+                if (awsCLI.configDetails.profile) {
+                    result += `\n- Perfil: ${awsCLI.configDetails.profile}`;
+                }
+                if (awsCLI.configDetails.outputFormat) {
+                    result += `\n- Formato de saída: ${awsCLI.configDetails.outputFormat}`;
+                }
+            }
+
+            // Adiciona informações de buckets
+            if (awsCLI.buckets && awsCLI.buckets.length > 0) {
+                result += `\n\nBUCKETS DISPONÍVEIS (${awsCLI.buckets.length}):`;
+                for (const bucket of awsCLI.buckets) {
+                    result += `\n- ${bucket}`;
+                }
+            } else {
+                result += `\n- Buckets disponíveis: Nenhum ou sem permissão para listar`;
+            }
+        }
+
+        // Adiciona comandos úteis para AWS S3
+        result += `\n\nCOMANDOS ÚTEIS PARA AWS S3:`;
+        result += `
+- Listar buckets: aws s3 ls
+- Listar objetos em um bucket: aws s3 ls s3://[bucket-name]
+- Listar objetos recursivamente: aws s3 ls s3://[bucket-name] --recursive
+- Criar bucket: aws s3 mb s3://[bucket-name]
+- Remover bucket: aws s3 rb s3://[bucket-name]
+- Copiar arquivo para S3: aws s3 cp [local-file] s3://[bucket-name]/[path]
+- Copiar arquivo do S3: aws s3 cp s3://[bucket-name]/[path] [local-file]
+- Sincronizar diretório para S3: aws s3 sync [local-dir] s3://[bucket-name]/[path]
+- Sincronizar diretório do S3: aws s3 sync s3://[bucket-name]/[path] [local-dir]
+- Remover objeto: aws s3 rm s3://[bucket-name]/[path]
+- Gerar URL temporária: aws s3 presign s3://[bucket-name]/[path] --expires-in [seconds]
+- Ver tamanho do bucket: aws s3 ls s3://[bucket-name] --recursive --human-readable --summarize
+- Configurar concorrência: aws configure set default.s3.max_concurrent_requests [number]
+- Configurar tamanho de chunk: aws configure set default.s3.multipart_chunksize [size]
+- Habilitar aceleração: aws s3 cp --endpoint-url=https://s3-accelerate.amazonaws.com`;
+
+        return result;
+    }
+
     // Formata informações de pacotes instalados para o prompt
     formatInstalledPackages(packages) {
         if (!packages) return "- Nenhuma informação de pacotes disponível";
@@ -337,8 +773,44 @@ INFORMAÇÕES DO DIRETÓRIO:
             result += packages.monitoringTools.map(tool =>
                 `${tool.name}${tool.active ? ' (ativo)' : ' (inativo)'}`
             ).join(", ");
+            result += "\n";
         } else {
-            result += "- Ferramentas de Monitoramento: Nenhuma detectada";
+            result += "- Ferramentas de Monitoramento: Nenhuma detectada\n";
+        }
+
+        // Formata Asterisk (VoIP)
+        if (packages.asterisk) {
+            result += "- Asterisk (VoIP): ";
+            result += `${packages.asterisk.details}`;
+            if (packages.asterisk.registeredPeers > 0) {
+                result += `, ${packages.asterisk.registeredPeers} peers registrados`;
+            }
+            if (packages.asterisk.activeChannels > 0) {
+                result += `, ${packages.asterisk.activeChannels} canais ativos`;
+            }
+            result += "\n";
+        } else {
+            result += "- Asterisk (VoIP): Não detectado\n";
+        }
+
+        // Formata PM2 (Process Manager)
+        if (packages.pm2) {
+            result += "- PM2 (Process Manager): ";
+            result += `${packages.pm2.details}`;
+            result += "\n";
+        } else {
+            result += "- PM2 (Process Manager): Não detectado\n";
+        }
+
+        // Formata AWS CLI (S3)
+        if (packages.awsCLI) {
+            result += "- AWS CLI (S3): ";
+            result += `${packages.awsCLI.details}`;
+            if (packages.awsCLI.buckets && packages.awsCLI.buckets.length > 0) {
+                result += `, ${packages.awsCLI.buckets.length} buckets disponíveis`;
+            }
+        } else {
+            result += "- AWS CLI (S3): Não detectado";
         }
 
         return result;

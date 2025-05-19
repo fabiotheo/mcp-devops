@@ -2,6 +2,7 @@
 // ~/.mcp-terminal/setup.js
 
 import fs from 'fs/promises';
+import { readFileSync } from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import readline from 'readline';
@@ -13,8 +14,16 @@ class MCPSetup {
         this.zshrcPath = path.join(process.env.HOME, '.zshrc');
         this.versionFilePath = path.join(this.mcpDir, '.version');
 
-        // Versão atual do MCP - atualizar quando lançar novas versões
-        this.version = "1.0.0";
+        // Lê a versão do package.json
+        try {
+            const packageJsonPath = path.join(process.cwd(), 'package.json');
+            const packageData = readFileSync(packageJsonPath, 'utf8');
+            const packageJson = JSON.parse(packageData);
+            this.version = packageJson.version;
+        } catch (error) {
+            // Fallback para versão padrão se não conseguir ler do package.json
+            this.version = "1.0.1";
+        }
     }
 
     async setup() {

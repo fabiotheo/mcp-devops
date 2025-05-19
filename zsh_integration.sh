@@ -56,7 +56,7 @@ ask() {
         return 1
     fi
 
-    echo "🚀 Executando: node ~/.mcp-terminal/mcp-assistant.js \"$@\""
+    echo "🚀 Executando: node ~/.mcp-terminal/mcp-assistant.js \"$*\""
     node ~/.mcp-terminal/mcp-assistant.js "$@"
     local exit_code=$?
     if [[ $exit_code -ne 0 ]]; then

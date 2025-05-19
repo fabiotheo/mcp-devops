@@ -11,6 +11,10 @@ class MCPSetup {
         this.mcpDir = path.join(process.env.HOME, '.mcp-terminal');
         this.configPath = path.join(this.mcpDir, 'config.json');
         this.zshrcPath = path.join(process.env.HOME, '.zshrc');
+        this.versionFilePath = path.join(this.mcpDir, '.version');
+
+        // Versão atual do MCP - atualizar quando lançar novas versões
+        this.version = "1.0.0";
     }
 
     async setup() {
@@ -35,6 +39,9 @@ class MCPSetup {
             // 6. Teste inicial
             await this.runTests();
 
+            // 7. Salvar versão atual
+            await this.saveVersion();
+
             console.log('\n✅ Instalação concluída com sucesso!');
             console.log('\n📋 Próximos passos:');
             console.log('1. Reinicie seu terminal ou execute: source ~/.zshrc');
@@ -45,6 +52,129 @@ class MCPSetup {
             console.error('\n❌ Erro durante a instalação:', error.message);
             process.exit(1);
         }
+    }
+
+    async upgrade() {
+        try {
+            console.log('🔄 Atualizando MCP Terminal Assistant...\n');
+
+            // 1. Verificar a versão atual
+            const currentVersion = await this.getCurrentVersion();
+            console.log(`📊 Versão instalada: ${currentVersion || 'não encontrada'}`);
+            console.log(`📊 Nova versão: ${this.version}`);
+
+            if (currentVersion === this.version) {
+                console.log('\n✅ Você já está na versão mais recente!');
+                return;
+            }
+
+            // 2. Criar diretórios (caso não existam)
+            await this.createDirectories();
+
+            // 3. Backup da configuração atual
+            console.log('📦 Fazendo backup da configuração...');
+            let config = null;
+            try {
+                const configData = await fs.readFile(this.configPath, 'utf8');
+                config = JSON.parse(configData);
+                console.log('  ✓ Backup da configuração concluído');
+            } catch (error) {
+                console.log('  ⚠️ Não foi possível ler configuração existente, será criada uma nova');
+            }
+
+            // 4. Executar migrações de versão específicas se necessário
+            if (currentVersion) {
+                await this.runMigrations(currentVersion);
+            }
+
+            // 5. Atualizar arquivos de código
+            console.log('📄 Atualizando arquivos...');
+            await this.setupDependencies();
+            await this.makeExecutable();
+
+            // 6. Restaurar configuração
+            if (config) {
+                console.log('🔄 Restaurando configuração...');
+                // Mesclamos com o template atual para garantir novos campos
+                const templatePath = path.join(process.cwd(), 'config_template.json');
+                try {
+                    const template = await fs.readFile(templatePath, 'utf8');
+                    const templateConfig = JSON.parse(template);
+
+                    // Mesclar mantendo valores do usuário onde existirem
+                    const mergedConfig = { ...templateConfig, ...config };
+
+                    await fs.writeFile(this.configPath, JSON.stringify(mergedConfig, null, 2));
+                    console.log('  ✓ Configuração restaurada e atualizada');
+                } catch (error) {
+                    // Se falhar, mantém a configuração antiga
+                    await fs.writeFile(this.configPath, JSON.stringify(config, null, 2));
+                    console.log('  ✓ Configuração original restaurada');
+                }
+            } else {
+                // Se não tiver configuração, cria uma nova
+                await this.configureAPI();
+            }
+
+            // 7. Atualizar integração Zsh (caso necessário)
+            await this.setupZshIntegration();
+
+            // 8. Executar testes
+            await this.runTests();
+
+            // 9. Salvar nova versão
+            await this.saveVersion();
+
+            console.log('\n✅ Atualização concluída com sucesso!');
+            console.log('\n📋 Próximos passos:');
+            console.log('1. Reinicie seu terminal ou execute: source ~/.zshrc');
+            console.log('2. Teste com: ask "como listar arquivos por tamanho"');
+            console.log('3. Execute um comando que falhe para ver o monitoramento');
+
+        } catch (error) {
+            console.error('\n❌ Erro durante a atualização:', error.message);
+            process.exit(1);
+        }
+    }
+
+    async getCurrentVersion() {
+        try {
+            return await fs.readFile(this.versionFilePath, 'utf8');
+        } catch (error) {
+            return null; // Versão não encontrada (instalação antiga ou nova)
+        }
+    }
+
+    async saveVersion() {
+        await fs.writeFile(this.versionFilePath, this.version, 'utf8');
+        console.log(`  ✓ Versão ${this.version} registrada`);
+    }
+
+    async runMigrations(fromVersion) {
+        console.log(`🔄 Executando migrações necessárias de v${fromVersion} para v${this.version}...`);
+
+        // Este bloco será expandido com migrações específicas conforme necessário
+        // Exemplo: se alterar a estrutura do config.json ou outros arquivos
+
+        // Migração da v0.9 para v1.0+
+        if (fromVersion < "1.0.0") {
+            console.log('  ✓ Aplicando migração para compatibilidade v1.0.0');
+
+            // Exemplo: atualizar estrutura de cache ou logs
+            try {
+                // Reorganização de pastas
+                const oldCachePath = path.join(this.mcpDir, 'cache');
+                const newCachePath = path.join(this.mcpDir, 'cache', 'responses');
+                await fs.mkdir(newCachePath, { recursive: true });
+
+                console.log('  ✓ Estrutura de diretórios atualizada');
+            } catch (error) {
+                console.log(`  ⚠️ Aviso na migração: ${error.message}`);
+            }
+        }
+
+        // Adicione mais migrações conforme necessário para versões futuras
+        // if (fromVersion < "1.1.0") { ... }
     }
 
     async createDirectories() {
@@ -747,14 +877,24 @@ export default class ModelFactory {
         try {
             const config = JSON.parse(await fs.readFile(this.configPath, 'utf8'));
             if (config.anthropic_api_key) {
-                console.log('  ✓ Configuração válida');
+                // Verifica se a API key é um placeholder
+                if (config.anthropic_api_key === "YOUR_ANTHROPIC_API_KEY_HERE" ||
+                    config.anthropic_api_key.includes("YOUR_") ||
+                    config.anthropic_api_key.includes("API_KEY")) {
+                    console.log('  ⚠️ API key não configurada. Você precisa configurar uma API key válida');
+                    console.log('     Edite o arquivo ~/.mcp-terminal/config.json e substitua o placeholder pela sua API key');
+                } else {
+                    console.log('  ✓ Configuração válida');
+                }
+            } else {
+                console.log('  ⚠️ API key não encontrada na configuração');
             }
         } catch {
             console.log('  ⚠ Problema na configuração');
         }
     }
 
-    async uninstall() {
+    async uninstall(removeAllData = false) {
         console.log('🗑️  Desinstalando MCP Terminal...');
 
         // Remove integração do .zshrc
@@ -765,12 +905,6 @@ export default class ModelFactory {
             console.log('  ✓ Integração removida do .zshrc');
         } catch {}
 
-        // Remove diretório
-        try {
-            await fs.rm(this.mcpDir, { recursive: true, force: true });
-            console.log('  ✓ Arquivos removidos');
-        } catch {}
-
         // Remove links globais
         const binDir = path.join(process.env.HOME, '.local/bin');
         try {
@@ -779,7 +913,136 @@ export default class ModelFactory {
             console.log('  ✓ Links globais removidos');
         } catch {}
 
+        // Remove diretório (opcional)
+        if (removeAllData) {
+            try {
+                await fs.rm(this.mcpDir, { recursive: true, force: true });
+                console.log('  ✓ Todos os arquivos e dados removidos');
+            } catch {}
+        } else {
+            console.log('  ℹ️ Diretório ~/.mcp-terminal mantido para preservar configurações e histórico');
+            console.log('     Para remover completamente, use: node setup.js --uninstall --remove-all-data');
+        }
+
         console.log('✅ Desinstalação concluída');
+    }
+
+    async autoSetup(isUpgrade = false) {
+        console.log(`🚀 ${isUpgrade ? 'Atualizando' : 'Configurando'} MCP Terminal Assistant automaticamente...\n`);
+
+        try {
+            // Verificar versão atual se for upgrade
+            if (isUpgrade) {
+                const currentVersion = await this.getCurrentVersion();
+                console.log(`📊 Versão instalada: ${currentVersion || 'não encontrada'}`);
+                console.log(`📊 Nova versão: ${this.version}`);
+
+                if (currentVersion === this.version) {
+                    console.log('\n✅ Você já está na versão mais recente!');
+                    return;
+                }
+
+                // Executar migrações se necessário
+                if (currentVersion) {
+                    await this.runMigrations(currentVersion);
+                }
+            }
+
+            // 1. Criar diretórios
+            await this.createDirectories();
+
+            // 2. Configurar dependências
+            await this.setupDependencies();
+
+            // 3. Configurar API key automaticamente
+            console.log('\n🔑 Configurando API automaticamente...');
+
+            // Carrega template de configuração
+            const templatePath = path.join(process.cwd(), 'config_template.json');
+            let config = {};
+
+            try {
+                const template = await fs.readFile(templatePath, 'utf8');
+                config = JSON.parse(template);
+            } catch (error) {
+                // Caso o template não seja encontrado, usa configuração padrão
+                config = {
+                    "ai_provider": "claude",
+                    "anthropic_api_key": "YOUR_ANTHROPIC_API_KEY_HERE",
+                    "openai_api_key": "YOUR_OPENAI_API_KEY_HERE",
+                    "gemini_api_key": "YOUR_GEMINI_API_KEY_HERE",
+                    "claude_model": "claude-3-7-sonnet-20250219",
+                    "openai_model": "gpt-4o",
+                    "gemini_model": "gemini-pro",
+                    "max_calls_per_hour": 100,
+                    "enable_monitoring": true,
+                    "enable_assistant": true,
+                    "monitor_commands": ["npm", "yarn", "git", "docker", "make", "cargo", "go", "apt", "pacman", "systemctl"],
+                    "quick_fixes": true,
+                    "auto_detect_fixes": false,
+                    "log_level": "info",
+                    "cache_duration_hours": 24
+                };
+            }
+
+            // Se for upgrade, preserva configuração existente
+            if (isUpgrade) {
+                try {
+                    const existingContent = await fs.readFile(this.configPath, 'utf8');
+                    const existingConfig = JSON.parse(existingContent);
+
+                    // Preserva configurações existentes
+                    if (existingConfig) {
+                        config = { ...config, ...existingConfig };
+                        console.log('  ✓ Configuração existente preservada');
+                    }
+                } catch {}
+            } else {
+                // Para instalação nova, mantém o placeholder para API key
+                // O usuário precisará configurar sua própria API key após a instalação
+                console.log('  ⚠️ Instalação automática: Você precisará configurar sua API key manualmente');
+                console.log('     Edite o arquivo ~/.mcp-terminal/config.json após a instalação');
+            }
+
+            // Salva a configuração
+            await fs.writeFile(this.configPath, JSON.stringify(config, null, 2));
+            console.log('  ✓ Configuração salva automaticamente');
+
+            // 4. Configurar integração Zsh
+            await this.setupZshIntegration();
+
+            // 5. Tornar scripts executáveis
+            await this.makeExecutable();
+
+            // 6. Teste inicial
+            await this.runTests();
+
+            // 7. Salvar versão atual
+            await this.saveVersion();
+
+            console.log(`\n✅ ${isUpgrade ? 'Atualização' : 'Instalação'} automática concluída com sucesso!`);
+
+            // Verificar se a API key é um placeholder
+            try {
+                const config = JSON.parse(await fs.readFile(this.configPath, 'utf8'));
+                if (config.anthropic_api_key === "YOUR_ANTHROPIC_API_KEY_HERE" ||
+                    config.anthropic_api_key.includes("YOUR_") ||
+                    config.anthropic_api_key.includes("API_KEY")) {
+                    console.log('\n⚠️ IMPORTANTE: API key não configurada');
+                    console.log('   Você precisa configurar uma API key válida antes de usar o MCP Terminal Assistant');
+                    console.log('   Edite o arquivo ~/.mcp-terminal/config.json e substitua o placeholder pela sua API key');
+                }
+            } catch {}
+
+            console.log('\n📋 Próximos passos:');
+            console.log('1. Reinicie seu terminal ou execute: source ~/.zshrc');
+            console.log('2. Teste com: ask "como listar arquivos por tamanho"');
+            console.log('3. Execute um comando que falhe para ver o monitoramento');
+
+        } catch (error) {
+            console.error(`\n❌ Erro durante a ${isUpgrade ? 'atualização' : 'instalação'} automática:`, error.message);
+            process.exit(1);
+        }
     }
 }
 
@@ -788,10 +1051,25 @@ async function main() {
     const args = process.argv.slice(2);
     const setup = new MCPSetup();
 
-    if (args.includes('--uninstall')) {
-        await setup.uninstall();
+    const isAuto = args.includes('--auto');
+    const isUpgrade = args.includes('--upgrade');
+    const isUninstall = args.includes('--uninstall');
+    const removeAllData = args.includes('--remove-all-data');
+
+    if (isUninstall) {
+        await setup.uninstall(removeAllData);
+    } else if (isUpgrade) {
+        if (isAuto) {
+            await setup.autoSetup(true);
+        } else {
+            await setup.upgrade();
+        }
     } else {
-        await setup.setup();
+        if (isAuto) {
+            await setup.autoSetup(false);
+        } else {
+            await setup.setup();
+        }
     }
 }
 

@@ -93,23 +93,55 @@ chmod +x install_prerequisites.sh
 ### Installation Process
 
 ```bash
-# Install MCP Terminal Assistant
+# Interactive installation (recommended for first-time users)
 node setup.js
 
+# Automatic installation with default settings
+node setup.js --auto
+
 # This will:
-# 1. Request your Anthropic API key
+# 1. Request your Anthropic API key (interactive mode)
+#    Note: In automatic mode, you'll need to manually configure your API key after installation
 # 2. Configure your Zsh shell
 # 3. Set up required directories and permissions
 # 4. Install necessary dependencies
 ```
 
+### Updating to a New Version
+
+When updating to a new version, you don't need to remove any files or directories. Just use the upgrade option:
+
+```bash
+# Interactive update preserving your settings (recommended for most users)
+# This will guide you through the upgrade process with prompts
+node setup.js --upgrade
+
+# Automatic update preserving your settings (for scripted/unattended upgrades)
+# This will upgrade without prompts, using your existing configuration
+node setup.js --upgrade --auto
+
+# Or use the quick update script (simplest option)
+# This is a convenience wrapper around the automatic upgrade
+./upgrade.sh
+```
+
+This will:
+1. Preserve your API keys and configuration
+2. Update only the necessary files
+3. Apply any needed migrations automatically
+4. Register the new version
+
+The upgrade process is designed to be safe and non-destructive, ensuring your personal settings and history are maintained while updating the core functionality.
+
 ### Post-Installation
 
-After installation, restart your terminal or run:
+After installation or update, restart your terminal or run:
 
 ```bash
 source ~/.zshrc
 ```
+
+If you used automatic installation, you'll need to configure your API key by editing `~/.mcp-terminal/config.json` and replacing the placeholder with your actual API key.
 
 ## 🔍 Usage
 
@@ -242,8 +274,11 @@ MCP Terminal Assistant uses a combination of techniques:
 ## 🔄 Uninstallation
 
 ```bash
-# Run the uninstaller
+# Run the uninstaller (preserves configuration and data)
 node setup.js --uninstall
+
+# To completely remove all data and configuration
+node setup.js --uninstall --remove-all-data
 ```
 
 ## 🛠️ Development

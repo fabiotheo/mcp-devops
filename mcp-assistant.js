@@ -17,6 +17,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'; // Keep for sync o
 import path from 'path';
 import { execSync, spawn } from 'child_process';
 import ModelFactory from './ai_models/model_factory.js';
+import WebSearcher from './web_search/index.js';
 import readline from 'readline';
 import os from 'os'; // For tmpdir and EOL
 
@@ -28,6 +29,7 @@ class MCPAssistant {
         this.configPath = CONFIG_PATH;
         this.systemDetector = new SystemDetector();
         this.aiModel = null;
+        this.webSearcher = null;
         this.config = {}; // Initialize config
         // loadConfig is called asynchronously, so ensure it's handled if methods depend on it immediately
     }
@@ -41,6 +43,12 @@ class MCPAssistant {
             }
             const configData = await fs.readFile(this.configPath, 'utf8');
             this.config = JSON.parse(configData);
+
+            // Initialize web searcher if enabled
+            if (this.config.web_search && this.config.web_search.enabled) {
+                this.webSearcher = new WebSearcher(this.config.web_search);
+                console.log('🌐 Web search functionality initialized');
+            }
 
             try {
                 this.aiModel = await ModelFactory.createModel(this.config);
@@ -77,6 +85,24 @@ class MCPAssistant {
             const currentDir = process.cwd();
             const dirInfo = await this.getCurrentDirectoryInfo();
 
+            // Try to get web search results if enabled
+            let webSearchResults = null;
+            if (this.webSearcher && this.config.web_search && this.config.web_search.enabled) {
+                try {
+                    console.log('🔍 Searching web for relevant information...');
+                    webSearchResults = await this.webSearcher.searchDocumentation(question, {
+                        os: systemContext.os,
+                        distro: systemContext.distro,
+                        version: systemContext.version,
+                        language: 'bash' // Assuming Linux commands
+                    });
+                    console.log(`✅ Found ${webSearchResults.results ? webSearchResults.results.length : 0} web search results`);
+                } catch (error) {
+                    console.warn(`⚠️  Web search failed: ${error.message}`);
+                    // Continue without web search results
+                }
+            }
+
             if (this.aiModel && !this.usingFallbackAI) {
                 // Ensure we have the installed packages information
                 if (!systemContext.installedPackages) {
@@ -89,13 +115,28 @@ class MCPAssistant {
                     ...systemContext,
                     currentDir,
                     dirInfo,
-                    formattedPackages: this.formatInstalledPackages(systemContext.installedPackages)
+                    formattedPackages: this.formatInstalledPackages(systemContext.installedPackages),
+                    webSearchResults: webSearchResults
                 });
             }
 
             // Fallback para o sistema antigo (Claude direto via Anthropic SDK)
             if (!this.anthropic) {
                 return '❌ Erro: Cliente Anthropic (fallback) não inicializado. Verifique sua API key.';
+            }
+
+            // Format web search results if available
+            let webSearchSection = '';
+            if (webSearchResults && webSearchResults.results && webSearchResults.results.length > 0) {
+                webSearchSection = `
+RESULTADOS DE BUSCA NA WEB:
+${webSearchResults.results.map((result, index) => 
+  `${index + 1}. ${result.title}
+   URL: ${result.url}
+   Fonte: ${result.source}
+   Resumo: ${result.snippet}`
+).join('\n\n')}
+`;
             }
 
             const prompt = `Você é um assistente especializado em Linux/Unix que ajuda usuários a encontrar o comando correto para suas tarefas.
@@ -118,7 +159,7 @@ ${dirInfo}
 
 COMANDOS DISPONÍVEIS NESTE SISTEMA (amostra ou relevantes, se aplicável):
 ${systemContext.commands && systemContext.commands.length > 0 ? JSON.stringify(systemContext.commands.slice(0, 20), null, 2) + (systemContext.commands.length > 20 ? "\n(e mais...)" : "") : "Não especificado"}
-
+${webSearchSection}
 PERGUNTA DO USUÁRIO: ${question}
 
 INSTRUÇÕES:
@@ -459,6 +500,11 @@ USO:
   ask --history                    # Ver histórico dos últimos 10 comandos
   ask --system-info                # Informações do sistema detectadas
   ask --provider-info              # Informações do provedor de IA atual
+  ask --web-search <on|off>        # Ativar/desativar busca na web
+  ask --web-status                 # Ver status da busca na web
+  ask --scrape <url>               # Extrair conteúdo de uma página web
+  ask --crawl <url> [--limit N]    # Rastrear um site web (limite opcional)
+  ask --firecrawl-key <key>        # Configurar chave API do Firecrawl
 
 OPERAÇÕES DE ARQUIVOS:
   ask --list [caminho]             # Listar conteúdo do diretório (padrão: .)
@@ -528,6 +574,201 @@ EXEMPLOS:
                 console.log(`   Provedor: ${providerInfo.provider}`);
                 console.log(`   Modelo: ${providerInfo.model}`);
                 console.log('\nPara alterar, edite seu config.json ou execute: mcp-setup --configure-model');
+                break;
+
+            case '--web-search':
+                if (!commandArg || (commandArg !== 'on' && commandArg !== 'off')) {
+                    console.log('❌ Uso: ask --web-search <on|off>');
+                    break;
+                }
+
+                try {
+                    // Read current config
+                    const configData = await fs.readFile(CONFIG_PATH, 'utf8');
+                    const config = JSON.parse(configData);
+
+                    // Ensure web_search section exists
+                    if (!config.web_search) {
+                        config.web_search = {
+                            enabled: false,
+                            cache_settings: {
+                                documentation: 7,
+                                error_solutions: 1,
+                                package_info: 0.04,
+                                man_pages: 30
+                            },
+                            priority_sources: [
+                                "man_pages",
+                                "official_docs",
+                                "github_issues",
+                                "stackoverflow"
+                            ],
+                            rate_limit_per_hour: 50
+                        };
+                    }
+
+                    // Update enabled setting
+                    config.web_search.enabled = (commandArg === 'on');
+
+                    // Save updated config
+                    await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
+
+                    // Update current instance
+                    assistant.config.web_search = config.web_search;
+
+                    // Initialize or clear web searcher as needed
+                    if (commandArg === 'on' && !assistant.webSearcher) {
+                        assistant.webSearcher = new WebSearcher(config.web_search);
+                        console.log('🌐 Busca na web ativada e inicializada');
+                    } else if (commandArg === 'off' && assistant.webSearcher) {
+                        assistant.webSearcher = null;
+                        console.log('🌐 Busca na web desativada');
+                    } else {
+                        console.log(`🌐 Busca na web ${commandArg === 'on' ? 'ativada' : 'desativada'}`);
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao atualizar configuração de busca na web:', error.message);
+                }
+                break;
+
+            case '--web-status':
+                if (assistant.config.web_search && assistant.config.web_search.enabled) {
+                    console.log('\n🌐 Status da Busca na Web: ATIVADA\n');
+                    console.log('Configurações:');
+                    console.log(JSON.stringify(assistant.config.web_search, null, 2));
+
+                    // Check if Firecrawl is configured
+                    if (assistant.webSearcher && assistant.webSearcher.isFirecrawlConfigured()) {
+                        console.log('\n🔥 Firecrawl: CONFIGURADO');
+                        console.log('Você pode usar os comandos --scrape e --crawl para extrair conteúdo de sites.');
+                    } else {
+                        console.log('\n🔥 Firecrawl: NÃO CONFIGURADO');
+                        console.log('Para configurar, use: ask --firecrawl-key <sua_chave_api>');
+                    }
+                } else {
+                    console.log('\n🌐 Status da Busca na Web: DESATIVADA\n');
+                    console.log('Para ativar, use: ask --web-search on');
+                }
+                break;
+
+            case '--firecrawl-key':
+                if (!commandArg) {
+                    console.log('❌ Uso: ask --firecrawl-key <sua_chave_api>');
+                    break;
+                }
+
+                try {
+                    // Read current config
+                    const configData = await fs.readFile(CONFIG_PATH, 'utf8');
+                    const config = JSON.parse(configData);
+
+                    // Update Firecrawl API key
+                    config.firecrawl_api_key = commandArg;
+
+                    // Save updated config
+                    await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
+
+                    console.log('✅ Chave API do Firecrawl configurada com sucesso');
+                    console.log('Reinicie o MCP Assistant para aplicar as alterações');
+                } catch (error) {
+                    console.error('❌ Erro ao atualizar configuração do Firecrawl:', error.message);
+                }
+                break;
+
+            case '--scrape':
+                if (!commandArg) {
+                    console.log('❌ Uso: ask --scrape <url>');
+                    break;
+                }
+
+                if (!assistant.webSearcher) {
+                    console.log('❌ Web search não está inicializado. Ative com: ask --web-search on');
+                    break;
+                }
+
+                if (!assistant.webSearcher.isFirecrawlConfigured()) {
+                    console.log('❌ Firecrawl não está configurado. Configure com: ask --firecrawl-key <sua_chave_api>');
+                    break;
+                }
+
+                try {
+                    console.log(`\n🔍 Extraindo conteúdo de: ${commandArg}\n`);
+                    const result = await assistant.webSearcher.scrapeWebsite(commandArg);
+
+                    if (!result.success) {
+                        console.log(`❌ Erro ao extrair conteúdo: ${result.error}`);
+                        break;
+                    }
+
+                    // Display the result
+                    console.log('✅ Conteúdo extraído com sucesso:\n');
+
+                    if (result.data && result.data.markdown) {
+                        console.log(result.data.markdown.substring(0, 1000) + '...');
+                        console.log('\n(Conteúdo truncado para exibição. Conteúdo completo disponível no objeto de resultado)');
+                    } else {
+                        console.log(JSON.stringify(result, null, 2));
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao extrair conteúdo:', error.message);
+                }
+                break;
+
+            case '--crawl':
+                if (!commandArg) {
+                    console.log('❌ Uso: ask --crawl <url> [--limit N]');
+                    break;
+                }
+
+                if (!assistant.webSearcher) {
+                    console.log('❌ Web search não está inicializado. Ative com: ask --web-search on');
+                    break;
+                }
+
+                if (!assistant.webSearcher.isFirecrawlConfigured()) {
+                    console.log('❌ Firecrawl não está configurado. Configure com: ask --firecrawl-key <sua_chave_api>');
+                    break;
+                }
+
+                try {
+                    // Parse limit if provided
+                    let limit = 10; // Default limit
+                    const limitArg = args.find(arg => arg.startsWith('--limit'));
+                    if (limitArg) {
+                        const limitValue = limitArg.split(' ')[1] || args[args.indexOf(limitArg) + 1];
+                        if (limitValue && !isNaN(parseInt(limitValue))) {
+                            limit = parseInt(limitValue);
+                        }
+                    }
+
+                    console.log(`\n🔍 Rastreando site: ${commandArg} (limite: ${limit} páginas)\n`);
+                    const result = await assistant.webSearcher.crawlWebsite(commandArg, { limit });
+
+                    if (!result.success) {
+                        console.log(`❌ Erro ao rastrear site: ${result.error}`);
+                        break;
+                    }
+
+                    // Display the result
+                    console.log('✅ Site rastreado com sucesso:\n');
+
+                    if (result.data && result.data.pages) {
+                        console.log(`Páginas rastreadas: ${result.data.pages.length}`);
+                        result.data.pages.slice(0, 5).forEach((page, index) => {
+                            console.log(`\n${index + 1}. ${page.url}`);
+                            if (page.title) console.log(`   Título: ${page.title}`);
+                            if (page.markdown) console.log(`   Conteúdo: ${page.markdown.substring(0, 100)}...`);
+                        });
+
+                        if (result.data.pages.length > 5) {
+                            console.log('\n(Exibindo apenas as 5 primeiras páginas)');
+                        }
+                    } else {
+                        console.log(JSON.stringify(result, null, 2));
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao rastrear site:', error.message);
+                }
                 break;
 
             case '--list':

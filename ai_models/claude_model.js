@@ -20,7 +20,7 @@ export default class ClaudeModel extends BaseAIModel {
         this.client = new Anthropic({
             apiKey: this.apiKey
         });
-        
+
         return this;
     }
 
@@ -71,7 +71,7 @@ Seja conciso e específico para o sistema detectado.`;
             });
 
             const analysis = response.content[0].text;
-            
+
             // Extrai comando sugerido da resposta
             const commandMatch = analysis.match(/💻 COMANDO: (.+?)(?:\n|$)/);
             const suggestedCommand = commandMatch ? commandMatch[1].replace(/`/g, '').trim() : null;
@@ -92,6 +92,23 @@ Seja conciso e específico para o sistema detectado.`;
 
     async askCommand(question, systemContext) {
         try {
+            // Format web search results if available
+            let webSearchSection = '';
+            if (systemContext.webSearchResults &&
+                systemContext.webSearchResults.results &&
+                systemContext.webSearchResults.results.length > 0) {
+
+                webSearchSection = `
+RESULTADOS DE BUSCA NA WEB:
+${systemContext.webSearchResults.results.map((result, index) => 
+  `${index + 1}. ${result.title}
+   URL: ${result.url}
+   Fonte: ${result.source}
+   Resumo: ${result.snippet}`
+).join('\n\n')}
+`;
+            }
+
             const prompt = `Você é um assistente especializado em Linux/Unix que ajuda usuários a encontrar o comando correto para suas tarefas.
 
 INFORMAÇÕES DO SISTEMA:
@@ -106,16 +123,18 @@ INFORMAÇÕES DO SISTEMA:
 
 COMANDOS DISPONÍVEIS NESTE SISTEMA:
 ${JSON.stringify(systemContext.commands, null, 2)}
-
+${webSearchSection}
 PERGUNTA DO USUÁRIO: ${question}
 
 INSTRUÇÕES:
 1. Analise a pergunta considerando o sistema específico do usuário
-2. Forneça o comando exato para a distribuição/sistema detectado
-3. Explique brevemente o que o comando faz
-4. Se houver variações por distribuição, mencione isso
-5. Inclua opções úteis do comando
-6. Se apropriado, sugira comandos relacionados
+2. Se houver resultados de busca na web, use-os para enriquecer sua resposta
+3. Forneça o comando exato para a distribuição/sistema detectado
+4. Explique brevemente o que o comando faz
+5. Se houver variações por distribuição, mencione isso
+6. Inclua opções úteis do comando
+7. Se apropriado, sugira comandos relacionados
+8. Cite fontes da web quando relevante
 
 FORMATO DA RESPOSTA:
 🔧 COMANDO:
@@ -129,6 +148,9 @@ FORMATO DA RESPOSTA:
 
 ⚠️ OBSERVAÇÕES:
 [Avisos ou considerações especiais]
+
+🌐 FONTES:
+[Fontes da web utilizadas, se aplicável]
 
 Responda de forma direta e prática.`;
 
@@ -167,7 +189,7 @@ Responda de forma direta e prática.`;
                     content: 'Hello'
                 }]
             });
-            
+
             return true;
         } catch (error) {
             console.error('Erro ao validar API key do Claude:', error);

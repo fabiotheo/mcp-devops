@@ -1,7 +1,7 @@
 # MCP Terminal Assistant
 
 <div align="center">
-  
+
 ![MCP Terminal Assistant Logo](https://placehold.co/600x400?text=MCP+Terminal+Assistant)
 
 *A CLI AI assistant for Linux terminals that monitors, analyzes, and helps fix failed commands*
@@ -25,6 +25,8 @@ No more searching StackOverflow or Reddit for error solutions - MCP Terminal Ass
 - **System-Specific Solutions**: Tailored fixes based on your specific Linux distribution
 - **Natural Language Interface**: Ask questions about Linux commands in plain English
 - **Smart Command Suggestions**: Get the right command for specific tasks
+- **Web Search Integration**: Enhances responses with real-time information from the internet
+- **Website Scraping**: Extract content from websites using Firecrawl
 - **Distribution-Aware**: Adapts to different package managers and system configurations
 - **Performance Optimized**: Uses local caching to provide fast responses
 - **Privacy Conscious**: Processes data locally when possible
@@ -134,6 +136,22 @@ ask --system-info
 # View command history
 ask --history
 
+# Enable or disable web search
+ask --web-search on
+ask --web-search off
+
+# Check web search status and configuration
+ask --web-status
+
+# Configure Firecrawl API key
+ask --firecrawl-key YOUR_API_KEY
+
+# Scrape a website
+ask --scrape https://example.com
+
+# Crawl a website (with optional limit)
+ask --crawl https://example.com --limit 20
+
 # Clean the cache
 mcp-clean
 
@@ -151,6 +169,7 @@ MCP Terminal Assistant can be configured by editing `~/.mcp-terminal/config.json
 ```json
 {
   "anthropic_api_key": "YOUR_API_KEY",
+  "firecrawl_api_key": "YOUR_FIRECRAWL_API_KEY",
   "model": "claude-3-5-sonnet-20240229",
   "max_calls_per_hour": 100,
   "enable_monitoring": true,
@@ -159,7 +178,23 @@ MCP Terminal Assistant can be configured by editing `~/.mcp-terminal/config.json
   "quick_fixes": true,
   "auto_detect_fixes": false,
   "log_level": "info",
-  "cache_duration_hours": 24
+  "cache_duration_hours": 24,
+  "web_search": {
+    "enabled": true,
+    "cache_settings": {
+      "documentation": 7,
+      "error_solutions": 1,
+      "package_info": 0.04,
+      "man_pages": 30
+    },
+    "priority_sources": [
+      "man_pages",
+      "official_docs",
+      "github_issues",
+      "stackoverflow"
+    ],
+    "rate_limit_per_hour": 50
+  }
 }
 ```
 
@@ -199,8 +234,10 @@ MCP Terminal Assistant uses a combination of techniques:
 1. **Command Capture**: Zsh hooks capture commands and their exit status
 2. **Local Pattern Analysis**: Fast pattern matching identifies common errors
 3. **System Detection**: Identifies your specific Linux distribution for tailored solutions
-4. **AI Analysis**: For complex errors, Claude AI provides targeted solutions
-5. **Caching**: Common solutions are cached to reduce API usage and speed up responses
+4. **Web Search**: When enabled, searches the internet for documentation, solutions, and other information
+5. **Website Scraping**: When configured with a Firecrawl API key, can extract content from websites in markdown format
+6. **AI Analysis**: For complex errors, Claude AI provides targeted solutions enhanced with web search results
+7. **Hierarchical Caching**: Common solutions, web search results, and scraped content are cached to reduce API usage and speed up responses
 
 ## 🔄 Uninstallation
 
@@ -223,6 +260,17 @@ mcp-terminal/
 ├── patterns/          # Error patterns for different tools
 │   ├── npm_errors.json
 │   ├── git_errors.json
+│   └── ...
+├── web_search/        # Web search functionality
+│   ├── index.js
+│   └── web_searcher.js
+├── web_scraper/       # Website scraping functionality
+│   ├── index.js
+│   └── firecrawl_wrapper.js
+├── ai_models/         # AI model implementations
+│   ├── base_model.js
+│   ├── claude_model.js
+│   ├── model_factory.js
 │   └── ...
 ├── zsh_integration.sh # Shell integration
 └── config.json        # Configuration file

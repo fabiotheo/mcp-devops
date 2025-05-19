@@ -3,6 +3,7 @@
   "anthropic_api_key": "YOUR_ANTHROPIC_API_KEY_HERE",
   "openai_api_key": "YOUR_OPENAI_API_KEY_HERE",
   "gemini_api_key": "YOUR_GEMINI_API_KEY_HERE",
+  "firecrawl_api_key": "YOUR_FIRECRAWL_API_KEY_HERE",
   "claude_model": "claude-3-7-sonnet-20250219",
   "openai_model": "gpt-4o",
   "gemini_model": "gemini-pro",
@@ -13,5 +14,21 @@
   "quick_fixes": true,
   "auto_detect_fixes": false,
   "log_level": "info",
-  "cache_duration_hours": 24
+  "cache_duration_hours": 24,
+  "web_search": {
+    "enabled": true,
+    "cache_settings": {
+      "documentation": 7,
+      "error_solutions": 1,
+      "package_info": 0.04,
+      "man_pages": 30
+    },
+    "priority_sources": [
+      "man_pages",
+      "official_docs",
+      "github_issues",
+      "stackoverflow"
+    ],
+    "rate_limit_per_hour": 50
+  }
 }

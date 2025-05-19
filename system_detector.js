@@ -5,6 +5,7 @@ import fs from 'fs';
 class SystemDetector {
     constructor() {
         this.systemInfo = null;
+        this.installedPackages = null;
         this.detectSystem();
     }
 
@@ -19,7 +20,7 @@ class SystemDetector {
                 architecture: this.getArchitecture(),
                 kernel: this.getKernel()
             };
-            
+
             this.systemInfo = info;
             return info;
         } catch (error) {
@@ -190,18 +191,254 @@ class SystemDetector {
         return distroSpecific[this.systemInfo.distro] || base;
     }
 
+    // Detecta pacotes instalados no sistema
+    detectInstalledPackages() {
+        if (this.installedPackages) {
+            return this.installedPackages;
+        }
+
+        const packages = {
+            firewalls: this.detectFirewalls(),
+            webServers: this.detectWebServers(),
+            databases: this.detectDatabases(),
+            containerTools: this.detectContainerTools(),
+            monitoringTools: this.detectMonitoringTools()
+        };
+
+        this.installedPackages = packages;
+        return packages;
+    }
+
+    // Detecta firewalls instalados
+    detectFirewalls() {
+        const firewalls = [];
+
+        // Verifica UFW (Uncomplicated Firewall)
+        try {
+            execSync('which ufw', { stdio: 'ignore' });
+            const status = execSync('ufw status', { encoding: 'utf8' }).trim();
+            firewalls.push({
+                name: 'ufw',
+                active: !status.includes('inactive'),
+                details: status
+            });
+        } catch {}
+
+        // Verifica FirewallD
+        try {
+            execSync('which firewall-cmd', { stdio: 'ignore' });
+            const status = execSync('firewall-cmd --state', { encoding: 'utf8' }).trim();
+            firewalls.push({
+                name: 'firewalld',
+                active: status === 'running',
+                details: `FirewallD is ${status}`
+            });
+        } catch {}
+
+        // Verifica iptables
+        try {
+            execSync('which iptables', { stdio: 'ignore' });
+            const rules = execSync('iptables -L', { encoding: 'utf8' }).trim();
+            firewalls.push({
+                name: 'iptables',
+                active: true,
+                details: 'iptables is available'
+            });
+        } catch {}
+
+        return firewalls;
+    }
+
+    // Detecta servidores web instalados
+    detectWebServers() {
+        const webServers = [];
+
+        // Verifica Nginx
+        try {
+            execSync('which nginx', { stdio: 'ignore' });
+            let status = 'installed';
+            try {
+                status = execSync('systemctl is-active nginx', { encoding: 'utf8' }).trim();
+            } catch {}
+            webServers.push({
+                name: 'nginx',
+                active: status === 'active',
+                details: `Nginx is ${status}`
+            });
+        } catch {}
+
+        // Verifica Apache
+        try {
+            const apacheCommands = ['apache2', 'httpd'];
+            for (const cmd of apacheCommands) {
+                try {
+                    execSync(`which ${cmd}`, { stdio: 'ignore' });
+                    let status = 'installed';
+                    try {
+                        status = execSync(`systemctl is-active ${cmd}`, { encoding: 'utf8' }).trim();
+                    } catch {}
+                    webServers.push({
+                        name: cmd,
+                        active: status === 'active',
+                        details: `${cmd} is ${status}`
+                    });
+                    break;
+                } catch {}
+            }
+        } catch {}
+
+        return webServers;
+    }
+
+    // Detecta bancos de dados instalados
+    detectDatabases() {
+        const databases = [];
+
+        // Lista de bancos de dados comuns
+        const dbServices = [
+            { cmd: 'mysql', name: 'MySQL' },
+            { cmd: 'mariadb', name: 'MariaDB' },
+            { cmd: 'postgresql', name: 'PostgreSQL' },
+            { cmd: 'mongod', name: 'MongoDB' },
+            { cmd: 'redis-server', name: 'Redis' }
+        ];
+
+        for (const db of dbServices) {
+            try {
+                execSync(`which ${db.cmd}`, { stdio: 'ignore' });
+                let status = 'installed';
+                try {
+                    status = execSync(`systemctl is-active ${db.cmd}`, { encoding: 'utf8' }).trim();
+                } catch {}
+                databases.push({
+                    name: db.name,
+                    active: status === 'active',
+                    details: `${db.name} is ${status}`
+                });
+            } catch {}
+        }
+
+        return databases;
+    }
+
+    // Detecta ferramentas de contêiner
+    detectContainerTools() {
+        const containerTools = [];
+
+        // Verifica Docker
+        try {
+            execSync('which docker', { stdio: 'ignore' });
+            let status = 'installed';
+            try {
+                status = execSync('systemctl is-active docker', { encoding: 'utf8' }).trim();
+            } catch {}
+            containerTools.push({
+                name: 'docker',
+                active: status === 'active',
+                details: `Docker is ${status}`
+            });
+        } catch {}
+
+        // Verifica Podman
+        try {
+            execSync('which podman', { stdio: 'ignore' });
+            containerTools.push({
+                name: 'podman',
+                active: true,
+                details: 'Podman is installed'
+            });
+        } catch {}
+
+        // Verifica Kubernetes tools
+        try {
+            execSync('which kubectl', { stdio: 'ignore' });
+            containerTools.push({
+                name: 'kubectl',
+                active: true,
+                details: 'Kubernetes CLI is installed'
+            });
+        } catch {}
+
+        return containerTools;
+    }
+
+    // Detecta ferramentas de monitoramento
+    detectMonitoringTools() {
+        const monitoringTools = [];
+
+        // Lista de ferramentas de monitoramento comuns
+        const tools = [
+            { cmd: 'prometheus', name: 'Prometheus' },
+            { cmd: 'grafana-server', name: 'Grafana' },
+            { cmd: 'nagios', name: 'Nagios' },
+            { cmd: 'zabbix_server', name: 'Zabbix' }
+        ];
+
+        for (const tool of tools) {
+            try {
+                execSync(`which ${tool.cmd}`, { stdio: 'ignore' });
+                let status = 'installed';
+                try {
+                    status = execSync(`systemctl is-active ${tool.cmd}`, { encoding: 'utf8' }).trim();
+                } catch {}
+                monitoringTools.push({
+                    name: tool.name,
+                    active: status === 'active',
+                    details: `${tool.name} is ${status}`
+                });
+            } catch {}
+        }
+
+        return monitoringTools;
+    }
+
+    // Verifica se um pacote específico está instalado
+    isPackageInstalled(packageName) {
+        const packageManager = this.systemInfo.packageManager;
+
+        try {
+            switch (packageManager) {
+                case 'apt':
+                    execSync(`dpkg -l ${packageName} | grep -q ^ii`, { stdio: 'ignore' });
+                    return true;
+                case 'yum':
+                case 'dnf':
+                    execSync(`rpm -q ${packageName}`, { stdio: 'ignore' });
+                    return true;
+                case 'pacman':
+                    execSync(`pacman -Q ${packageName}`, { stdio: 'ignore' });
+                    return true;
+                case 'zypper':
+                    execSync(`rpm -q ${packageName}`, { stdio: 'ignore' });
+                    return true;
+                default:
+                    // Tenta verificar se o comando existe
+                    execSync(`which ${packageName}`, { stdio: 'ignore' });
+                    return true;
+            }
+        } catch {
+            return false;
+        }
+    }
+
     // Gera contexto para o LLM
     getSystemContext() {
+        // Detecta pacotes instalados se ainda não tiver feito
+        if (!this.installedPackages) {
+            this.detectInstalledPackages();
+        }
+
         return {
             ...this.systemInfo,
             commands: this.getSystemCommands(),
-            capabilities: this.getSystemCapabilities()
+            capabilities: this.getSystemCapabilities(),
+            installedPackages: this.installedPackages
         };
     }
 
     getSystemCapabilities() {
         const capabilities = [];
-        
+
         // Verifica capacidades do sistema
         try {
             execSync('which systemctl', { stdio: 'ignore' });
@@ -229,7 +466,7 @@ class SystemDetector {
     // Método para comandos comuns específicos do sistema
     getCommand(action, ...args) {
         const commands = this.getSystemCommands();
-        
+
         switch (action) {
             case 'listDirectoriesBySize':
                 return this.getListDirectoriesBySizeCommand(args[0] || '.');

@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 // ~/.mcp-terminal/mcp-assistant.js
+//
+// MCP Assistant - Um assistente de linha de comando para Linux
+//
+// Recursos:
+// - Responde perguntas sobre comandos Linux
+// - Detecta o sistema operacional e adapta respostas
+// - Detecta pacotes instalados (firewalls, servidores web, etc.) e adapta respostas
+// - Navegação e manipulação de arquivos
+// - Histórico de comandos
 
 import { Anthropic } from '@anthropic-ai/sdk';
 import SystemDetector from './system_detector.js';
@@ -64,15 +73,23 @@ class MCPAssistant {
         }
 
         try {
-            const systemContext = this.systemDetector.getSystemContext();
+            let systemContext = this.systemDetector.getSystemContext();
             const currentDir = process.cwd();
             const dirInfo = await this.getCurrentDirectoryInfo();
 
             if (this.aiModel && !this.usingFallbackAI) {
+                // Ensure we have the installed packages information
+                if (!systemContext.installedPackages) {
+                    this.systemDetector.detectInstalledPackages();
+                    // Update systemContext with the latest information
+                    systemContext = this.systemDetector.getSystemContext();
+                }
+
                 return await this.aiModel.askCommand(question, {
                     ...systemContext,
                     currentDir,
                     dirInfo,
+                    formattedPackages: this.formatInstalledPackages(systemContext.installedPackages)
                 });
             }
 
@@ -93,6 +110,9 @@ INFORMAÇÕES DO SISTEMA:
 - Kernel: ${systemContext.kernel}
 - Capacidades: ${systemContext.capabilities.join(', ') || 'N/A'}
 
+PACOTES INSTALADOS:
+${this.formatInstalledPackages(systemContext.installedPackages)}
+
 DIRETÓRIO ATUAL: ${currentDir}
 ${dirInfo}
 
@@ -102,12 +122,13 @@ ${systemContext.commands && systemContext.commands.length > 0 ? JSON.stringify(s
 PERGUNTA DO USUÁRIO: ${question}
 
 INSTRUÇÕES:
-1. Analise a pergunta considerando o sistema específico do usuário.
-2. Forneça o comando exato para a distribuição/sistema detectado.
-3. Explique brevemente o que o comando faz.
-4. Se houver variações por distribuição, mencione isso.
-5. Inclua opções úteis do comando.
-6. Se apropriado, sugira comandos relacionados.
+1. Analise a pergunta considerando o sistema específico do usuário e os pacotes instalados.
+2. Se a pergunta for sobre um tipo específico de software (firewall, servidor web, etc.), adapte sua resposta com base nos pacotes detectados no sistema.
+3. Forneça o comando exato para a distribuição/sistema detectado e os pacotes instalados.
+4. Explique brevemente o que o comando faz.
+5. Se houver variações por distribuição ou pacote instalado, mencione isso.
+6. Inclua opções úteis do comando.
+7. Se apropriado, sugira comandos relacionados.
 
 FORMATO DA RESPOSTA (use este formato estritamente):
 🔧 COMANDO:
@@ -217,6 +238,69 @@ INFORMAÇÕES DO DIRETÓRIO:
             provider: 'Anthropic (Fallback)',
             model: this.config.claude_model || this.config.model || "claude-3-sonnet-20240229",
         };
+    }
+
+    // Formata informações de pacotes instalados para o prompt
+    formatInstalledPackages(packages) {
+        if (!packages) return "- Nenhuma informação de pacotes disponível";
+
+        let result = "";
+
+        // Formata firewalls
+        if (packages.firewalls && packages.firewalls.length > 0) {
+            result += "- Firewalls: ";
+            result += packages.firewalls.map(fw =>
+                `${fw.name}${fw.active ? ' (ativo)' : ' (inativo)'}`
+            ).join(", ");
+            result += "\n";
+        } else {
+            result += "- Firewalls: Nenhum detectado\n";
+        }
+
+        // Formata servidores web
+        if (packages.webServers && packages.webServers.length > 0) {
+            result += "- Servidores Web: ";
+            result += packages.webServers.map(server =>
+                `${server.name}${server.active ? ' (ativo)' : ' (inativo)'}`
+            ).join(", ");
+            result += "\n";
+        } else {
+            result += "- Servidores Web: Nenhum detectado\n";
+        }
+
+        // Formata bancos de dados
+        if (packages.databases && packages.databases.length > 0) {
+            result += "- Bancos de Dados: ";
+            result += packages.databases.map(db =>
+                `${db.name}${db.active ? ' (ativo)' : ' (inativo)'}`
+            ).join(", ");
+            result += "\n";
+        } else {
+            result += "- Bancos de Dados: Nenhum detectado\n";
+        }
+
+        // Formata ferramentas de contêiner
+        if (packages.containerTools && packages.containerTools.length > 0) {
+            result += "- Ferramentas de Contêiner: ";
+            result += packages.containerTools.map(tool =>
+                `${tool.name}${tool.active ? ' (ativo)' : ' (inativo)'}`
+            ).join(", ");
+            result += "\n";
+        } else {
+            result += "- Ferramentas de Contêiner: Nenhuma detectada\n";
+        }
+
+        // Formata ferramentas de monitoramento
+        if (packages.monitoringTools && packages.monitoringTools.length > 0) {
+            result += "- Ferramentas de Monitoramento: ";
+            result += packages.monitoringTools.map(tool =>
+                `${tool.name}${tool.active ? ' (ativo)' : ' (inativo)'}`
+            ).join(", ");
+        } else {
+            result += "- Ferramentas de Monitoramento: Nenhuma detectada";
+        }
+
+        return result;
     }
 
     async listDirectory(dirPath = '.') {

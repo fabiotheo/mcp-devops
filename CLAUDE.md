@@ -4,102 +4,116 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MCP Terminal Assistant is a command-line tool for Linux/Unix systems that provides AI-powered assistance for terminal users. It monitors failed commands and helps users find the right commands for specific tasks.
+MCP Terminal Assistant is a command-line tool for Linux/Unix systems that provides AI-powered assistance for terminal users. It monitors failed commands, analyzes errors using pattern matching and AI, and helps users find the right commands for specific tasks. The system supports multiple AI providers (Claude, GPT, Gemini) and includes web search and website scraping capabilities.
+
+## Architecture
+
+### AI Model System
+- **Model Factory Pattern**: `ai_models/model_factory.js` creates appropriate AI model instances based on configuration
+- **Base Model Interface**: `ai_models/base_model.js` defines the contract for all AI providers
+- **Provider Implementations**: Separate files for Claude (`claude_model.js`), OpenAI (`openai_model.js`), and Gemini (`gemini_model.js`)
+- **Multi-Provider Support**: Configuration-driven selection between Claude, GPT, and Gemini models
+
+### Error Analysis Pipeline
+1. **Command Capture**: Zsh integration captures failed commands with exit codes
+2. **Pattern Matching**: Local JSON patterns in `patterns/` directory provide fast, offline error detection
+3. **System Detection**: `system_detector.js` identifies OS/distribution for tailored solutions
+4. **Web Enhancement**: Optional web search integration for real-time documentation and solutions
+5. **AI Analysis**: Complex errors are analyzed by selected AI provider with enhanced context
 
 ### Core Components
-
-- **Command Monitoring**: Monitors and analyzes failed terminal commands
-- **Terminal Assistant**: Provides command suggestions for user queries
-- **System Detection**: Identifies OS and provides system-specific recommendations
-
-## Key Files
-
-- `mcp-client.js`: Monitors terminal commands and analyzes failures
-- `mcp-assistant.js`: Handles user queries about Linux commands
-- `system_detector.js`: Detects OS, distribution, and available tools
-- `setup.js`: Installation script for setting up the tool
-- `zsh_integration.sh`: Shell integration for Zsh
+- **Command Monitoring** (`mcp-client.js`): Captures and analyzes failed terminal commands
+- **Assistant Interface** (`mcp-assistant.js`): Handles natural language queries about Linux commands
+- **Web Search** (`web_search/`): Enhances responses with real-time information from the internet
+- **Web Scraping** (`web_scraper/`): Extracts content from websites using Firecrawl API
+- **Pattern System** (`patterns/`): JSON-based error patterns for different tools (npm, git, docker, linux)
 
 ## Commands
 
-### Setup and Installation
+### Development and Testing
 
 ```bash
-# Install MCP Terminal Assistant
-node setup.js
-
-# Uninstall
-node setup.js --uninstall
-```
-
-### User Commands
-
-These are commands available to the end-user after installation:
-
-```bash
-# Ask for command suggestions
-ask "how to list directories by size"
-
-# Alternative short form
-q "how to list directories by size"
-
-# Manually monitor a command
-mcp-run <command>
-
-# View configuration
-mcp-config
-
-# Clean the cache
-mcp-clean
-
-# View usage statistics
-mcp-stats
-```
-
-### Development
-
-```bash
-# Run the assistant to test
+# Test the assistant with a query
 node mcp-assistant.js "query"
 
-# Test system detection
+# Test with system information display
 node mcp-assistant.js --system-info
 
-# Run the client manually
+# Manual command monitoring
 node mcp-client.js --command "failed command" --exit-code 1
+
+# Test web search functionality
+node mcp-assistant.js --web-status
+
+# Test different AI providers
+node mcp-assistant.js "test query" --provider claude
+```
+
+### Installation and Setup
+
+```bash
+# Interactive installation
+node setup.js
+
+# Automatic installation with defaults
+node setup.js --auto
+
+# Upgrade existing installation
+node setup.js --upgrade
+
+# Upgrade automatically (preserving settings)
+node setup.js --upgrade --auto
+```
+
+### Package Management
+
+```bash
+# Update all packages to latest versions
+pnpm update --latest
+
+# Install dependencies
+pnpm install
 ```
 
 ## Configuration
 
-The configuration file is located at `~/.mcp-terminal/config.json` and contains:
+### Main Configuration (`~/.mcp-terminal/config.json`)
+The system supports extensive configuration including:
+- Multiple AI provider API keys (`anthropic_api_key`, `openai_api_key`, `gemini_api_key`)
+- Model selection per provider
+- Rate limiting and monitoring preferences
+- Web search configuration with cache settings and priority sources
+- Firecrawl API integration for website scraping
 
-- Anthropic API key
-- Model selection
-- Rate limiting settings
-- Monitoring preferences
-- Command patterns to monitor
-- Caching configuration
+### Pattern System
+Error patterns are stored as JSON files in `patterns/` directory:
+- `git_errors.json`: Git-specific error patterns
+- `npm_errors.json`: NPM/package manager errors
+- `docker_errors.json`: Docker-related issues
+- `linux_errors.json`: General Linux command errors
 
-## Architecture Notes
-
-1. **Zsh Integration**: The tool integrates with Zsh via hooks that capture commands before execution (`preexec`) and after execution (`precmd`).
-
-2. **Error Analysis Flow**:
-   - Failed command is captured with its exit code
-   - System information is collected
-   - The command and error are analyzed using pattern matching or AI
-   - Solutions are presented to the user
-
-3. **Caching System**: Common solutions are cached to reduce API usage and provide faster responses.
-
-4. **System-Specific Commands**: The `system_detector.js` provides system-specific command recommendations based on the detected OS distribution.
+Each pattern includes:
+- `pattern`: Regex pattern to match errors
+- `message`: Human-readable error description
+- `fix`: Suggested command to resolve the issue
+- `confidence`: Confidence level (0.0-1.0)
 
 ## Development Guidelines
 
-1. **Error Patterns**: When adding new error patterns, place them in the `patterns/` directory with appropriate categorization.
+### Adding New AI Providers
+1. Create new provider class extending `BaseAIModel` in `ai_models/`
+2. Implement required methods: `initialize()`, `analyzeCommand()`, `askCommand()`
+3. Update `model_factory.js` to include the new provider
+4. Add configuration options for API keys and model selection
 
-2. **API Usage**: Ensure all API calls include proper error handling and respect rate limits.
+### Error Pattern Development
+- Add new patterns to appropriate JSON files in `patterns/`
+- Test patterns with various error scenarios
+- Ensure patterns are specific enough to avoid false positives
+- Include confidence scores based on pattern reliability
 
-3. **Testing**: Test new features with various Linux distributions to ensure compatibility.
-
-4. **Command Filtering**: Be careful with the monitored commands list to avoid excessive API usage.
+### Web Integration Features
+- Web search results are cached based on content type (documentation, error solutions, package info)
+- Priority sources can be configured (man pages, official docs, GitHub issues, Stack Overflow)
+- Rate limiting prevents API abuse
+- Firecrawl integration allows content extraction from websites in markdown format

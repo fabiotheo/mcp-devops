@@ -1,6 +1,6 @@
 {
   "name": "mcp-terminal",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.60.0",
@@ -13,6 +13,8 @@
   "bin": {
     "mcp-setup": "./setup.js",
     "ask": "./mcp-assistant.js",
-    "mcp-monitor": "./mcp-client.js"
+    "mcp-monitor": "./mcp-client.js",
+    "mcp-chat": "./mcp-chat",
+    "mcp": "./mcp-chat"
   }
 }

@@ -22,12 +22,12 @@ class MCPServer {
         try {
             const config = await fs.readFile(this.configPath, 'utf8');
             this.config = JSON.parse(config);
-            
+
             this.anthropic = new Anthropic({
                 apiKey: this.config.anthropic_api_key
             });
         } catch (error) {
-            console.error('L Erro ao carregar configuração:', error.message);
+            console.error('âŒ Erro ao carregar configuraÃ§Ã£o:', error.message);
             process.exit(1);
         }
     }
@@ -42,12 +42,12 @@ class MCPServer {
         });
 
         this.server.listen(this.port, () => {
-            console.log(`=€ MCP Server rodando em http://localhost:${this.port}`);
+            console.log(`âœ… MCP Server rodando em http://localhost:${this.port}`);
         });
 
         this.server.on('error', (err) => {
             if (err.code === 'EADDRINUSE') {
-                console.error(`  Porta ${this.port} já está em uso. Escolha outra porta.`);
+                console.error(`âŒ Porta ${this.port} jÃ¡ estÃ¡ em uso. Escolha outra porta.`);
                 process.exit(1);
             } else {
                 console.error('Erro no servidor:', err);
@@ -58,13 +58,13 @@ class MCPServer {
     async handleRequest(req, res) {
         const parsedUrl = url.parse(req.url, true);
         const requestBody = await this.getRequestBody(req);
-        
+
         // Definir headers CORS para permitir acesso local
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-        
-        // Responder a requisições OPTIONS para preflight CORS
+
+        // Responder a requisiÃ§Ãµes OPTIONS para preflight CORS
         if (req.method === 'OPTIONS') {
             res.writeHead(204);
             res.end();
@@ -76,10 +76,10 @@ class MCPServer {
             // Rota para analisar comandos
             try {
                 const data = JSON.parse(requestBody);
-                
+
                 if (!data.command) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'Comando não fornecido' }));
+                    res.end(JSON.stringify({ error: 'Comando nÃ£o fornecido' }));
                     return;
                 }
 
@@ -92,51 +92,51 @@ class MCPServer {
                 };
 
                 const analysis = await this.analyzeCommand(commandData);
-                
+
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify(analysis));
-                
+
             } catch (error) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Requisição inválida' }));
+                res.end(JSON.stringify({ error: 'RequisiÃ§Ã£o invÃ¡lida' }));
             }
-            
+
         } else if (parsedUrl.pathname === '/api/ask' && req.method === 'POST') {
             // Rota para perguntas sobre comandos
             try {
                 const data = JSON.parse(requestBody);
-                
+
                 if (!data.question) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'Pergunta não fornecida' }));
+                    res.end(JSON.stringify({ error: 'Pergunta nÃ£o fornecida' }));
                     return;
                 }
 
                 const result = await this.askCommand(data.question);
-                
+
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify(result));
-                
+
             } catch (error) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Requisição inválida' }));
+                res.end(JSON.stringify({ error: 'RequisiÃ§Ã£o invÃ¡lida' }));
             }
-            
+
         } else if (parsedUrl.pathname === '/api/system-info' && req.method === 'GET') {
-            // Rota para obter informações do sistema
+            // Rota para obter informaÃ§Ãµes do sistema
             const systemInfo = this.systemDetector.getSystemContext();
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(systemInfo));
-            
+
         } else if (parsedUrl.pathname === '/api/health' && req.method === 'GET') {
             // Rota para health check
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ status: 'ok', version: '1.0.0' }));
-            
+
         } else {
-            // Rota não encontrada
+            // Rota nÃ£o encontrada
             res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Rota não encontrada' }));
+            res.end(JSON.stringify({ error: 'Rota nÃ£o encontrada' }));
         }
     }
 
@@ -157,17 +157,17 @@ class MCPServer {
             const systemContext = this.systemDetector.getSystemContext();
             const { command, exitCode, stdout, stderr, duration } = commandData;
 
-            const prompt = `Você é um especialista em Linux que analisa comandos que falharam.
+            const prompt = `VocÃª Ã© um especialista em Linux que analisa comandos que falharam.
 
 SISTEMA:
 - OS: ${systemContext.os}
-- Distribuição: ${systemContext.distro} ${systemContext.version}
+- DistribuiÃ§Ã£o: ${systemContext.distro} ${systemContext.version}
 - Package Manager: ${systemContext.packageManager}
 - Shell: ${systemContext.shell}
 
 COMANDO EXECUTADO: ${command}
 EXIT CODE: ${exitCode}
-TEMPO DE EXECUÇÃO: ${duration}s
+TEMPO DE EXECUÃ‡ÃƒO: ${duration}s
 
 STDOUT:
 ${stdout || '(vazio)'}
@@ -175,20 +175,20 @@ ${stdout || '(vazio)'}
 STDERR:
 ${stderr || '(vazio)'}
 
-ANÁLISE NECESSÁRIA:
+ANÃLISE NECESSÃRIA:
 1. Identifique o problema principal
 2. Explique a causa do erro
-3. Forneça uma solução específica para este sistema Linux
-4. Sugira um comando para corrigir (se aplicável)
+3. ForneÃ§a uma soluÃ§Ã£o especÃ­fica para este sistema Linux
+4. Sugira um comando para corrigir (se aplicÃ¡vel)
 5. Inclua comandos preventivos se relevante
 
 FORMATO DA RESPOSTA:
-= PROBLEMA: [Descrição clara do problema]
-=à  SOLUÇÃO: [Explicação da solução]
-=» COMANDO: [Comando específico para corrigir, se aplicável]
-   PREVENÇÃO: [Como evitar no futuro]
+ðŸ” PROBLEMA: [DescriÃ§Ã£o clara do problema]
+âœ… SOLUÃ‡ÃƒO: [ExplicaÃ§Ã£o da soluÃ§Ã£o]
+ðŸ’» COMANDO: [Comando especÃ­fico para corrigir, se aplicÃ¡vel]
+ðŸ›¡ï¸ PREVENÃ‡ÃƒO: [Como evitar no futuro]
 
-Seja conciso e específico para o sistema detectado.`;
+Seja conciso e especÃ­fico para o sistema detectado.`;
 
             const response = await this.anthropic.messages.create({
                 model: this.config.model,
@@ -200,9 +200,9 @@ Seja conciso e específico para o sistema detectado.`;
             });
 
             const analysis = response.content[0].text;
-            
+
             // Extrai comando sugerido da resposta
-            const commandMatch = analysis.match(/=» COMANDO: (.+?)(?:\n|$)/);
+            const commandMatch = analysis.match(/ðŸ’» COMANDO: (.+?)(?:\n|$)/);
             const suggestedCommand = commandMatch ? commandMatch[1].replace(/`/g, '').trim() : null;
 
             return {
@@ -211,7 +211,7 @@ Seja conciso e específico para o sistema detectado.`;
             };
 
         } catch (error) {
-            console.error('Erro na análise:', error);
+            console.error('Erro na anÃ¡lise:', error);
             return { error: 'Falha ao analisar comando' };
         }
     }
@@ -220,46 +220,46 @@ Seja conciso e específico para o sistema detectado.`;
         try {
             // Contexto do sistema
             const systemContext = this.systemDetector.getSystemContext();
-            
-            const prompt = `Você é um assistente especializado em Linux/Unix que ajuda usuários a encontrar o comando correto para suas tarefas.
 
-INFORMAÇÕES DO SISTEMA:
+            const prompt = `VocÃª Ã© um assistente especializado em Linux/Unix que ajuda usuÃ¡rios a encontrar o comando correto para suas tarefas.
+
+INFORMAÃ‡Ã•ES DO SISTEMA:
 - OS: ${systemContext.os}
-- Distribuição: ${systemContext.distro}
-- Versão: ${systemContext.version}
+- DistribuiÃ§Ã£o: ${systemContext.distro}
+- VersÃ£o: ${systemContext.version}
 - Package Manager: ${systemContext.packageManager}
 - Shell: ${systemContext.shell}
 - Arquitetura: ${systemContext.architecture}
 - Kernel: ${systemContext.kernel}
 - Capacidades: ${systemContext.capabilities.join(', ')}
 
-COMANDOS DISPONÍVEIS NESTE SISTEMA:
+COMANDOS DISPONÃVEIS NESTE SISTEMA:
 ${JSON.stringify(systemContext.commands, null, 2)}
 
-PERGUNTA DO USUÁRIO: ${question}
+PERGUNTA DO USUÃRIO: ${question}
 
-INSTRUÇÕES:
-1. Analise a pergunta considerando o sistema específico do usuário
-2. Forneça o comando exato para a distribuição/sistema detectado
+INSTRUÃ‡Ã•ES:
+1. Analise a pergunta considerando o sistema especÃ­fico do usuÃ¡rio
+2. ForneÃ§a o comando exato para a distribuiÃ§Ã£o/sistema detectado
 3. Explique brevemente o que o comando faz
-4. Se houver variações por distribuição, mencione isso
-5. Inclua opções úteis do comando
+4. Se houver variaÃ§Ãµes por distribuiÃ§Ã£o, mencione isso
+5. Inclua opÃ§Ãµes Ãºteis do comando
 6. Se apropriado, sugira comandos relacionados
 
 FORMATO DA RESPOSTA:
-=' COMANDO:
+ðŸ’» COMANDO:
 \`comando exato aqui\`
 
-=Ý EXPLICAÇÃO:
-[Explicação clara do que faz]
+ðŸ“ EXPLICAÃ‡ÃƒO:
+[ExplicaÃ§Ã£o clara do que faz]
 
-=¡ OPÇÕES ÚTEIS:
-[Variações ou opções importantes]
+âš™ï¸ OPÃ‡Ã•ES ÃšTEIS:
+[VariaÃ§Ãµes ou opÃ§Ãµes importantes]
 
-  OBSERVAÇÕES:
-[Avisos ou considerações especiais]
+â„¹ï¸ OBSERVAÃ‡Ã•ES:
+[Avisos ou consideraÃ§Ãµes especiais]
 
-Responda de forma direta e prática.`;
+Responda de forma direta e prÃ¡tica.`;
 
             const response = await this.anthropic.messages.create({
                 model: this.config.model,
@@ -271,7 +271,7 @@ Responda de forma direta e prática.`;
             });
 
             const responseText = response.content[0].text;
-            
+
             // Extrai comando sugerido da resposta
             const commandMatch = responseText.match(/`([^`]+)`/);
             const command = commandMatch ? commandMatch[1] : null;
@@ -283,10 +283,10 @@ Responda de forma direta e prática.`;
 
         } catch (error) {
             console.error('Erro ao consultar assistente:', error);
-            return { error: 'Erro ao processar requisição' };
+            return { error: 'Erro ao processar requisiÃ§Ã£o' };
         }
     }
-    
+
     stop() {
         if (this.server) {
             this.server.close();
@@ -298,20 +298,20 @@ Responda de forma direta e prática.`;
 // CLI
 async function main() {
     const args = process.argv.slice(2);
-    const port = args.includes('--port') ? 
+    const port = args.includes('--port') ?
         parseInt(args[args.indexOf('--port') + 1]) : 4321;
-    
-    console.log(`=€ Iniciando MCP Server na porta ${port}...`);
-    
+
+    console.log(`ðŸš€ Iniciando MCP Server na porta ${port}...`);
+
     const server = new MCPServer(port);
-    
+
     // Graceful shutdown
     const shutdown = () => {
         console.log('\nDesligando servidor...');
         server.stop();
         process.exit(0);
     };
-    
+
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
 }

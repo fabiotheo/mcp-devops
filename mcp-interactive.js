@@ -481,7 +481,9 @@ class MCPInteractive extends EventEmitter {
                 currentDir: process.cwd(),
                 dirInfo: '',
                 formattedPackages: '',
-                webSearchResults: null  // Importante: definir como null ao invés de undefined
+                webSearchResults: null,  // Importante: definir como null ao invés de undefined
+                capabilities: this.systemDetector.getSystemCapabilities() || [],  // Adicionar capabilities
+                commands: this.systemDetector.getSystemCommands() || {}  // Adicionar commands também
             };
 
             // Obter resposta - passar contexto completo

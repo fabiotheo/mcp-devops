@@ -364,8 +364,20 @@ class MCPInteractive extends EventEmitter {
     }
 
     async initialize() {
+        // Carregar configuração
+        const configPath = path.join(os.homedir(), '.mcp-terminal', 'config.json');
+        let modelConfig = {};
+
+        if (existsSync(configPath)) {
+            try {
+                modelConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
+            } catch (error) {
+                console.error(chalk.yellow('Aviso: Não foi possível carregar configuração'));
+            }
+        }
+
         // Inicializar modelo de IA
-        this.aiModel = await ModelFactory.createModel();
+        this.aiModel = await ModelFactory.createModel(modelConfig);
         await this.aiModel.initialize();
 
         // Inicializar interface REPL

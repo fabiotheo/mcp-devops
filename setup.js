@@ -738,7 +738,9 @@ export default class ModelFactory {
             { src: 'mcp-client.js', dest: 'mcp-client.js' },
             { src: 'mcp-assistant.js', dest: 'mcp-assistant.js' },
             { src: 'system_detector.js', dest: 'system_detector.js' },
-            { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' }
+            { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' },
+            { src: 'configure-ai.js', dest: 'configure-ai.js' },
+            { src: 'mcp-configure', dest: 'mcp-configure' }
         ];
 
         // Copiar arquivos principais
@@ -823,7 +825,9 @@ export default class ModelFactory {
 
         const scripts = [
             'mcp-client.js',
-            'mcp-assistant.js'
+            'mcp-assistant.js',
+            'configure-ai.js',
+            'mcp-configure'
         ];
 
         for (const script of scripts) {
@@ -843,7 +847,8 @@ export default class ModelFactory {
 
             const links = [
                 { from: path.join(this.mcpDir, 'mcp-assistant.js'), to: path.join(binDir, 'ask') },
-                { from: path.join(this.mcpDir, 'mcp-client.js'), to: path.join(binDir, 'mcp-monitor') }
+                { from: path.join(this.mcpDir, 'mcp-client.js'), to: path.join(binDir, 'mcp-monitor') },
+                { from: path.join(this.mcpDir, 'mcp-configure'), to: path.join(binDir, 'mcp-configure') }
             ];
 
             for (const link of links) {

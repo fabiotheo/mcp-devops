@@ -1,6 +1,6 @@
 {
   "name": "mcp-terminal",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.60.0",

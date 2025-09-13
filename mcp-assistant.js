@@ -1409,7 +1409,7 @@ EXEMPLOS:
 }
 
 // Ensure main is called only when script is executed directly
-if (import.meta.url.startsWith('file:') && process.argv[1] === import.meta.url.substring('file:'.length)) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     main().catch(err => {
         console.error("❌ Falha crítica no script:", err);
         process.exit(1);

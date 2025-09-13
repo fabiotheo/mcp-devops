@@ -109,7 +109,27 @@ node setup.js --auto
 
 ### Updating to a New Version
 
-When updating to a new version, you don't need to remove any files or directories. Just use the upgrade option:
+#### Option 1: Updating from GitHub (Recommended)
+
+If you installed MCP Terminal Assistant from GitHub, you can update to the latest version using Git:
+
+```bash
+# 1. Navigate to the MCP installation directory
+cd ~/mcp-devops  # Or wherever you cloned the repository
+
+# 2. Pull the latest changes from GitHub
+git pull origin master
+
+# 3. Install/update dependencies
+pnpm install  # Or npm install if you use npm
+
+# 4. Run the upgrade script to apply any configuration changes
+node setup.js --upgrade --auto
+```
+
+#### Option 2: Using the Built-in Upgrade
+
+If you installed without Git or want a guided upgrade:
 
 ```bash
 # Interactive update preserving your settings (recommended for most users)
@@ -125,13 +145,28 @@ node setup.js --upgrade --auto
 ./upgrade.sh
 ```
 
-This will:
+#### What Happens During Update
+
+The update process will:
 1. Preserve your API keys and configuration
 2. Update only the necessary files
 3. Apply any needed migrations automatically
 4. Register the new version
+5. Keep your command history and cache intact
 
 The upgrade process is designed to be safe and non-destructive, ensuring your personal settings and history are maintained while updating the core functionality.
+
+#### Verifying the Update
+
+After updating, you can verify the installation:
+
+```bash
+# Check the version
+ask --version
+
+# Test basic functionality
+ask "test command"
+```
 
 ### Post-Installation
 

@@ -378,16 +378,39 @@ INFORMAÇÕES DO DIRETÓRIO:
     }
 
     getProviderInfo() {
-        if (this.aiModel && !this.usingFallbackAI) {
-            return {
-                provider: this.aiModel.getProviderName(),
-                model: this.aiModel.getModelName(),
-            };
-        }
-        return {
-            provider: 'Anthropic (Fallback)',
-            model: this.config.claude_model || this.config.model || "claude-3-sonnet-20240229",
+        const info = {
+            provider: 'Unknown',
+            model: 'Unknown',
+            apiKeyConfigured: false,
+            webSearchEnabled: false,
+            firecrawlConfigured: false
         };
+
+        if (this.aiModel && !this.usingFallbackAI) {
+            info.provider = this.aiModel.getProviderName();
+            info.model = this.aiModel.getModelName();
+        } else if (this.usingFallbackAI) {
+            info.provider = 'Anthropic (Fallback)';
+            info.model = this.config.claude_model || this.config.model || "claude-3-sonnet-20240229";
+        }
+
+        // Check API key status
+        if (this.config.anthropic_api_key && this.config.anthropic_api_key !== 'YOUR_ANTHROPIC_API_KEY') {
+            info.apiKeyConfigured = true;
+        } else if (this.config.openai_api_key && this.config.openai_api_key !== 'YOUR_OPENAI_API_KEY') {
+            info.apiKeyConfigured = true;
+        } else if (this.config.gemini_api_key && this.config.gemini_api_key !== 'YOUR_GEMINI_API_KEY') {
+            info.apiKeyConfigured = true;
+        }
+
+        // Check web search status
+        info.webSearchEnabled = this.config.web_search && this.config.web_search.enabled;
+
+        // Check Firecrawl status
+        info.firecrawlConfigured = this.config.firecrawl_api_key &&
+                                   this.config.firecrawl_api_key !== 'YOUR_FIRECRAWL_API_KEY';
+
+        return info;
     }
 
     // Verifica se a pergunta é sobre IPs bloqueados ou firewalls
@@ -1008,6 +1031,7 @@ USO:
   ask --history                    # Ver histórico dos últimos 10 comandos
   ask --system-info                # Informações do sistema detectadas
   ask --provider-info              # Informações do provedor de IA atual
+  ask --model                      # Ver modelo de IA em uso (atalho)
   ask --web-search <on|off>        # Ativar/desativar busca na web
   ask --web-status                 # Ver status da busca na web
   ask --scrape <url>               # Extrair conteúdo de uma página web
@@ -1079,10 +1103,26 @@ EXEMPLOS:
 
             case '--provider-info':
                 const providerInfo = assistant.getProviderInfo();
-                console.log('\n🤖 Provedor de IA Configurado:\n');
-                console.log(`   Provedor: ${providerInfo.provider}`);
-                console.log(`   Modelo: ${providerInfo.model}`);
-                console.log('\nPara alterar, edite seu config.json ou execute: mcp-setup --configure-model');
+                console.log('\n╔══════════════════════════════════════════╗');
+                console.log('║      🤖 CONFIGURAÇÃO DE IA ATUAL        ║');
+                console.log('╚══════════════════════════════════════════╝\n');
+                console.log(`📦 Provedor: ${providerInfo.provider}`);
+                console.log(`🧠 Modelo: ${providerInfo.model}`);
+                console.log(`🔑 API Key: ${providerInfo.apiKeyConfigured ? '✅ Configurada' : '❌ Não configurada'}`);
+                console.log(`🌐 Web Search: ${providerInfo.webSearchEnabled ? '✅ Ativado' : '⚪ Desativado'}`);
+                console.log(`🔥 Firecrawl: ${providerInfo.firecrawlConfigured ? '✅ Configurado' : '⚪ Não configurado'}`);
+                console.log('\n💡 Dicas:');
+                console.log('   • Para mudar o modelo: edite ~/.mcp-terminal/config.json');
+                console.log('   • Para web search: ask --web-search on/off');
+                console.log('   • Para ver todos os comandos: ask --help');
+                break;
+
+            case '--model':
+                const modelInfo = assistant.getProviderInfo();
+                console.log(`\n🧠 Modelo de IA: ${modelInfo.provider} - ${modelInfo.model}`);
+                if (!modelInfo.apiKeyConfigured) {
+                    console.log('⚠️  API Key não configurada!');
+                }
                 break;
 
             case '--web-search':

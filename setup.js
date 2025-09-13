@@ -740,7 +740,9 @@ export default class ModelFactory {
             { src: 'system_detector.js', dest: 'system_detector.js' },
             { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' },
             { src: 'configure-ai.js', dest: 'configure-ai.js' },
-            { src: 'mcp-configure', dest: 'mcp-configure' }
+            { src: 'mcp-configure', dest: 'mcp-configure' },
+            { src: 'mcp-interactive.js', dest: 'mcp-interactive.js' },
+            { src: 'mcp-chat', dest: 'mcp-chat' }
         ];
 
         // Copiar arquivos principais
@@ -827,7 +829,9 @@ export default class ModelFactory {
             'mcp-client.js',
             'mcp-assistant.js',
             'configure-ai.js',
-            'mcp-configure'
+            'mcp-configure',
+            'mcp-interactive.js',
+            'mcp-chat'
         ];
 
         for (const script of scripts) {
@@ -848,7 +852,9 @@ export default class ModelFactory {
             const links = [
                 { from: path.join(this.mcpDir, 'mcp-assistant.js'), to: path.join(binDir, 'ask') },
                 { from: path.join(this.mcpDir, 'mcp-client.js'), to: path.join(binDir, 'mcp-monitor') },
-                { from: path.join(this.mcpDir, 'mcp-configure'), to: path.join(binDir, 'mcp-configure') }
+                { from: path.join(this.mcpDir, 'mcp-configure'), to: path.join(binDir, 'mcp-configure') },
+                { from: path.join(this.mcpDir, 'mcp-chat'), to: path.join(binDir, 'mcp-chat') },
+                { from: path.join(this.mcpDir, 'mcp-chat'), to: path.join(binDir, 'mcp') }
             ];
 
             for (const link of links) {

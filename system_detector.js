@@ -29,6 +29,13 @@ class SystemDetector {
         }
     }
 
+    getSystemInfo() {
+        if (!this.systemInfo) {
+            this.detectSystem();
+        }
+        return this.systemInfo;
+    }
+
     getOS() {
         try {
             return execSync('uname -s', { encoding: 'utf8' }).trim();

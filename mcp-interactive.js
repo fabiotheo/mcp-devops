@@ -361,6 +361,7 @@ class MCPInteractive extends EventEmitter {
         this.aiModel = null;
         this.systemDetector = new SystemDetector();
         this.sessionName = config.session || `session-${Date.now()}`;
+        this.sessionPermissions = new Set();  // Armazena comandos já aprovados na sessão
     }
 
     async initialize() {
@@ -466,14 +467,17 @@ class MCPInteractive extends EventEmitter {
             this.contextManager.addMessage('user', question);
 
             // Mostra indicador de processamento
-            process.stdout.write(chalk.gray('Pensando...'));
+            process.stdout.write(chalk.gray('Analisando...'));
+
+            // Detecta e executa comandos mencionados na pergunta
+            const commandResults = await this.detectAndExecuteCommands(question);
 
             // Obtém resposta da IA com contexto
             const context = this.contextManager.getContext();
             const systemInfo = this.systemDetector.getSystemInfo();
 
-            // Preparar contexto para o modelo
-            const enhancedQuestion = this.prepareQuestion(question, context, systemInfo);
+            // Preparar contexto para o modelo - incluindo resultados dos comandos
+            const enhancedQuestion = this.prepareQuestionWithCommandResults(question, context, systemInfo, commandResults);
 
             // Criar contexto completo compatível com askCommand
             const systemContext = {
@@ -483,7 +487,8 @@ class MCPInteractive extends EventEmitter {
                 formattedPackages: '',
                 webSearchResults: null,  // Importante: definir como null ao invés de undefined
                 capabilities: this.systemDetector.getSystemCapabilities() || [],  // Adicionar capabilities
-                commands: this.systemDetector.getSystemCommands() || {}  // Adicionar commands também
+                commands: this.systemDetector.getSystemCommands() || {},  // Adicionar commands também
+                commandResults: commandResults  // Adicionar resultados dos comandos executados
             };
 
             // Obter resposta - passar contexto completo
@@ -502,6 +507,207 @@ class MCPInteractive extends EventEmitter {
             process.stdout.write('\r' + ' '.repeat(20) + '\r');
             console.error(chalk.red(`\nErro: ${error.message}\n`));
         }
+    }
+
+    // Detecta comandos na pergunta e os executa
+    async detectAndExecuteCommands(question) {
+        const commandResults = [];
+
+        // Padrões para detectar pedidos de execução de comandos
+        const executePatterns = [
+            /(?:execute|executar?|run|rodar?|pode\s+(?:executar|rodar)|me\s+(?:mostre|passe|dê))\s+(?:o\s+)?(?:comando\s+)?[`"]?([^`"\n]+)[`"]?/gi,
+            /(?:qual|quais|me\s+(?:dê|passe|mostre))\s+(?:o\s+)?(?:resultado|output|saída)\s+(?:do\s+)?(?:comando\s+)?[`"]?([^`"\n]+)[`"]?/gi,
+            /(?:status|informações?|detalhes?)\s+(?:do|da|de)\s+([a-zA-Z0-9_\-]+)/gi
+        ];
+
+        // Comandos comuns que o usuário pode querer executar
+        const commonCommands = {
+            'fail2ban': ['fail2ban-client status', 'systemctl status fail2ban'],
+            'firewall': ['ufw status', 'iptables -L -n'],
+            'docker': ['docker ps', 'docker stats --no-stream'],
+            'sistema': ['uname -a', 'lsb_release -a', 'df -h'],
+            'rede': ['ip a', 'netstat -tlnp'],
+            'processos': ['ps aux | head -20', 'top -b -n 1 | head -20']
+        };
+
+        // Verifica se a pergunta menciona algum serviço/comando conhecido
+        for (const [service, commands] of Object.entries(commonCommands)) {
+            if (question.toLowerCase().includes(service)) {
+                for (const cmd of commands) {
+                    // Executa apenas se o usuário está pedindo informações atuais
+                    if (question.match(/(?:status|estado|ativas?|rodando|executando|quais|liste|mostrar?)/i)) {
+                        const result = await this.executeCommand(cmd);
+                        if (result) {
+                            commandResults.push(result);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Busca por comandos específicos mencionados
+        for (const pattern of executePatterns) {
+            let match;
+            pattern.lastIndex = 0; // Reset regex
+            while ((match = pattern.exec(question)) !== null) {
+                const command = match[1].trim();
+                if (command && !command.includes('&&') && !command.includes(';') && !command.includes('|>')) {
+                    const result = await this.executeCommand(command);
+                    if (result) {
+                        commandResults.push(result);
+                    }
+                }
+            }
+        }
+
+        return commandResults;
+    }
+
+    // Executa um comando de forma segura com permissão
+    async executeCommand(command) {
+        const { execSync } = await import('child_process');
+
+        try {
+            // Adiciona sudo se necessário para comandos que normalmente precisam
+            let actualCommand = command;
+            const needsSudo = [
+                'fail2ban-client',
+                'iptables',
+                'netstat -tlnp',
+                'systemctl status',
+                'ufw status'
+            ].some(cmd => command.startsWith(cmd));
+
+            if (needsSudo && !command.startsWith('sudo')) {
+                actualCommand = `sudo ${command}`;
+            }
+
+            // Verifica se precisa pedir permissão
+            const needsPermission = !this.sessionPermissions.has(actualCommand);
+
+            if (needsPermission) {
+                const permission = await this.askCommandPermission(actualCommand);
+
+                if (permission === 'n') {
+                    console.log(chalk.yellow('\n❌ Comando cancelado pelo usuário\n'));
+                    return null;
+                } else if (permission === 'y') {
+                    // Executa apenas uma vez este comando
+                    // Não adiciona às permissões permanentes
+                } else if (permission === 'a') {
+                    // Sempre executar ESTE comando específico nesta sessão
+                    this.sessionPermissions.add(actualCommand);
+                    console.log(chalk.green(`\n✅ O comando "${actualCommand}" será executado automaticamente nesta sessão\n`));
+                } else if (permission === 'd') {
+                    // Usuário quer digitar outro comando
+                    const customCommand = await this.askCustomCommand();
+                    if (customCommand) {
+                        actualCommand = customCommand;
+                        // Não adiciona às permissões, executa apenas uma vez
+                    } else {
+                        return null;
+                    }
+                }
+            }
+
+            console.log(chalk.gray(`\n📊 Executando: ${actualCommand}`));
+
+            const output = execSync(actualCommand, {
+                encoding: 'utf8',
+                timeout: 5000,  // Timeout de 5 segundos
+                maxBuffer: 1024 * 1024  // 1MB buffer
+            });
+
+            console.log(chalk.green('✓ Comando executado com sucesso\n'));
+
+            return {
+                command: actualCommand,
+                output: output.trim(),
+                exitCode: 0,
+                timestamp: new Date().toISOString()
+            };
+
+        } catch (error) {
+            // Se o comando falhou mas tem output (stderr), ainda pode ser útil
+            if (error.stderr || error.stdout) {
+                console.log(chalk.yellow(`⚠️ Comando retornou erro mas tem output\n`));
+                return {
+                    command: command,
+                    output: (error.stdout || '') + (error.stderr || ''),
+                    exitCode: error.status || 1,
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                };
+            }
+
+            console.log(chalk.red(`✗ Falha ao executar: ${error.message}\n`));
+            return null;
+        }
+    }
+
+    // Pede permissão para executar comando
+    async askCommandPermission(command) {
+        const readline = await import('readline');
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
+
+        return new Promise((resolve) => {
+            console.log(chalk.yellow(`\n🔐 Permissão necessária para executar:`));
+            console.log(chalk.cyan(`   ${command}`));
+            console.log();
+            console.log(chalk.gray('Opções:'));
+            console.log(chalk.gray('  [Y] Sim, executar uma vez'));
+            console.log(chalk.gray('  [N] Não executar'));
+            console.log(chalk.gray('  [A] Sempre executar ESTE comando nesta sessão'));
+            console.log(chalk.gray('  [D] Digitar outro comando'));
+            console.log();
+
+            rl.question(chalk.yellow('Escolha (y/n/a/d): '), (answer) => {
+                rl.close();
+                resolve(answer.toLowerCase());
+            });
+        });
+    }
+
+    // Pede para o usuário digitar um comando customizado
+    async askCustomCommand() {
+        const readline = await import('readline');
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
+
+        return new Promise((resolve) => {
+            console.log(chalk.cyan('\n📝 Digite o comando que deseja executar:'));
+            rl.question(chalk.gray('> '), (command) => {
+                rl.close();
+                resolve(command.trim() || null);
+            });
+        });
+    }
+
+    // Prepara a pergunta com os resultados dos comandos
+    prepareQuestionWithCommandResults(question, context, systemInfo, commandResults) {
+        let enhanced = this.prepareQuestion(question, context, systemInfo);
+
+        if (commandResults && commandResults.length > 0) {
+            enhanced += '\n\n### Resultados de Comandos Executados:\n';
+            for (const result of commandResults) {
+                enhanced += `\n**Comando:** \`${result.command}\`\n`;
+                enhanced += `**Exit Code:** ${result.exitCode}\n`;
+                if (result.output) {
+                    enhanced += `**Output:**\n\`\`\`\n${result.output.substring(0, 1000)}\n\`\`\`\n`;
+                }
+                if (result.error) {
+                    enhanced += `**Erro:** ${result.error}\n`;
+                }
+            }
+            enhanced += '\n### Com base nos resultados acima, forneça uma análise e recomendações.';
+        }
+
+        return enhanced;
     }
 
     prepareQuestion(question, context, systemInfo) {

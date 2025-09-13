@@ -705,24 +705,36 @@ export default class ModelFactory {
         console.log('\n🐚 Configurando integração Zsh...');
 
         const integrationLine = 'source ~/.mcp-terminal/zsh_integration.sh';
+        const pathLine = 'export PATH="$HOME/.local/bin:$PATH"';
 
         try {
-            const zshrc = await fs.readFile(this.zshrcPath, 'utf8');
+            let zshrc = await fs.readFile(this.zshrcPath, 'utf8');
+            let updated = false;
 
-            if (zshrc.includes(integrationLine)) {
-                console.log('  ✓ Integração já configurada no .zshrc');
-                return;
+            // Verifica e adiciona integração
+            if (!zshrc.includes(integrationLine)) {
+                zshrc += '\n\n# MCP Terminal Integration\n' + integrationLine + '\n';
+                updated = true;
             }
 
-            // Adiciona integração ao .zshrc
-            const newZshrc = zshrc + '\n\n# MCP Terminal Integration\n' + integrationLine + '\n';
-            await fs.writeFile(this.zshrcPath, newZshrc);
-            console.log('  ✓ Integração adicionada ao .zshrc');
+            // Verifica e adiciona PATH
+            if (!zshrc.includes('.local/bin')) {
+                zshrc += '\n# Add .local/bin to PATH for MCP commands\n' + pathLine + '\n';
+                updated = true;
+            }
+
+            if (updated) {
+                await fs.writeFile(this.zshrcPath, zshrc);
+                console.log('  ✓ Integração e PATH configurados no .zshrc');
+            } else {
+                console.log('  ✓ Integração já configurada no .zshrc');
+            }
 
         } catch (error) {
             // Se .zshrc não existe, cria
             if (error.code === 'ENOENT') {
-                await fs.writeFile(this.zshrcPath, `# MCP Terminal Integration\n${integrationLine}\n`);
+                const content = `# MCP Terminal Integration\n${integrationLine}\n\n# Add .local/bin to PATH\n${pathLine}\n`;
+                await fs.writeFile(this.zshrcPath, content);
                 console.log('  ✓ .zshrc criado com integração');
             } else {
                 throw error;

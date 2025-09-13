@@ -475,8 +475,17 @@ class MCPInteractive extends EventEmitter {
             // Preparar contexto para o modelo
             const enhancedQuestion = this.prepareQuestion(question, context, systemInfo);
 
-            // Obter resposta
-            const response = await this.aiModel.askCommand(enhancedQuestion);
+            // Criar contexto completo compatível com askCommand
+            const systemContext = {
+                ...systemInfo,
+                currentDir: process.cwd(),
+                dirInfo: '',
+                formattedPackages: '',
+                webSearchResults: null  // Importante: definir como null ao invés de undefined
+            };
+
+            // Obter resposta - passar contexto completo
+            const response = await this.aiModel.askCommand(enhancedQuestion, systemContext);
 
             // Limpar indicador
             process.stdout.write('\r' + ' '.repeat(20) + '\r');

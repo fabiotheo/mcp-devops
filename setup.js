@@ -6,13 +6,32 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import readline from 'node:readline';
+import os from 'node:os';
 
 class MCPSetup {
     constructor() {
-        this.mcpDir = path.join(process.env.HOME, '.mcp-terminal');
+        // Usar método robusto e multiplataforma para detectar home
+        const homeDir = os.homedir();
+
+        this.mcpDir = path.join(homeDir, '.mcp-terminal');
         this.configPath = path.join(this.mcpDir, 'config.json');
-        this.zshrcPath = path.join(process.env.HOME, '.zshrc');
+        this.zshrcPath = path.join(homeDir, '.zshrc');
+        this.bashrcPath = path.join(homeDir, '.bashrc');
         this.versionFilePath = path.join(this.mcpDir, '.version');
+        this.homeDir = homeDir;
+
+        // Detectar se é root (apenas em sistemas Unix-like)
+        this.isRoot = process.platform !== 'win32' &&
+                     typeof process.getuid === 'function' &&
+                     process.getuid() === 0;
+
+        // Detectar shell atual com validação
+        this.currentShell = process.env.SHELL || '/bin/bash';
+
+        // Shell padrão se não detectado
+        if (!this.currentShell || this.currentShell === '') {
+            this.currentShell = '/bin/bash';
+        }
 
         // Lê a versão do package.json
         try {
@@ -39,8 +58,8 @@ class MCPSetup {
             // 3. Configurar API key
             await this.configureAPI();
 
-            // 4. Configurar integração Zsh
-            await this.setupZshIntegration();
+            // 4. Configurar integração do Shell
+            await this.setupShellIntegration();
 
             // 5. Tornar scripts executáveis
             await this.makeExecutable();
@@ -125,8 +144,8 @@ class MCPSetup {
                 await this.configureAPI();
             }
 
-            // 7. Atualizar integração Zsh (caso necessário)
-            await this.setupZshIntegration();
+            // 7. Atualizar integração do Shell (caso necessário)
+            await this.setupShellIntegration();
 
             // 8. Executar testes
             await this.runTests();
@@ -701,45 +720,82 @@ export default class ModelFactory {
         console.log('  ✓ Configuração salva');
     }
 
-    async setupZshIntegration() {
-        console.log('\n🐚 Configurando integração Zsh...');
+    async setupShellIntegration() {
+        // Detectar qual shell está sendo usado
+        const shellName = path.basename(this.currentShell);
+        const isZsh = shellName.includes('zsh');
+        const isBash = shellName.includes('bash');
 
+        console.log(`\n🐚 Configurando integração do shell (${shellName})...`);
+
+        // Determinar arquivo de configuração correto
+        let rcPath;
+        if (isZsh) {
+            rcPath = this.zshrcPath;
+        } else if (isBash) {
+            rcPath = this.bashrcPath;
+        } else {
+            console.log(`  ⚠ Shell ${shellName} não suportado automaticamente.`);
+            console.log(`  👉 Adicione manualmente ao seu arquivo de configuração:`);
+            console.log(`     export PATH="$HOME/.local/bin:$PATH"`);
+            return;
+        }
+
+        const rcName = path.basename(rcPath);
         const integrationLine = 'source ~/.mcp-terminal/zsh_integration.sh';
         const pathLine = 'export PATH="$HOME/.local/bin:$PATH"';
 
         try {
-            let zshrc = await fs.readFile(this.zshrcPath, 'utf8');
+            let rcContent = '';
+            try {
+                rcContent = await fs.readFile(rcPath, 'utf8');
+            } catch (error) {
+                if (error.code !== 'ENOENT') throw error;
+                // Arquivo não existe, será criado
+            }
+
             let updated = false;
 
             // Verifica e adiciona integração
-            if (!zshrc.includes(integrationLine)) {
-                zshrc += '\n\n# MCP Terminal Integration\n' + integrationLine + '\n';
+            if (!rcContent.includes(integrationLine)) {
+                rcContent += '\n\n# MCP Terminal Integration\n' + integrationLine + '\n';
                 updated = true;
             }
 
             // Verifica e adiciona PATH
-            if (!zshrc.includes('.local/bin')) {
-                zshrc += '\n# Add .local/bin to PATH for MCP commands\n' + pathLine + '\n';
+            if (!rcContent.includes('.local/bin')) {
+                rcContent += '\n# Add .local/bin to PATH for MCP commands\n' + pathLine + '\n';
                 updated = true;
             }
 
             if (updated) {
-                await fs.writeFile(this.zshrcPath, zshrc);
-                console.log('  ✓ Integração e PATH configurados no .zshrc');
+                await fs.writeFile(rcPath, rcContent);
+                console.log(`  ✓ Integração e PATH configurados no ${rcName}`);
             } else {
-                console.log('  ✓ Integração já configurada no .zshrc');
+                console.log(`  ✓ Integração já configurada no ${rcName}`);
+            }
+
+            // Para root em Linux, adicionar também ao /etc/profile.d/
+            if (this.isRoot && process.platform === 'linux') {
+                try {
+                    const profileScript = `#!/bin/sh\n# MCP Terminal Integration\nexport PATH="$HOME/.local/bin:$PATH"\n`;
+                    await fs.writeFile('/etc/profile.d/mcp.sh', profileScript);
+                    await fs.chmod('/etc/profile.d/mcp.sh', 0o755);
+                    console.log('  ✓ Configuração global adicionada em /etc/profile.d/mcp.sh');
+                } catch (error) {
+                    // Ignorar se não conseguir escrever
+                    console.log('  ℹ Não foi possível adicionar configuração global (sem permissão)');
+                }
             }
 
         } catch (error) {
-            // Se .zshrc não existe, cria
-            if (error.code === 'ENOENT') {
-                const content = `# MCP Terminal Integration\n${integrationLine}\n\n# Add .local/bin to PATH\n${pathLine}\n`;
-                await fs.writeFile(this.zshrcPath, content);
-                console.log('  ✓ .zshrc criado com integração');
-            } else {
-                throw error;
-            }
+            console.error(`  ❌ Erro ao configurar ${rcName}:`, error.message);
         }
+    }
+
+    // Manter o nome antigo para compatibilidade
+    async setupZshIntegration() {
+        return this.setupShellIntegration();
     }
 
     async makeExecutable() {
@@ -859,7 +915,13 @@ export default class ModelFactory {
         }
 
         // Cria links simbólicos globais (opcional)
-        const binDir = path.join(process.env.HOME, '.local/bin');
+        const binDir = path.join(this.homeDir, '.local/bin');
+
+        // Para root, também criar em /usr/local/bin se possível
+        const additionalBinDirs = [];
+        if (this.isRoot) {
+            additionalBinDirs.push('/usr/local/bin');
+        }
         try {
             await fs.mkdir(binDir, { recursive: true });
 
@@ -873,14 +935,86 @@ export default class ModelFactory {
 
             for (const link of links) {
                 try {
-                    await fs.unlink(link.to);
-                } catch {}
+                    // Verificar se o arquivo de origem existe
+                    await fs.access(link.from);
 
-                await fs.symlink(link.from, link.to);
-                console.log(`  ✓ Link criado: ${link.to}`);
+                    // Verificar o que existe no destino
+                    let destStats = null;
+                    try {
+                        destStats = await fs.lstat(link.to);
+                    } catch {
+                        // Destino não existe, OK para criar
+                    }
+
+                    if (destStats) {
+                        if (destStats.isSymbolicLink()) {
+                            // É um link simbólico, pode remover
+                            await fs.unlink(link.to);
+                        } else if (destStats.isDirectory()) {
+                            console.log(`  ⚠ ${link.to} é um diretório, pulando...`);
+                            continue;
+                        } else if (destStats.isFile()) {
+                            console.log(`  ⚠ ${link.to} é um arquivo existente, pulando...`);
+                            continue;
+                        }
+                    }
+
+                    await fs.symlink(link.from, link.to);
+                    console.log(`  ✓ Link criado: ${link.to}`);
+                } catch (error) {
+                    console.log(`  ⚠ Não foi possível criar link ${path.basename(link.to)}: ${error.message}`);
+                }
+            }
+
+            // Para root, criar links também em /usr/local/bin
+            if (this.isRoot) {
+                console.log('\n  📌 Criando links globais para root...');
+                for (const dir of additionalBinDirs) {
+                    try {
+                        await fs.mkdir(dir, { recursive: true });
+
+                        const globalLinks = [
+                            { from: path.join(this.mcpDir, 'mcp-assistant.js'), to: path.join(dir, 'ask') },
+                            { from: path.join(this.mcpDir, 'mcp-chat-launcher.sh'), to: path.join(dir, 'mcp-chat') },
+                            { from: path.join(this.mcpDir, 'mcp-chat-launcher.sh'), to: path.join(dir, 'mcp') }
+                        ];
+
+                        for (const link of globalLinks) {
+                            try {
+                                // Verificar se o arquivo de origem existe
+                                await fs.access(link.from);
+
+                                // Verificar o que existe no destino
+                                let destStats = null;
+                                try {
+                                    destStats = await fs.lstat(link.to);
+                                } catch {
+                                    // Destino não existe, OK para criar
+                                }
+
+                                if (destStats) {
+                                    if (destStats.isSymbolicLink()) {
+                                        // É um link simbólico, pode remover
+                                        await fs.unlink(link.to);
+                                    } else if (destStats.isDirectory() || destStats.isFile()) {
+                                        console.log(`  ⚠ ${link.to} já existe, pulando...`);
+                                        continue;
+                                    }
+                                }
+
+                                await fs.symlink(link.from, link.to);
+                                console.log(`  ✓ Link global criado: ${link.to}`);
+                            } catch (error) {
+                                console.log(`  ⚠ Não foi possível criar link global: ${error.message}`);
+                            }
+                        }
+                    } catch (error) {
+                        console.log(`  ⚠ Não foi possível criar links em ${dir}: ${error.message}`);
+                    }
+                }
             }
         } catch (error) {
-            console.log(`  ⚠ Não foi possível criar links globais: ${error.message}`);
+            console.log(`  ⚠ Não foi possível criar links: ${error.message}`);
         }
     }
 
@@ -1042,8 +1176,8 @@ export default class ModelFactory {
             await fs.writeFile(this.configPath, JSON.stringify(config, null, 2));
             console.log('  ✓ Configuração salva automaticamente');
 
-            // 4. Configurar integração Zsh
-            await this.setupZshIntegration();
+            // 4. Configurar integração do Shell
+            await this.setupShellIntegration();
 
             // 5. Tornar scripts executáveis
             await this.makeExecutable();

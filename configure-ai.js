@@ -70,16 +70,16 @@ class AIConfigurator {
     }
 
     async selectModel(provider) {
-        console.log('\n📋 Modelos disponíveis:\n');
+        console.log('\n📋 Modelos disponíveis:');
+        console.log('────────────────────────────────────────\n');
 
         const models = {
             anthropic: [
-                { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet (Mais recente)', recommended: true },
-                { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (Outubro 2024)' },
-                { id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet (Junho 2024)' },
-                { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus (Mais poderoso)' },
-                { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet' },
-                { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku (Mais rápido)' }
+                { id: 'claude-opus-4-1-20250805', name: 'Claude Opus 4.1 (Mais poderoso e inteligente)', premium: true },
+                { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4 (Alto desempenho)', recommended: true },
+                { id: 'claude-3-7-sonnet-20250219', name: 'Claude Sonnet 3.7 (Excelente custo-benefício)' },
+                { id: 'claude-3-5-haiku-20241022', name: 'Claude Haiku 3.5 (Mais rápido)', fast: true },
+                { id: 'claude-3-haiku-20240307', name: 'Claude Haiku 3 (Econômico)' }
             ],
             openai: [
                 { id: 'gpt-4o', name: 'GPT-4o (Mais recente)', recommended: true },
@@ -95,11 +95,24 @@ class AIConfigurator {
 
         const providerModels = models[provider];
         providerModels.forEach((model, index) => {
-            const rec = model.recommended ? ' ⭐ RECOMENDADO' : '';
-            console.log(`  ${index + 1}) ${model.name}${rec}`);
+            let badge = '';
+            if (model.premium) badge = ' 👑 PREMIUM';
+            else if (model.recommended) badge = ' ⭐ RECOMENDADO';
+            else if (model.fast) badge = ' ⚡ RÁPIDO';
+            console.log(`  ${index + 1}) ${model.name}${badge}`);
         });
 
         console.log(`  ${providerModels.length + 1}) Digitar ID do modelo manualmente`);
+        console.log('\n────────────────────────────────────────');
+
+        if (provider === 'anthropic') {
+            console.log('\n💡 Dicas sobre os modelos Claude:');
+            console.log('  • Opus 4.1: Máxima inteligência, ideal para tarefas complexas');
+            console.log('  • Sonnet 4: Melhor equilíbrio entre performance e custo');
+            console.log('  • Sonnet 3.7: Ótimo custo-benefício para uso geral');
+            console.log('  • Haiku 3.5: Respostas rápidas, ideal para comandos simples');
+        }
+
         console.log('');
 
         const choice = await this.question(`Escolha o modelo (1-${providerModels.length + 1}): `);

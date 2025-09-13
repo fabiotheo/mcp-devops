@@ -1,0 +1,71 @@
+{
+  "// Configuração de Provedores de IA //": "Escolha um provedor e configure sua API key",
+
+  "// OPÇÃO 1: Claude (Anthropic)": "",
+  "anthropic_api_key": "sk-ant-api03-...",
+  "claude_model": "claude-3-7-sonnet-20250219",
+  "// Modelos disponíveis Claude": [
+    "claude-3-7-sonnet-20250219 (mais recente e poderoso)",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-sonnet-20240620",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307"
+  ],
+
+  "// OPÇÃO 2: OpenAI (GPT)": "",
+  "openai_api_key": "sk-...",
+  "openai_model": "gpt-4o",
+  "// Modelos disponíveis OpenAI": [
+    "gpt-4o (mais recente)",
+    "gpt-4-turbo",
+    "gpt-4",
+    "gpt-3.5-turbo"
+  ],
+
+  "// OPÇÃO 3: Google Gemini": "",
+  "gemini_api_key": "AIza...",
+  "gemini_model": "gemini-pro",
+  "// Modelos disponíveis Gemini": [
+    "gemini-pro",
+    "gemini-pro-vision"
+  ],
+
+  "// Seleção do Provedor Principal": "",
+  "provider": "anthropic",
+  "// Opções de provider": ["anthropic", "openai", "gemini"],
+
+  "// Modelo padrão (retrocompatibilidade)": "",
+  "model": "claude-3-7-sonnet-20250219",
+
+  "// Configurações de Monitoramento": "",
+  "max_calls_per_hour": 100,
+  "enable_monitoring": true,
+  "enable_assistant": true,
+  "monitor_commands": ["npm", "yarn", "git", "docker", "make", "cargo", "go"],
+  "quick_fixes": true,
+  "auto_detect_fixes": false,
+  "log_level": "info",
+  "cache_duration_hours": 24,
+
+  "// Configuração de Web Search": "",
+  "web_search": {
+    "enabled": true,
+    "cache_settings": {
+      "documentation": 7,
+      "error_solutions": 1,
+      "package_info": 0.04,
+      "man_pages": 30
+    },
+    "priority_sources": [
+      "man_pages",
+      "official_docs",
+      "github_issues",
+      "stackoverflow"
+    ],
+    "rate_limit_per_hour": 50
+  },
+
+  "// Configuração do Firecrawl (para scraping de sites)": "",
+  "firecrawl_api_key": "fc-..."
+}

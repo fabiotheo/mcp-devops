@@ -1032,6 +1032,7 @@ USO:
   ask --system-info                # Informações do sistema detectadas
   ask --provider-info              # Informações do provedor de IA atual
   ask --model                      # Ver modelo de IA em uso (atalho)
+  ask --configure                  # Configurar provedor de IA e API key
   ask --web-search <on|off>        # Ativar/desativar busca na web
   ask --web-status                 # Ver status da busca na web
   ask --scrape <url>               # Extrair conteúdo de uma página web
@@ -1122,6 +1123,34 @@ EXEMPLOS:
                 console.log(`\n🧠 Modelo de IA: ${modelInfo.provider} - ${modelInfo.model}`);
                 if (!modelInfo.apiKeyConfigured) {
                     console.log('⚠️  API Key não configurada!');
+                }
+                break;
+
+            case '--configure':
+                console.log('\n🔧 Iniciando configuração interativa...\n');
+                try {
+                    // Import and run the configurator
+                    const { spawn } = await import('child_process');
+                    const configScript = path.join(path.dirname(import.meta.url.replace('file://', '')), 'configure-ai.js');
+
+                    const configProcess = spawn('node', [configScript], {
+                        stdio: 'inherit'
+                    });
+
+                    configProcess.on('close', (code) => {
+                        if (code === 0) {
+                            console.log('\n✅ Configuração concluída!');
+                        } else {
+                            console.log('\n❌ Configuração cancelada ou falhou.');
+                        }
+                        process.exit(code);
+                    });
+
+                    // Don't continue with the rest of the script
+                    return;
+                } catch (error) {
+                    console.error('❌ Erro ao iniciar configurador:', error.message);
+                    console.log('💡 Tente executar diretamente: node ~/mcp-devops/configure-ai.js');
                 }
                 break;
 

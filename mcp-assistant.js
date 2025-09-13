@@ -1042,11 +1042,13 @@ EXEMPLOS:
         output: process.stdout,
     });
 
-    // Função simplificada de confirmação para evitar problemas com promises assincronas
+    // Função de confirmação usando promises
     const askConfirmation = (prompt) => {
-        process.stdout.write(prompt);
-        const answer = rl.question('');
-        return answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes';
+        return new Promise((resolve) => {
+            rl.question(prompt, (answer) => {
+                resolve(answer && (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes'));
+            });
+        });
     };
 
     try {

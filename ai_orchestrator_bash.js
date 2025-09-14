@@ -194,32 +194,28 @@ export default class AICommandOrchestratorBash {
     getAdditionalTools() {
         return [
             {
-                type: "function",
-                function: {
-                    name: "list_fail2ban_jails",
-                    description: "Lista todas as jails ativas do fail2ban. Retorna um array com os nomes das jails.",
-                    parameters: {
-                        type: "object",
-                        properties: {},
-                        required: []
-                    }
+                type: "custom",
+                name: "list_fail2ban_jails",
+                description: "Lista todas as jails ativas do fail2ban. Retorna um array com os nomes das jails.",
+                input_schema: {
+                    type: "object",
+                    properties: {},
+                    required: []
                 }
             },
             {
-                type: "function",
-                function: {
-                    name: "get_jail_status",
-                    description: "Obtém o status detalhado de uma jail específica do fail2ban, incluindo IPs banidos.",
-                    parameters: {
-                        type: "object",
-                        properties: {
-                            jail_name: {
-                                type: "string",
-                                description: "Nome da jail a consultar"
-                            }
-                        },
-                        required: ["jail_name"]
-                    }
+                type: "custom",
+                name: "get_jail_status",
+                description: "Obtém o status detalhado de uma jail específica do fail2ban, incluindo IPs banidos.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        jail_name: {
+                            type: "string",
+                            description: "Nome da jail a consultar"
+                        }
+                    },
+                    required: ["jail_name"]
                 }
             }
         ];

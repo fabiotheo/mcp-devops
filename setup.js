@@ -340,6 +340,7 @@ class MCPSetup {
                 const sourceFiles = [
                     'base_model.js',
                     'claude_model.js',
+                    'claude_model_tools.js',
                     'openai_model.js',
                     'gemini_model.js',
                     'model_factory.js'
@@ -872,7 +873,9 @@ export default class ModelFactory {
             { src: 'mcp-interactive.js', dest: 'mcp-interactive.js' },
             { src: 'mcp-chat', dest: 'mcp-chat' },
             { src: 'mcp-chat-launcher.sh', dest: 'mcp-chat-launcher.sh' },
-            { src: 'ai_orchestrator.js', dest: 'ai_orchestrator.js' }
+            { src: 'ai_orchestrator.js', dest: 'ai_orchestrator.js' },
+            { src: 'ai_orchestrator_tools.js', dest: 'ai_orchestrator_tools.js' },
+            { src: 'ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' }
         ];
 
         // Copiar arquivos principais
@@ -1230,6 +1233,19 @@ export default class ModelFactory {
                     "claude_model": "claude-3-7-sonnet-20250219",
                     "openai_model": "gpt-4o",
                     "gemini_model": "gemini-pro",
+                    "use_native_tools": true,
+                    "enable_bash_tool": true,
+                    "bash_config": {
+                        "timeout": 30000,
+                        "maxOutputSize": 100000
+                    },
+                    "ai_orchestration": {
+                        "enabled": true,
+                        "max_iterations": 10,
+                        "max_execution_time": 60000,
+                        "verbose_logging": false,
+                        "enable_cache": true
+                    },
                     "max_calls_per_hour": 100,
                     "enable_monitoring": true,
                     "enable_assistant": true,
@@ -1247,10 +1263,34 @@ export default class ModelFactory {
                     const existingContent = await fs.readFile(this.configPath, 'utf8');
                     const existingConfig = JSON.parse(existingContent);
 
-                    // Preserva configurações existentes
+                    // Preserva configurações existentes mas adiciona novas features
                     if (existingConfig) {
+                        // Adiciona novas features se não existirem
+                        if (existingConfig.use_native_tools === undefined) {
+                            existingConfig.use_native_tools = true;
+                            console.log('  ✓ Ativando Tools nativas do Claude');
+                        }
+                        if (existingConfig.enable_bash_tool === undefined) {
+                            existingConfig.enable_bash_tool = true;
+                            console.log('  ✓ Ativando ferramenta Bash persistente');
+                        }
+                        if (!existingConfig.bash_config) {
+                            existingConfig.bash_config = {
+                                "timeout": 30000,
+                                "maxOutputSize": 100000
+                            };
+                        }
+                        if (!existingConfig.ai_orchestration) {
+                            existingConfig.ai_orchestration = {
+                                "enabled": true,
+                                "max_iterations": 10,
+                                "max_execution_time": 60000,
+                                "verbose_logging": false,
+                                "enable_cache": true
+                            };
+                        }
                         config = { ...config, ...existingConfig };
-                        console.log('  ✓ Configuração existente preservada');
+                        console.log('  ✓ Configuração existente preservada e atualizada');
                     }
                 } catch {}
             } else {

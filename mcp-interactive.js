@@ -10,6 +10,8 @@ import chalk from 'chalk';
 import ModelFactory from './ai_models/model_factory.js';
 import SystemDetector from './system_detector.js';
 import AICommandOrchestrator from './ai_orchestrator.js';
+import AICommandOrchestratorWithTools from './ai_orchestrator_tools.js';
+import AICommandOrchestratorBash from './ai_orchestrator_bash.js';
 import PersistentHistory from './libs/persistent-history.js';
 import KeybindingManager from './libs/keybinding-manager.js';
 import MultiLineInput from './libs/multiline-input.js';
@@ -536,18 +538,53 @@ class MCPInteractive extends EventEmitter {
             executeCommand: this.executeCommand.bind(this)
         };
 
-        // Inicializar orquestrador de comandos
-        this.commandOrchestrator = new AICommandOrchestrator(
-            this.aiModel,
-            commandExecutor,  // Passa apenas o executor, não toda a instância
-            {
-                maxIterations: modelConfig.ai_orchestration?.max_iterations || 5,
-                maxExecutionTime: modelConfig.ai_orchestration?.max_execution_time || 30000,
-                enableCache: modelConfig.ai_orchestration?.enable_cache !== false,
-                verboseLogging: modelConfig.ai_orchestration?.verbose_logging || false,
-                cacheDurationHours: modelConfig.cache_duration_hours || 1
-            }
-        );
+        // Escolher orquestrador baseado na configuração
+        const useToolsOrchestrator = modelConfig.use_native_tools || false;
+        const useBashTool = modelConfig.enable_bash_tool || false;
+
+        if (useBashTool && this.aiModel.supportsTools && this.aiModel.supportsTools()) {
+            // Usar orquestrador com ferramenta Bash
+            this.commandOrchestrator = new AICommandOrchestratorBash(
+                this.aiModel,
+                {
+                    maxIterations: modelConfig.ai_orchestration?.max_iterations || 10,
+                    maxExecutionTime: modelConfig.ai_orchestration?.max_execution_time || 60000,
+                    verboseLogging: modelConfig.ai_orchestration?.verbose_logging || false,
+                    enableBash: true,
+                    bashConfig: modelConfig.bash_config || {
+                        timeout: 30000,
+                        maxOutputSize: 100000,
+                        workingDir: process.cwd()
+                    }
+                }
+            );
+            console.log(chalk.green('✓ Usando orquestrador com ferramenta Bash persistente'));
+        } else if (useToolsOrchestrator && this.aiModel.supportsTools && this.aiModel.supportsTools()) {
+            // Usar novo orquestrador com Tools nativas
+            this.commandOrchestrator = new AICommandOrchestratorWithTools(
+                this.aiModel,
+                commandExecutor,
+                {
+                    maxIterations: modelConfig.ai_orchestration?.max_iterations || 10,
+                    maxExecutionTime: modelConfig.ai_orchestration?.max_execution_time || 60000,
+                    verboseLogging: modelConfig.ai_orchestration?.verbose_logging || false
+                }
+            );
+            console.log(chalk.green('✓ Usando orquestrador com Tools nativas do Claude'));
+        } else {
+            // Usar orquestrador tradicional
+            this.commandOrchestrator = new AICommandOrchestrator(
+                this.aiModel,
+                commandExecutor,  // Passa apenas o executor, não toda a instância
+                {
+                    maxIterations: modelConfig.ai_orchestration?.max_iterations || 5,
+                    maxExecutionTime: modelConfig.ai_orchestration?.max_execution_time || 30000,
+                    enableCache: modelConfig.ai_orchestration?.enable_cache !== false,
+                    verboseLogging: modelConfig.ai_orchestration?.verbose_logging || false,
+                    cacheDurationHours: modelConfig.cache_duration_hours || 1
+                }
+            );
+        }
 
         // Inicializar histórico persistente
         this.persistentHistory = new PersistentHistory({

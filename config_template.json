@@ -7,6 +7,19 @@
   "claude_model": "claude-3-7-sonnet-20250219",
   "openai_model": "gpt-4o",
   "gemini_model": "gemini-pro",
+  "use_native_tools": true,
+  "enable_bash_tool": true,
+  "bash_config": {
+    "timeout": 30000,
+    "maxOutputSize": 100000
+  },
+  "ai_orchestration": {
+    "enabled": true,
+    "max_iterations": 10,
+    "max_execution_time": 60000,
+    "verbose_logging": false,
+    "enable_cache": true
+  },
   "max_calls_per_hour": 100,
   "enable_monitoring": true,
   "enable_assistant": true,

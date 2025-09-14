@@ -29,7 +29,9 @@
       "Read(//private/var/logs/**)",
       "WebSearch",
       "Bash(pkill:*)",
-      "mcp__zen__analyze"
+      "mcp__zen__analyze",
+      "Read(//Users/fabiotheodoro/.mcp-terminal/**)",
+      "Bash(awk:*)"
     ],
     "deny": [],
     "ask": []

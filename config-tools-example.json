@@ -1,0 +1,17 @@
+{
+  "anthropic_api_key": "YOUR_API_KEY_HERE",
+  "claude_model": "claude-3-5-sonnet-20241022",
+  "use_native_tools": true,
+  "ai_orchestration": {
+    "enabled": true,
+    "max_iterations": 10,
+    "max_execution_time": 60000,
+    "verbose_logging": false
+  },
+  "monitoring": {
+    "enabled": true,
+    "capture_failed": true,
+    "capture_timeout": true
+  },
+  "command_timeout": 15000
+}

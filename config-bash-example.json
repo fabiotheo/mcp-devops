@@ -1,0 +1,34 @@
+{
+  "anthropic_api_key": "sk-ant-api03-...",
+  "use_native_tools": true,
+  "enable_bash_tool": true,
+  "bash_config": {
+    "timeout": 30000,
+    "maxOutputSize": 100000,
+    "workingDir": "/home/user",
+    "env": {
+      "CUSTOM_VAR": "value"
+    }
+  },
+  "ai_orchestration": {
+    "enabled": true,
+    "max_iterations": 10,
+    "max_execution_time": 60000,
+    "verbose_logging": false,
+    "enable_cache": true
+  },
+  "monitoring": {
+    "enabled": true
+  },
+  "rate_limiting": {
+    "enabled": true,
+    "max_calls_per_minute": 30
+  },
+  "cache_duration_hours": 1,
+  "debug": false,
+  "quiet": false,
+  "history": {
+    "max_entries": 1000,
+    "deduplicate": true
+  }
+}

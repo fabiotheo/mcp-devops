@@ -471,11 +471,11 @@ class MCPInteractive extends EventEmitter {
             // Adiciona ao contexto
             this.contextManager.addMessage('user', question);
 
-            // Inicia animação de loading
-            this.startSpinner(' Analisando sua pergunta');
-
-            // Detecta e executa comandos mencionados na pergunta
+            // Detecta e executa comandos mencionados na pergunta (SEM spinner ainda)
             const commandResults = await this.detectAndExecuteCommands(question);
+
+            // SÓ AGORA inicia animação de loading (após permissões)
+            this.startSpinner(' Processando com IA');
 
             // Obtém resposta da IA com contexto
             const context = this.contextManager.getContext();
@@ -587,6 +587,9 @@ class MCPInteractive extends EventEmitter {
                 actualCommand = `sudo ${command}`;
             }
 
+            // Para o spinner antes de pedir permissão (se estiver rodando)
+            this.stopSpinner();
+
             // Verifica se precisa pedir permissão
             const needsPermission = !this.sessionPermissions.has(actualCommand);
 
@@ -615,7 +618,7 @@ class MCPInteractive extends EventEmitter {
                 }
             }
 
-            console.log(chalk.gray(`\n📊 Executando: ${actualCommand}`));
+            console.log(chalk.cyan(`\n▶ Executando: ${actualCommand}`));
 
             const output = execSync(actualCommand, {
                 encoding: 'utf8',
@@ -623,18 +626,18 @@ class MCPInteractive extends EventEmitter {
                 maxBuffer: 1024 * 1024  // 1MB buffer
             });
 
-            console.log(chalk.green('✓ Comando executado com sucesso'));
+            console.log(chalk.green('✓ Sucesso'));
 
             // Mostra o output do comando com formatação melhorada
             if (output && output.trim()) {
                 console.log();
                 console.log(chalk.bold.cyan('📄 Resultado do comando:'));
-                console.log(chalk.bgGray.white(' ' + '-'.repeat(40) + ' '));
+                console.log(chalk.gray('─'.repeat(45)));
                 console.log(chalk.yellow(output.substring(0, 500)));
                 if (output.length > 500) {
                     console.log(chalk.gray('... (output truncado para 500 caracteres)'));
                 }
-                console.log(chalk.bgGray.white(' ' + '-'.repeat(40) + ' '));
+                console.log(chalk.gray('─'.repeat(45)));
             }
             console.log();  // Linha em branco para separação
 
@@ -725,6 +728,9 @@ class MCPInteractive extends EventEmitter {
 
     // Inicia animação de loading
     startSpinner(message = '') {
+        // Não inicia se já estiver rodando
+        if (this.spinnerInterval) return;
+
         this.spinnerIndex = 0;
         this.spinnerInterval = setInterval(() => {
             const frame = this.spinnerFrames[this.spinnerIndex];

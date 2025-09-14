@@ -522,12 +522,12 @@ class MCPInteractive extends EventEmitter {
 
         // Comandos comuns que o usuário pode querer executar
         const commonCommands = {
-            'fail2ban': ['fail2ban-client status', 'systemctl status fail2ban'],
+            'fail2ban': ['fail2ban-client status'],  // Removido systemctl status duplicado
             'firewall': ['ufw status', 'iptables -L -n'],
             'docker': ['docker ps', 'docker stats --no-stream'],
-            'sistema': ['uname -a', 'lsb_release -a', 'df -h'],
-            'rede': ['ip a', 'netstat -tlnp'],
-            'processos': ['ps aux | head -20', 'top -b -n 1 | head -20']
+            'sistema': ['uname -a', 'lsb_release -a'],
+            'rede': ['ip a'],
+            'processos': ['ps aux | head -20']
         };
 
         // Verifica se a pergunta menciona algum serviço/comando conhecido
@@ -618,7 +618,17 @@ class MCPInteractive extends EventEmitter {
                 maxBuffer: 1024 * 1024  // 1MB buffer
             });
 
-            console.log(chalk.green('✓ Comando executado com sucesso\n'));
+            console.log(chalk.green('✓ Comando executado com sucesso'));
+
+            // Mostra o output do comando
+            if (output && output.trim()) {
+                console.log(chalk.gray('\n📄 Resultado:'));
+                console.log(chalk.white(output.substring(0, 500)));
+                if (output.length > 500) {
+                    console.log(chalk.gray('... (output truncado)'));
+                }
+            }
+            console.log();  // Linha em branco para separação
 
             return {
                 command: actualCommand,
@@ -648,9 +658,16 @@ class MCPInteractive extends EventEmitter {
     // Pede permissão para executar comando
     async askCommandPermission(command) {
         const readline = await import('readline');
+
+        // Pausa temporariamente o REPL principal
+        if (this.replInterface && this.replInterface.rl) {
+            this.replInterface.rl.pause();
+        }
+
         const rl = readline.createInterface({
             input: process.stdin,
-            output: process.stdout
+            output: process.stdout,
+            terminal: false  // Evita duplicação de eco
         });
 
         return new Promise((resolve) => {
@@ -666,7 +683,13 @@ class MCPInteractive extends EventEmitter {
 
             rl.question(chalk.yellow('Escolha (y/n/a/d): '), (answer) => {
                 rl.close();
-                resolve(answer.toLowerCase());
+
+                // Retoma o REPL principal
+                if (this.replInterface && this.replInterface.rl) {
+                    this.replInterface.rl.resume();
+                }
+
+                resolve(answer.toLowerCase().charAt(0));  // Pega apenas o primeiro caractere
             });
         });
     }
@@ -704,7 +727,7 @@ class MCPInteractive extends EventEmitter {
                     enhanced += `**Erro:** ${result.error}\n`;
                 }
             }
-            enhanced += '\n### Com base nos resultados acima, forneça uma análise e recomendações.';
+            enhanced += '\n### Instruções: Com base nos resultados dos comandos executados acima, forneça primeiro uma ANÁLISE do que foi encontrado, depois explique o significado dos resultados, e por fim sugira comandos adicionais se necessário.';
         }
 
         return enhanced;

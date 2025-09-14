@@ -155,24 +155,25 @@ ${chalk.cyan('═══ Dicas ═══')}
 ${chalk.cyan('═══ Atalhos de Teclado ═══')}
 
 ${chalk.blue('Comandos Básicos:')}
-${chalk.yellow('ESC')}        - Cancela o input atual ${chalk.gray('(planejado)')}
+${chalk.yellow('ESC')}        - Cancela o input atual
 ${chalk.yellow('Ctrl+C')}     - Força saída da aplicação
 ${chalk.yellow('Ctrl+D')}     - Finaliza input multi-linha
-${chalk.yellow('Ctrl+L')}     - Limpa a tela ${chalk.gray('(planejado)')}
-${chalk.yellow('Ctrl+U')}     - Apaga toda a linha ${chalk.gray('(planejado)')}
+${chalk.yellow('Ctrl+L')}     - Limpa a tela
+${chalk.yellow('Ctrl+U')}     - Apaga toda a linha
+${chalk.yellow('Ctrl+K')}     - Apaga até o fim da linha
+${chalk.yellow('Ctrl+W')}     - Apaga palavra anterior
 
 ${chalk.blue('Navegação:')}
-${chalk.yellow('↑ / ↓')}      - Navega pelo histórico
+${chalk.yellow('↑ / ↓')}      - Navega pelo histórico ${chalk.green('(persistente)')}
 ${chalk.yellow('Ctrl+A')}     - Move para início da linha
 ${chalk.yellow('Ctrl+E')}     - Move para fim da linha
 ${chalk.yellow('Tab')}        - Auto-completa comandos
 
 ${chalk.blue('Multi-linha:')}
 ${chalk.yellow('"""')}        - Inicia/termina bloco multi-linha
-${chalk.yellow('\\')} no fim   - Continua na próxima linha ${chalk.gray('(planejado)')}
+${chalk.yellow('\\')} no fim   - Continua na próxima linha
 
-${chalk.gray('Nota: Alguns atalhos estão em desenvolvimento')}
-${chalk.gray('Veja o plano completo em docs/commands.md')}
+${chalk.gray('Use /help para mais comandos')}
 `;
         return shortcuts;
     }
@@ -467,7 +468,7 @@ class MCPInteractive extends EventEmitter {
 
         // Inicializar detector de sistema
         this.systemDetector = new SystemDetector();
-        await this.systemDetector.detect();
+        // SystemDetector já detecta no constructor, não precisa chamar detect()
 
         // Inicializar modelo de IA
         this.aiModel = await ModelFactory.createModel(modelConfig);

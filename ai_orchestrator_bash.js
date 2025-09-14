@@ -186,30 +186,7 @@ export default class AICommandOrchestratorBash {
     getBashTool() {
         return {
             type: "bash_20250124",
-            name: "bash",
-            description: `Executa comandos shell em uma sessão bash persistente. A sessão mantém estado entre comandos,
-incluindo variáveis de ambiente, diretório de trabalho e arquivos criados. Use para:
-- Executar comandos Linux/Unix
-- Criar e manipular arquivos
-- Executar scripts
-- Instalar pacotes
-- Processar dados
-- Automação de tarefas
-A ferramenta retorna stdout e stderr combinados. Para reiniciar a sessão, use restart: true.`,
-            input_schema: {
-                type: "object",
-                properties: {
-                    command: {
-                        type: "string",
-                        description: "O comando bash a ser executado. Pode incluir pipes, redirecionamentos e múltiplos comandos com && ou ;"
-                    },
-                    restart: {
-                        type: "boolean",
-                        description: "Se true, reinicia a sessão bash (limpa variáveis e volta ao diretório inicial)"
-                    }
-                },
-                required: []
-            }
+            name: "bash"
         };
     }
 
@@ -217,26 +194,32 @@ A ferramenta retorna stdout e stderr combinados. Para reiniciar a sessão, use r
     getAdditionalTools() {
         return [
             {
-                name: "list_fail2ban_jails",
-                description: "Atalho otimizado para listar jails do fail2ban. Mais rápido que usar bash para este caso específico.",
-                input_schema: {
-                    type: "object",
-                    properties: {},
-                    required: []
+                type: "function",
+                function: {
+                    name: "list_fail2ban_jails",
+                    description: "Lista todas as jails ativas do fail2ban. Retorna um array com os nomes das jails.",
+                    parameters: {
+                        type: "object",
+                        properties: {},
+                        required: []
+                    }
                 }
             },
             {
-                name: "get_jail_status",
-                description: "Atalho otimizado para status de jail do fail2ban. Retorna dados estruturados.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        jail_name: {
-                            type: "string",
-                            description: "Nome da jail"
-                        }
-                    },
-                    required: ["jail_name"]
+                type: "function",
+                function: {
+                    name: "get_jail_status",
+                    description: "Obtém o status detalhado de uma jail específica do fail2ban, incluindo IPs banidos.",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            jail_name: {
+                                type: "string",
+                                description: "Nome da jail a consultar"
+                            }
+                        },
+                        required: ["jail_name"]
+                    }
                 }
             }
         ];

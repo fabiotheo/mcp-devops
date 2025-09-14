@@ -9,6 +9,7 @@ import os from 'os';
 import chalk from 'chalk';
 import ModelFactory from './ai_models/model_factory.js';
 import SystemDetector from './system_detector.js';
+import AICommandOrchestrator from './ai_orchestrator.js';
 
 class ContextManager {
     constructor(maxTokens = 100000) {
@@ -101,6 +102,7 @@ class CommandProcessor {
             '/model': this.changeModel.bind(this),
             '/exec': this.executeCommand.bind(this),
             '/history': this.showHistory.bind(this),
+            '/version': this.showVersion.bind(this),
             '/exit': this.exit.bind(this),
             '/quit': this.exit.bind(this)
         };
@@ -129,6 +131,7 @@ ${chalk.yellow('/load')} [nome] - Carrega uma sessão salva
 ${chalk.yellow('/model')}    - Mostra/altera o modelo de IA
 ${chalk.yellow('/exec')}     - Executa o último comando sugerido
 ${chalk.yellow('/history')}  - Mostra histórico da sessão
+${chalk.yellow('/version')}  - Mostra informações da versão
 ${chalk.yellow('/exit')}     - Sai do modo interativo
 
 ${chalk.cyan('═══ Dicas ═══')}
@@ -136,6 +139,7 @@ ${chalk.cyan('═══ Dicas ═══')}
 • Digite ${chalk.green('"""')} para entrada multi-linha
 • Use ${chalk.green('Tab')} para auto-completar comandos
 • Sessões são salvas automaticamente a cada 5 minutos
+• AI Orchestration está ${chalk.green('ativado')} para perguntas complexas
 `;
         return help;
     }
@@ -198,6 +202,25 @@ ${chalk.cyan('═══ Dicas ═══')}
             output += `${roleColor(`[${msg.time}] ${msg.role}:`)} ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}\n`;
         }
         return output;
+    }
+
+    async showVersion() {
+        const version = this.mcp.version || '1.0.22';
+        const systemInfo = this.mcp.systemDetector?.getSystemInfo() || {};
+        const providerInfo = this.mcp.aiModel?.getProviderInfo() || {};
+
+        const versionInfo = `
+${chalk.cyan('═══ Informações da Versão ═══')}
+
+${chalk.blue('▶ MCP Terminal:')} v${version}
+${chalk.blue('▶ Sistema:')} ${systemInfo.os || 'Unknown'} ${systemInfo.distro || ''}
+${chalk.blue('▶ IA Model:')} ${providerInfo.model || 'Not configured'}
+${chalk.blue('▶ AI Orchestration:')} ${chalk.green('Enabled')}
+${chalk.blue('▶ Node.js:')} ${process.version}
+
+${chalk.gray('© 2024 IPCOM - AI Tool for Linux')}
+`;
+        return versionInfo;
     }
 
     async exit() {
@@ -371,6 +394,15 @@ class MCPInteractive extends EventEmitter {
     }
 
     async initialize() {
+        // Carregar versão do package.json
+        try {
+            const packagePath = path.join(path.dirname(new URL(import.meta.url).pathname), 'package.json');
+            const packageJson = JSON.parse(await fs.readFile(packagePath, 'utf8'));
+            this.version = packageJson.version;
+        } catch (error) {
+            this.version = '1.0.22'; // Fallback
+        }
+
         // Carregar configuração
         const configPath = path.join(os.homedir(), '.mcp-terminal', 'config.json');
         let modelConfig = {};
@@ -383,9 +415,31 @@ class MCPInteractive extends EventEmitter {
             }
         }
 
+        // Inicializar detector de sistema
+        this.systemDetector = new SystemDetector();
+        await this.systemDetector.detect();
+
         // Inicializar modelo de IA
         this.aiModel = await ModelFactory.createModel(modelConfig);
         await this.aiModel.initialize();
+
+        // Criar executor de comandos desacoplado
+        const commandExecutor = {
+            executeCommand: this.executeCommand.bind(this)
+        };
+
+        // Inicializar orquestrador de comandos
+        this.commandOrchestrator = new AICommandOrchestrator(
+            this.aiModel,
+            commandExecutor,  // Passa apenas o executor, não toda a instância
+            {
+                maxIterations: modelConfig.ai_orchestration?.max_iterations || 5,
+                maxExecutionTime: modelConfig.ai_orchestration?.max_execution_time || 30000,
+                enableCache: modelConfig.ai_orchestration?.enable_cache !== false,
+                verboseLogging: modelConfig.ai_orchestration?.verbose_logging || false,
+                cacheDurationHours: modelConfig.cache_duration_hours || 1
+            }
+        );
 
         // Inicializar interface REPL
         this.replInterface.initialize();
@@ -423,22 +477,40 @@ class MCPInteractive extends EventEmitter {
 
     showWelcome() {
         console.clear();
-        console.log(chalk.cyan('╔════════════════════════════════════════════╗'));
-        console.log(chalk.cyan('║') + chalk.white('     MCP Terminal Assistant v1.0.8          ') + chalk.cyan('║'));
-        console.log(chalk.cyan('║') + chalk.yellow('         Modo Interativo Ativado            ') + chalk.cyan('║'));
-        console.log(chalk.cyan('╚════════════════════════════════════════════╝'));
+
+        // ASCII Art do IPCOM
+        console.log(chalk.cyan(`  ___ ____   ____ ___  __  __
+ |_ _|  _ \\ / ___/ _ \\|  \\/  |
+  | || |_) | |  | | | | |\\/| |
+  | ||  __/| |__| |_| | |  | |
+ |___|_|  __\\____\\___/|_|  |_|  _    __              _     _
+    / \\  |_ _| |_   _|__   ___ | |  / _| ___  _ __  | |   (_)_ __  _   ___  __
+   / _ \\  | |    | |/ _ \\ / _ \\| | | |_ / _ \\| '__| | |   | | '_ \\| | | \\ \\/ /
+  / ___ \\ | |    | | (_) | (_) | | |  _| (_) | |    | |___| | | | | |_| |>  <
+ /_/   \\_\\___|   |_|\\___/ \\___/|_| |_|  \\___/|_|    |_____|_|_| |_|\\__,_/_/\\_\\
+`));
+
+        console.log(chalk.cyan('═'.repeat(80)));
+        console.log(chalk.white.bold(`                    MCP Terminal Assistant v${this.version || '1.0.22'}`));
+        console.log(chalk.yellow('                        Modo Interativo Ativado'));
+        console.log(chalk.cyan('═'.repeat(80)));
         console.log();
 
         // Informações do sistema
         const systemInfo = this.systemDetector.getSystemInfo();
-        console.log(chalk.gray('Sistema:'), `${systemInfo.os} ${systemInfo.distro || ''}`);
+        console.log(chalk.blue('▶ Sistema:'), chalk.white(`${systemInfo.os} ${systemInfo.distro || ''}`));
 
         // Informações do modelo
         const providerInfo = this.aiModel.getProviderInfo();
-        console.log(chalk.gray('Modelo:'), providerInfo.model);
-        console.log();
+        console.log(chalk.blue('▶ IA Model:'), chalk.white(providerInfo.model));
 
-        console.log(chalk.gray('Digite /help para comandos, /exit para sair'));
+        // Informações de contexto
+        console.log(chalk.blue('▶ Contexto:'), chalk.white('AI Orchestration Enabled'));
+
+        console.log();
+        console.log(chalk.cyan('─'.repeat(80)));
+        console.log(chalk.gray('💡 Digite'), chalk.cyan('/help'), chalk.gray('para comandos |'), chalk.cyan('/exit'), chalk.gray('para sair'));
+        console.log(chalk.cyan('─'.repeat(80)));
         console.log();
     }
 
@@ -472,47 +544,119 @@ class MCPInteractive extends EventEmitter {
             // Adiciona ao contexto
             this.contextManager.addMessage('user', question);
 
-            // Detecta e executa comandos mencionados na pergunta (SEM spinner ainda)
-            const commandResults = await this.detectAndExecuteCommands(question);
+            // Verifica se deve usar orquestração inteligente
+            const shouldOrchestrate = this.shouldUseOrchestration(question);
 
-            // SÓ AGORA inicia animação de loading (após permissões)
-            this.startSpinner(' Processando com IA');
+            if (shouldOrchestrate && this.config.ai_orchestration?.enabled !== false) {
+                // Usa orquestração inteligente para perguntas complexas
+                console.log(chalk.gray('\n🤖 Iniciando análise inteligente...'));
 
-            // Obtém resposta da IA com contexto
-            const context = this.contextManager.getContext();
-            const systemInfo = this.systemDetector.getSystemInfo();
+                const systemInfo = this.systemDetector.getSystemInfo();
+                const systemContext = {
+                    ...systemInfo,
+                    packageManager: systemInfo.packageManager || 'apt',
+                    capabilities: this.systemDetector.getSystemCapabilities() || [],
+                    commands: this.systemDetector.getSystemCommands() || {}
+                };
 
-            // Preparar contexto para o modelo - incluindo resultados dos comandos
-            const enhancedQuestion = this.prepareQuestionWithCommandResults(question, context, systemInfo, commandResults);
+                // Executa orquestração
+                const result = await this.commandOrchestrator.orchestrateExecution(question, systemContext);
 
-            // Criar contexto completo compatível com askCommand
-            const systemContext = {
-                ...systemInfo,
-                currentDir: process.cwd(),
-                dirInfo: '',
-                formattedPackages: '',
-                webSearchResults: null,  // Importante: definir como null ao invés de undefined
-                capabilities: this.systemDetector.getSystemCapabilities() || [],  // Adicionar capabilities
-                commands: this.systemDetector.getSystemCommands() || {},  // Adicionar commands também
-                commandResults: commandResults  // Adicionar resultados dos comandos executados
-            };
+                if (result.success && result.finalAnswer) {
+                    // Adiciona resposta ao contexto
+                    this.contextManager.addMessage('assistant', result.finalAnswer);
 
-            // Obter resposta - passar contexto completo
-            const response = await this.aiModel.askCommand(enhancedQuestion, systemContext);
+                    // Exibir resposta formatada
+                    console.log();
+                    console.log(chalk.bold.green('📌 Resposta:'));
+                    console.log(chalk.white(result.finalAnswer));
+                    console.log();
 
-            // Para animação de loading
-            this.stopSpinner();
-
-            // Adiciona resposta ao contexto
-            this.contextManager.addMessage('assistant', response);
-
-            // Exibir resposta formatada
-            this.displayFormattedResponse(response);
+                    // Mostra resumo da execução
+                    if (result.metadata) {
+                        console.log(chalk.gray(`✓ ${result.metadata.totalCommands} comandos executados`));
+                        console.log(chalk.gray(`⏱ Tempo: ${(result.duration / 1000).toFixed(1)}s`));
+                        if (result.metadata.cacheHits > 0) {
+                            console.log(chalk.gray(`📦 ${result.metadata.cacheHits} resultados do cache`));
+                        }
+                    }
+                } else {
+                    // Fallback para método tradicional se não encontrou resposta
+                    await this.handleQuestionTraditional(question);
+                }
+            } else {
+                // Usa método tradicional para perguntas simples
+                await this.handleQuestionTraditional(question);
+            }
 
         } catch (error) {
             this.stopSpinner();
             console.error(chalk.red(`\n✗ Erro: ${error.message}\n`));
         }
+    }
+
+    // Decide se deve usar orquestração baseado na pergunta
+    shouldUseOrchestration(question) {
+        const q = question.toLowerCase();
+
+        // Padrões que indicam necessidade de múltiplos comandos
+        const patterns = [
+            /quant[oa]s?\s+\w+/,  // quantos IPs, quantas regras
+            /list[ea]r?\s+(?:todos?|todas?)/,  // listar todos
+            /mostrar?\s+(?:todos?|todas?|detalhes?)/,  // mostrar detalhes
+            /status\s+(?:completo|detalhado)/,  // status completo
+            /informações?\s+(?:completas?|detalhadas?)/,  // informações completas
+            /analis[ea]r?\s+/,  // analisar logs
+            /verificar?\s+/,  // verificar sistema
+            /diagnóstico/,  // diagnóstico
+            /relatório/,  // relatório
+            /fail2ban.*(?:bloqueado|banido|jail)/,  // fail2ban específico
+            /docker.*(?:containers?|imagens?|volumes?)/,  // docker específico
+            /systemd?.*service/,  // serviços systemd
+            /logs?.*(?:erro|warning|critical)/  // análise de logs
+        ];
+
+        return patterns.some(pattern => pattern.test(q));
+    }
+
+    // Método tradicional (mantido para perguntas simples)
+    async handleQuestionTraditional(question) {
+        // Detecta e executa comandos mencionados na pergunta (SEM spinner ainda)
+        const commandResults = await this.detectAndExecuteCommands(question);
+
+        // SÓ AGORA inicia animação de loading (após permissões)
+        this.startSpinner(' Processando com IA');
+
+        // Obtém resposta da IA com contexto
+        const context = this.contextManager.getContext();
+        const systemInfo = this.systemDetector.getSystemInfo();
+
+        // Preparar contexto para o modelo - incluindo resultados dos comandos
+        const enhancedQuestion = this.prepareQuestionWithCommandResults(question, context, systemInfo, commandResults);
+
+        // Criar contexto completo compatível com askCommand
+        const systemContext = {
+            ...systemInfo,
+            currentDir: process.cwd(),
+            dirInfo: '',
+            formattedPackages: '',
+            webSearchResults: null,
+            capabilities: this.systemDetector.getSystemCapabilities() || [],
+            commands: this.systemDetector.getSystemCommands() || {},
+            commandResults: commandResults
+        };
+
+        // Obter resposta - passar contexto completo
+        const response = await this.aiModel.askCommand(enhancedQuestion, systemContext);
+
+        // Para animação de loading
+        this.stopSpinner();
+
+        // Adiciona resposta ao contexto
+        this.contextManager.addMessage('assistant', response);
+
+        // Exibir resposta formatada
+        this.displayFormattedResponse(response);
     }
 
     // Detecta comandos na pergunta e os executa
@@ -626,12 +770,29 @@ class MCPInteractive extends EventEmitter {
                 // Pega timeout da configuração ou usa padrão de 15 segundos
                 const commandTimeout = this.config.command_timeout || 15000;
 
-                // Executa comando via shell para suportar pipes e redirecionamentos
-                const child = spawn(actualCommand, [], {
-                    shell: true,  // Necessário para comandos com pipes
-                    encoding: 'utf8',
-                    timeout: commandTimeout
-                });
+                // Para comandos com pipes, precisamos usar shell de forma segura
+                // Verifica se é um comando que precisa de shell
+                const needsShell = actualCommand.includes('|') || actualCommand.includes('>') || actualCommand.includes('<');
+
+                let child;
+                if (needsShell) {
+                    // Para comandos com pipes, usa sh -c com comando como argumento único
+                    // Isso é mais seguro que shell: true
+                    child = spawn('sh', ['-c', actualCommand], {
+                        encoding: 'utf8',
+                        timeout: commandTimeout
+                    });
+                } else {
+                    // Para comandos simples, separa comando e argumentos (mais seguro)
+                    const parts = actualCommand.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+                    const command = parts[0];
+                    const args = parts.slice(1).map(arg => arg.replace(/^"(.*)"$/, '$1'));
+
+                    child = spawn(command, args, {
+                        encoding: 'utf8',
+                        timeout: commandTimeout
+                    });
+                }
 
                 let stdout = '';
                 let stderr = '';

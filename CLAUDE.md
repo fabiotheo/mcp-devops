@@ -8,6 +8,13 @@ MCP Terminal Assistant is a command-line tool for Linux/Unix systems that provid
 
 ## Architecture
 
+### Iterative Refinement System (NEW - 2025)
+- **AI Orchestrator**: Enhanced `ai_orchestrator.js` with iterative command execution loop
+- **Pattern Matcher**: `libs/pattern_matcher.js` recognizes common command patterns (fail2ban, docker, disk usage)
+- **Progressive Execution**: System continues executing commands until it has complete answer
+- **Data Extraction**: Extracts real data from command outputs instead of generic responses
+- **Goal Tracking**: Maintains context of what information is needed to answer the question
+
 ### AI Model System
 - **Model Factory Pattern**: `ai_models/model_factory.js` creates appropriate AI model instances based on configuration
 - **Base Model Interface**: `ai_models/base_model.js` defines the contract for all AI providers
@@ -22,6 +29,8 @@ MCP Terminal Assistant is a command-line tool for Linux/Unix systems that provid
 5. **AI Analysis**: Complex errors are analyzed by selected AI provider with enhanced context
 
 ### Core Components
+- **Command Orchestrator** (`ai_orchestrator.js`): Orchestrates iterative command execution with goal tracking
+- **Pattern Matcher** (`libs/pattern_matcher.js`): Detects common patterns and executes predefined command sequences
 - **Command Monitoring** (`mcp-client.js`): Captures and analyzes failed terminal commands
 - **Assistant Interface** (`mcp-assistant.js`): Handles natural language queries about Linux commands
 - **Web Search** (`web_search/`): Enhances responses with real-time information from the internet
@@ -35,6 +44,9 @@ MCP Terminal Assistant is a command-line tool for Linux/Unix systems that provid
 ```bash
 # Test the assistant with a query
 node mcp-assistant.js "query"
+
+# Test iterative refinement system
+node test-simple.js
 
 # Test with system information display
 node mcp-assistant.js --system-info
@@ -98,6 +110,36 @@ Each pattern includes:
 - `fix`: Suggested command to resolve the issue
 - `confidence`: Confidence level (0.0-1.0)
 
+## Recent Improvements (Iterative Refinement - January 2025)
+
+### Problem Solved
+The system previously would execute only the first command and stop, providing incomplete answers. For example, when asked "How many IPs are blocked in fail2ban?", it would only run `fail2ban-client status` and not check individual jails.
+
+### Solution Implemented
+1. **Iterative Execution Loop**: System now continues executing commands until it has complete information
+2. **Pattern Recognition**: Common patterns (fail2ban, docker, disk usage) are recognized and handled automatically
+3. **Real Data Extraction**: System extracts actual data from command outputs instead of providing generic explanations
+4. **Progress Evaluation**: After each command, system evaluates if more information is needed
+
+### Key Files Modified/Added
+- `ai_orchestrator.js`: Added iterative loop, progress evaluation, and data extraction
+- `libs/pattern_matcher.js`: New file for pattern recognition and command sequencing
+- `docs/repairFlux.md`: Detailed plan for the improvement implementation
+
+### Example Flow
+```
+Question: "How many IPs are blocked in fail2ban?"
+1. Execute: fail2ban-client status
+   → Extract: jail list (sshd, apache, nginx)
+2. Execute: fail2ban-client status sshd
+   → Extract: 3 blocked IPs
+3. Execute: fail2ban-client status apache
+   → Extract: 2 blocked IPs
+4. Execute: fail2ban-client status nginx
+   → Extract: 1 blocked IP
+Answer: "6 IPs are blocked: 3 in sshd, 2 in apache, 1 in nginx"
+```
+
 ## Development Guidelines
 
 ### Adding New Files to Installation
@@ -123,6 +165,8 @@ try {
 
 3. **Remember**: The system runs on both Mac (development) and Linux (production), so files must be properly copied during installation.
 
+**Note**: The `libs/` directory is already configured in `setup.js` to be automatically copied during installation (lines 855-880).
+
 ### Adding New AI Providers
 1. Create new provider class extending `BaseAIModel` in `ai_models/`
 2. Implement required methods: `initialize()`, `analyzeCommand()`, `askCommand()`
@@ -141,3 +185,21 @@ try {
 - Priority sources can be configured (man pages, official docs, GitHub issues, Stack Overflow)
 - Rate limiting prevents API abuse
 - Firecrawl integration allows content extraction from websites in markdown format
+
+### Adding Pattern Recognition
+To add new command patterns, edit `libs/pattern_matcher.js`:
+1. Add pattern to the `loadPatterns()` method
+2. Define matcher regex, command sequence, and data extraction logic
+3. Each pattern should include:
+   - `matcher`: Regex to match user questions
+   - `sequence`: Array of command steps to execute
+   - `parseOutput`: Function to extract data from command output
+   - `aggregator`: Function to combine data from multiple commands
+4. Test with `node test-simple.js`
+
+### Pattern Matcher Capabilities
+The Pattern Matcher (`libs/pattern_matcher.js`) supports:
+- **Dynamic Commands**: Commands can be functions that generate based on previous results
+- **Data Extraction**: Each step can extract and store data for use in later steps
+- **Aggregation**: Combine results from multiple commands into a final answer
+- **Built-in Patterns**: fail2ban, disk usage, docker, network, systemd, logs, processes

@@ -133,22 +133,56 @@ Retorne APENAS um objeto JSON com a lista de comandos iniciais.
     }
 
     async isTaskComplete(context) {
+        // Quick check if we have jail data for all discovered jails
+        const hasAllJailData = context.workingMemory.discovered.lists.length > 0 &&
+            context.workingMemory.dataExtracted.jails &&
+            Object.keys(context.workingMemory.dataExtracted.jails).length === context.workingMemory.discovered.lists.length;
+
         const prompt = `Memória de Trabalho:
 ${JSON.stringify(context.workingMemory, null, 2)}
 
 Pergunta Original: ${context.originalQuestion}
 
 A pergunta foi COMPLETAMENTE respondida com os dados na memória?
-Responda APENAS: {"isComplete": true} ou {"isComplete": false, "reasoning": "o que falta"}`;
+IMPORTANTE: Responda APENAS com JSON puro, sem texto adicional.
+Formato: {"isComplete": true} ou {"isComplete": false, "reasoning": "o que falta"}`;
 
         try {
             const response = await this.ai.askCommand(prompt, context.systemContext);
             if (!response) throw new Error('IA não retornou resposta para isTaskComplete');
-            const jsonStr = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/)?.[1] || response;
+
+            // Try to extract JSON from the response
+            let jsonStr = response;
+
+            // Remove code blocks if present
+            const codeBlockMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+            if (codeBlockMatch) {
+                jsonStr = codeBlockMatch[1];
+            }
+
+            // Try to find JSON object in the text
+            const jsonMatch = jsonStr.match(/\{[^}]*"isComplete"[^}]*\}/);
+            if (jsonMatch) {
+                jsonStr = jsonMatch[0];
+            }
+
+            // Clean up common issues
+            jsonStr = jsonStr.trim();
+            if (jsonStr.startsWith('bash') || jsonStr.startsWith('sudo')) {
+                // AI returned a command instead of JSON, force incomplete
+                return { isComplete: false, reasoning: 'Ainda há comandos a executar' };
+            }
+
             return JSON.parse(jsonStr);
         } catch (error) {
             console.error(chalk.red('❌ Erro ao avaliar completude da tarefa:'), error.message);
-            return { isComplete: false, reasoning: 'Erro na avaliação.' };
+
+            // If we have all jail data, consider it complete
+            if (hasAllJailData) {
+                return { isComplete: true };
+            }
+
+            return { isComplete: false, reasoning: 'Erro na avaliação, continuando...' };
         }
     }
 
@@ -163,7 +197,14 @@ VOCÊ DEVE EXECUTAR UM COMANDO PARA CADA ITEM DESTA LISTA.`;
             // For fail2ban specifically
             if (context.originalQuestion.toLowerCase().includes('fail2ban') ||
                 context.originalQuestion.toLowerCase().includes('bloqueado')) {
-                iterationHint += `\nPara fail2ban, execute: ${lists.map(jail => `fail2ban-client status ${jail}`).join(', ')}`;
+                // Check which jails we already have data for
+                const jailsWithData = context.workingMemory.dataExtracted.jails ?
+                    Object.keys(context.workingMemory.dataExtracted.jails) : [];
+                const jailsNeedingData = lists.filter(jail => !jailsWithData.includes(jail));
+
+                if (jailsNeedingData.length > 0) {
+                    iterationHint += `\nPara fail2ban, execute comandos para as jails FALTANTES: ${jailsNeedingData.map(jail => `sudo fail2ban-client status ${jail}`).join(', ')}`;
+                }
             }
         }
 
@@ -189,7 +230,22 @@ Responda APENAS com JSON:
         try {
             const response = await this.ai.askCommand(prompt, context.systemContext);
             if (!response) throw new Error('IA não retornou resposta para planNextCommands');
-            const jsonStr = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/)?.[1] || response;
+
+            // Try to extract JSON from the response
+            let jsonStr = response;
+
+            // Remove code blocks if present
+            const codeBlockMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+            if (codeBlockMatch) {
+                jsonStr = codeBlockMatch[1];
+            }
+
+            // Try to find JSON object with commands
+            const jsonMatch = jsonStr.match(/\{[^}]*"commands"[^}]*\}/s);
+            if (jsonMatch) {
+                jsonStr = jsonMatch[0];
+            }
+
             const result = JSON.parse(jsonStr);
 
             // Update working memory if provided

@@ -362,6 +362,11 @@ class MCPInteractive extends EventEmitter {
         this.systemDetector = new SystemDetector();
         this.sessionName = config.session || `session-${Date.now()}`;
         this.sessionPermissions = new Set();  // Armazena comandos já aprovados na sessão
+        this.spinnerInterval = null;
+        // Spinner animado com braille patterns para efeito suave
+        this.spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+        // Alternativa: ['◐', '◓', '◑', '◒'] ou ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘']
+        this.spinnerIndex = 0;
     }
 
     async initialize() {
@@ -466,8 +471,8 @@ class MCPInteractive extends EventEmitter {
             // Adiciona ao contexto
             this.contextManager.addMessage('user', question);
 
-            // Mostra indicador de processamento
-            process.stdout.write(chalk.gray('Analisando...'));
+            // Inicia animação de loading
+            this.startSpinner(' Analisando sua pergunta');
 
             // Detecta e executa comandos mencionados na pergunta
             const commandResults = await this.detectAndExecuteCommands(question);
@@ -494,18 +499,18 @@ class MCPInteractive extends EventEmitter {
             // Obter resposta - passar contexto completo
             const response = await this.aiModel.askCommand(enhancedQuestion, systemContext);
 
-            // Limpar indicador
-            process.stdout.write('\r' + ' '.repeat(20) + '\r');
+            // Para animação de loading
+            this.stopSpinner();
 
             // Adiciona resposta ao contexto
             this.contextManager.addMessage('assistant', response);
 
-            // Exibir resposta
-            console.log('\n' + response + '\n');
+            // Exibir resposta formatada
+            this.displayFormattedResponse(response);
 
         } catch (error) {
-            process.stdout.write('\r' + ' '.repeat(20) + '\r');
-            console.error(chalk.red(`\nErro: ${error.message}\n`));
+            this.stopSpinner();
+            console.error(chalk.red(`\n✗ Erro: ${error.message}\n`));
         }
     }
 
@@ -620,13 +625,16 @@ class MCPInteractive extends EventEmitter {
 
             console.log(chalk.green('✓ Comando executado com sucesso'));
 
-            // Mostra o output do comando
+            // Mostra o output do comando com formatação melhorada
             if (output && output.trim()) {
-                console.log(chalk.gray('\n📄 Resultado:'));
-                console.log(chalk.white(output.substring(0, 500)));
+                console.log();
+                console.log(chalk.bold.cyan('📄 Resultado do comando:'));
+                console.log(chalk.bgGray.white(' ' + '-'.repeat(40) + ' '));
+                console.log(chalk.yellow(output.substring(0, 500)));
                 if (output.length > 500) {
-                    console.log(chalk.gray('... (output truncado)'));
+                    console.log(chalk.gray('... (output truncado para 500 caracteres)'));
                 }
+                console.log(chalk.bgGray.white(' ' + '-'.repeat(40) + ' '));
             }
             console.log();  // Linha em branco para separação
 
@@ -671,14 +679,18 @@ class MCPInteractive extends EventEmitter {
         });
 
         return new Promise((resolve) => {
-            console.log(chalk.yellow(`\n🔐 Permissão necessária para executar:`));
-            console.log(chalk.cyan(`   ${command}`));
             console.log();
-            console.log(chalk.gray('Opções:'));
-            console.log(chalk.gray('  [Y] Sim, executar uma vez'));
-            console.log(chalk.gray('  [N] Não executar'));
-            console.log(chalk.gray('  [A] Sempre executar ESTE comando nesta sessão'));
-            console.log(chalk.gray('  [D] Digitar outro comando'));
+            console.log(chalk.bgYellow.black(' 🔐 PERMISSÃO NECESSÁRIA '));
+            console.log(chalk.yellow('━'.repeat(45)));
+            console.log(chalk.cyan('Comando solicitado:'));
+            console.log(chalk.bold.white(`  ${command}`));
+            console.log(chalk.yellow('━'.repeat(45)));
+            console.log();
+            console.log(chalk.white('Escolha uma opção:'));
+            console.log(chalk.green('  [Y]') + chalk.gray(' Executar uma vez'));
+            console.log(chalk.red('  [N]') + chalk.gray(' Cancelar'));
+            console.log(chalk.blue('  [A]') + chalk.gray(' Sempre permitir este comando'));
+            console.log(chalk.magenta('  [D]') + chalk.gray(' Digitar outro comando'));
             console.log();
 
             rl.question(chalk.yellow('Escolha (y/n/a/d): '), (answer) => {
@@ -709,6 +721,107 @@ class MCPInteractive extends EventEmitter {
                 resolve(command.trim() || null);
             });
         });
+    }
+
+    // Inicia animação de loading
+    startSpinner(message = '') {
+        this.spinnerIndex = 0;
+        this.spinnerInterval = setInterval(() => {
+            const frame = this.spinnerFrames[this.spinnerIndex];
+            const text = chalk.cyan(frame) + chalk.gray(message);
+            process.stdout.write(`\r${text}`);
+            this.spinnerIndex = (this.spinnerIndex + 1) % this.spinnerFrames.length;
+        }, 80);
+    }
+
+    // Para animação de loading
+    stopSpinner() {
+        if (this.spinnerInterval) {
+            clearInterval(this.spinnerInterval);
+            this.spinnerInterval = null;
+            process.stdout.write('\r' + ' '.repeat(50) + '\r');
+        }
+    }
+
+    // Formata e exibe resposta com cores
+    displayFormattedResponse(response) {
+        console.log();  // Nova linha após limpar o spinner
+
+        // Divide a resposta em linhas para processar
+        const lines = response.split('\n');
+        let inCodeBlock = false;
+        let codeBlockContent = [];
+
+        for (const line of lines) {
+            // Detecta blocos de código
+            if (line.startsWith('```')) {
+                if (inCodeBlock) {
+                    // Fim do bloco de código
+                    console.log(chalk.gray('```'));
+                    console.log(chalk.green(codeBlockContent.join('\n')));
+                    console.log(chalk.gray('```'));
+                    codeBlockContent = [];
+                    inCodeBlock = false;
+                } else {
+                    // Início do bloco de código
+                    inCodeBlock = true;
+                }
+                continue;
+            }
+
+            if (inCodeBlock) {
+                codeBlockContent.push(line);
+                continue;
+            }
+
+            // Aplica cores baseado no conteúdo
+            if (line.startsWith('## ')) {
+                // Títulos principais - ANÁLISE, SIGNIFICADO, etc
+                console.log();
+                console.log(chalk.bold.cyan(line));
+                console.log(chalk.gray('─'.repeat(40)));
+            } else if (line.startsWith('### ')) {
+                // Subtítulos
+                console.log();
+                console.log(chalk.bold.yellow(line.replace('### ', '▶ ')));
+            } else if (line.startsWith('🔧') || line.includes('COMANDO')) {
+                // Comandos
+                console.log(chalk.bold.green(line));
+            } else if (line.startsWith('📝') || line.includes('EXPLICAÇÃO')) {
+                // Explicações
+                console.log(chalk.blue(line));
+            } else if (line.startsWith('💡') || line.includes('OPÇÕES')) {
+                // Opções/Dicas
+                console.log(chalk.magenta(line));
+            } else if (line.startsWith('⚠️') || line.includes('OBSERVAÇÕES')) {
+                // Avisos/Observações
+                console.log(chalk.yellow(line));
+            } else if (line.startsWith('🌐') || line.includes('FONTES')) {
+                // Fontes
+                console.log(chalk.gray(line));
+            } else if (line.startsWith('**') && line.endsWith('**')) {
+                // Texto em negrito
+                const text = line.replace(/\*\*/g, '');
+                console.log(chalk.bold.white(text));
+            } else if (line.startsWith('- ') || line.startsWith('* ')) {
+                // Listas
+                console.log(chalk.white('  •' + line.substring(1)));
+            } else if (line.includes('`') && !line.includes('```')) {
+                // Inline code
+                const formatted = line.replace(/`([^`]+)`/g, (match, code) => {
+                    return chalk.green.bold(code);
+                });
+                console.log(formatted);
+            } else if (line.trim() === '') {
+                // Linha vazia
+                console.log();
+            } else {
+                // Texto normal
+                console.log(chalk.white(line));
+            }
+        }
+
+        console.log();  // Linha extra no final
     }
 
     // Prepara a pergunta com os resultados dos comandos

@@ -797,6 +797,7 @@ class MCPInteractive extends EventEmitter {
         // Padrões que indicam necessidade de múltiplos comandos
         const patterns = [
             /quant[oa]s?\s+\w+/,  // quantos IPs, quantas regras
+            /quais?\s+(?:os?\s+)?(?:ips?|endereços?)/,  // quais IPs, quais os IPs
             /list[ea]r?\s+(?:todos?|todas?)/,  // listar todos
             /mostrar?\s+(?:todos?|todas?|detalhes?)/,  // mostrar detalhes
             /status\s+(?:completo|detalhado)/,  // status completo
@@ -805,7 +806,8 @@ class MCPInteractive extends EventEmitter {
             /verificar?\s+/,  // verificar sistema
             /diagnóstico/,  // diagnóstico
             /relatório/,  // relatório
-            /fail2ban.*(?:bloqueado|banido|jail)/,  // fail2ban específico
+            /fail2ban/i,  // QUALQUER menção a fail2ban - sempre usar orquestração
+            /bloqueado|banido/,  // IPs bloqueados/banidos
             /docker.*(?:containers?|imagens?|volumes?)/,  // docker específico
             /systemd?.*service/,  // serviços systemd
             /logs?.*(?:erro|warning|critical)/  // análise de logs

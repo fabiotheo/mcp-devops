@@ -369,6 +369,20 @@ class REPLInterface extends EventEmitter {
             }
         });
 
+        // Detecta quando o usuário digita "/" para mostrar comandos
+        let lastInput = '';
+        this.rl.on('keypress', (char, key) => {
+            if (char === '/' && this.rl.line === '/') {
+                // Se digitou apenas "/", mostra automaticamente as opções
+                setImmediate(() => {
+                    if (this.rl.line === '/') {
+                        // Simula TAB para mostrar completions
+                        this.rl.write(null, { name: 'tab' });
+                    }
+                });
+            }
+        });
+
 
         this.rl.on('line', (line) => {
             const result = this.multilineInput.processInput(line);
@@ -399,12 +413,54 @@ class REPLInterface extends EventEmitter {
         });
     }
 
-    autoComplete(line) {
-        const completions = [
-            '/help', '/shortcuts', '/clear', '/reset', '/save', '/load',
-            '/model', '/exec', '/history', '/exit', '/quit'
-        ];
+    autoComplete(line, callback) {
+        const commands = {
+            '/help': 'Mostrar ajuda e comandos disponíveis',
+            '/shortcuts': 'Mostrar atalhos de teclado',
+            '/clear': 'Limpar a tela',
+            '/reset': 'Resetar contexto da conversa',
+            '/save': 'Salvar sessão atual',
+            '/load': 'Carregar sessão salva',
+            '/model': 'Mudar modelo de IA',
+            '/exec': 'Executar comando direto',
+            '/history': 'Mostrar histórico',
+            '/exit': 'Sair do programa',
+            '/quit': 'Sair do programa'
+        };
+
+        const completions = Object.keys(commands);
+
+        // Se digitou apenas "/" mostra todas as opções com descrições
+        if (line === '/') {
+            // Mostra menu de comandos formatado
+            console.log('\n' + chalk.cyan('═══ Comandos Disponíveis ═══'));
+            for (const [cmd, desc] of Object.entries(commands)) {
+                console.log(chalk.yellow(cmd.padEnd(12)) + chalk.gray(' - ' + desc));
+            }
+            console.log(chalk.cyan('═══════════════════════════════\n'));
+
+            // Retorna todas as completions
+            if (callback) {
+                callback(null, [completions, line]);
+            }
+            return [completions, line];
+        }
+
+        // Caso contrário, filtra baseado no que foi digitado
         const hits = completions.filter((c) => c.startsWith(line));
+
+        // Se tem múltiplas opções e o usuário pressionou TAB
+        if (hits.length > 1 && line.length > 1) {
+            console.log('\n' + chalk.cyan('Opções:'));
+            hits.forEach(cmd => {
+                console.log(chalk.yellow(cmd) + chalk.gray(' - ' + commands[cmd]));
+            });
+            console.log();
+        }
+
+        if (callback) {
+            callback(null, [hits.length ? hits : completions, line]);
+        }
         return [hits.length ? hits : completions, line];
     }
 
@@ -635,23 +691,51 @@ class MCPInteractive extends EventEmitter {
                 // Executa orquestração
                 const result = await this.commandOrchestrator.orchestrateExecution(question, systemContext);
 
-                if (result.success && result.finalAnswer) {
-                    // Adiciona resposta ao contexto
-                    this.contextManager.addMessage('assistant', result.finalAnswer);
+                if (result.success && (result.directAnswer || result.finalAnswer)) {
+                    // PRIMEIRO: Mostra resposta direta e clara
+                    if (result.directAnswer) {
+                        console.log();
+                        console.log(chalk.cyan('═══════════════════════════════════════════════════════'));
+                        console.log(chalk.bold.white('📊 RESPOSTA:'));
+                        console.log(chalk.cyan('───────────────────────────────────────────────────────'));
+                        console.log();
+                        console.log(chalk.white(result.directAnswer));
+                        console.log();
+                        console.log(chalk.cyan('═══════════════════════════════════════════════════════'));
 
-                    // Exibir resposta formatada
-                    console.log();
-                    console.log(chalk.bold.green('📌 Resposta:'));
-                    console.log(chalk.white(result.finalAnswer));
-                    console.log();
+                        // Adiciona ao contexto
+                        this.contextManager.addMessage('assistant', result.directAnswer);
+                    }
 
-                    // Mostra resumo da execução
-                    if (result.metadata) {
-                        console.log(chalk.gray(`✓ ${result.metadata.totalCommands} comandos executados`));
-                        console.log(chalk.gray(`⏱ Tempo: ${(result.duration / 1000).toFixed(1)}s`));
-                        if (result.metadata.cacheHits > 0) {
-                            console.log(chalk.gray(`📦 ${result.metadata.cacheHits} resultados do cache`));
+                    // SEGUNDO: Mostra detalhes técnicos (se houver)
+                    if (result.technicalDetails || result.executedCommands.length > 0) {
+                        console.log();
+                        console.log(chalk.gray('📝 Detalhes Técnicos:'));
+
+                        // Comandos executados
+                        if (result.executedCommands.length > 0) {
+                            console.log(chalk.gray(`  • Comandos executados: ${result.executedCommands.join(', ')}`));
                         }
+
+                        // Métricas
+                        if (result.metadata) {
+                            console.log(chalk.gray(`  • Tempo: ${(result.duration / 1000).toFixed(1)}s`));
+                            if (result.metadata.cacheHits > 0) {
+                                console.log(chalk.gray(`  • Cache hits: ${result.metadata.cacheHits}`));
+                            }
+                        }
+
+                        // Resumo técnico
+                        if (result.technicalDetails) {
+                            console.log(chalk.gray(`  • ${result.technicalDetails}`));
+                        }
+                    }
+
+                    // TERCEIRO: Resposta detalhada adicional (se existir e for diferente)
+                    if (result.finalAnswer && result.finalAnswer !== result.directAnswer) {
+                        console.log();
+                        console.log(chalk.gray('💡 Informações Adicionais:'));
+                        console.log(chalk.gray(result.finalAnswer));
                     }
                 } else {
                     // Fallback para método tradicional se não encontrou resposta
@@ -870,6 +954,7 @@ class MCPInteractive extends EventEmitter {
                 let stdout = '';
                 let stderr = '';
                 let outputShown = false;
+                let commandCompleted = false;  // Flag para evitar timeout fantasma
 
                 child.stdout.on('data', (data) => {
                     stdout += data.toString();
@@ -880,6 +965,7 @@ class MCPInteractive extends EventEmitter {
                 });
 
                 child.on('close', (code) => {
+                    commandCompleted = true;  // Marca comando como completo
                     if (code === 0) {
                         console.log(chalk.green('✓ Sucesso'));
 
@@ -933,15 +1019,17 @@ class MCPInteractive extends EventEmitter {
                 });
 
                 child.on('error', (err) => {
+                    commandCompleted = true;  // Marca como completo mesmo com erro
                     console.log(chalk.red(`✗ Falha ao executar: ${err.message}\n`));
                     resolve(null);
                 });
 
                 // Timeout manual caso o timeout do spawn não funcione
                 setTimeout(() => {
-                    if (!child.killed) {
+                    if (!child.killed && !commandCompleted) {  // Só mostra timeout se comando não completou
                         child.kill('SIGTERM');
                         console.log(chalk.yellow(`⚠️ Comando excedeu o tempo limite de ${commandTimeout/1000}s\n`));
+                        resolve(null);  // Resolve para evitar hanging
                     }
                 }, commandTimeout);
             });
@@ -964,7 +1052,9 @@ class MCPInteractive extends EventEmitter {
         const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
-            terminal: false  // Evita duplicação de eco
+            terminal: false,  // Evita duplicação de eco
+            history: [],     // Histórico vazio para não interferir
+            historySize: 0   // Não salva histórico
         });
 
         return new Promise((resolve) => {
@@ -1000,7 +1090,9 @@ class MCPInteractive extends EventEmitter {
         const readline = await import('readline');
         const rl = readline.createInterface({
             input: process.stdin,
-            output: process.stdout
+            output: process.stdout,
+            history: [],     // Histórico vazio para não interferir
+            historySize: 0   // Não salva histórico
         });
 
         return new Promise((resolve) => {

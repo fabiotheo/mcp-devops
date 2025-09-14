@@ -40,6 +40,8 @@ export default class AICommandOrchestrator {
             results: [],
             currentPlan: [],
             iteration: 0,
+            directAnswer: null, // Nova: resposta direta sintetizada
+            technicalDetails: null, // Nova: detalhes técnicos opcionais
             metadata: {
                 cacheHits: 0,
                 aiCalls: 0,
@@ -91,6 +93,15 @@ export default class AICommandOrchestrator {
                 }
 
                 executionContext.iteration++;
+            }
+
+            // Após executar comandos, sintetiza resposta direta
+            if (executionContext.results.length > 0) {
+                const synthesis = await this.synthesizeDirectAnswer(executionContext);
+                if (synthesis) {
+                    executionContext.directAnswer = synthesis.directAnswer;
+                    executionContext.technicalDetails = synthesis.summary;
+                }
             }
 
             return this.formatResults(executionContext);
@@ -180,6 +191,59 @@ Retorne APENAS um JSON válido (sem markdown, sem comentários):
                 commands: this.extractBasicCommands(question),
                 estimatedIterations: 1
             };
+        }
+    }
+
+    async synthesizeDirectAnswer(context) {
+        // Novo método para sintetizar resposta direta dos resultados
+        context.metadata.aiCalls++;
+
+        if (!context.results.length) {
+            return null;
+        }
+
+        const prompt = `Você executou comandos e obteve resultados. Analise e forneça uma resposta DIRETA e CLARA.
+
+PERGUNTA ORIGINAL:
+${context.originalQuestion}
+
+COMANDOS EXECUTADOS E RESULTADOS:
+${context.results.map((r, i) => {
+    const output = r.output || r.error || 'vazio';
+    return `Comando: ${r.command}\nResultado:\n${output}\n`;
+}).join('\n---\n')}
+
+INSTRUÇÕES CRÍTICAS:
+1. Analise os resultados REAIS obtidos dos comandos
+2. Extraia APENAS a informação relevante para responder a pergunta
+3. Responda de forma DIRETA e CONCISA
+4. Use os dados REAIS dos resultados, não exemplos genéricos
+5. Se perguntaram por IPs/números/listas, mostre-os claramente
+6. NÃO explique comandos, apenas responda o que foi perguntado
+
+Retorne um JSON:
+{
+  "directAnswer": "Resposta direta e clara aqui",
+  "dataPoints": ["pontos de dados extraídos"],
+  "summary": "resumo em uma linha"
+}`;
+
+        try {
+            const response = await this.ai.askCommand(prompt, context.systemContext);
+
+            let jsonStr = response;
+            if (response.includes('```')) {
+                jsonStr = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/)?.[1] || response;
+            }
+
+            const parsed = JSON.parse(jsonStr);
+            return parsed;
+
+        } catch (error) {
+            if (this.config.verboseLogging) {
+                console.log(chalk.yellow('⚠️ Erro ao sintetizar resposta'));
+            }
+            return null;
         }
     }
 
@@ -350,9 +414,11 @@ Retorne APENAS um JSON válido (sem markdown, sem comentários):
         const duration = Date.now() - this.startTime;
 
         return {
-            success: !!context.finalAnswer,
+            success: !!context.finalAnswer || !!context.directAnswer,
             question: context.originalQuestion,
-            finalAnswer: context.finalAnswer,
+            directAnswer: context.directAnswer, // Resposta direta e clara
+            finalAnswer: context.finalAnswer, // Resposta detalhada (legado)
+            technicalDetails: context.technicalDetails, // Detalhes técnicos opcionais
             executedCommands: context.executedCommands,
             results: context.results.map(r => ({
                 command: r.command,

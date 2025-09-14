@@ -27,7 +27,8 @@
       "Bash(sudo cp:*)",
       "Read(//private/var/log/**)",
       "Read(//private/var/logs/**)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []

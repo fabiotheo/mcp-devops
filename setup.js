@@ -811,7 +811,8 @@ export default class ModelFactory {
             { src: 'mcp-configure', dest: 'mcp-configure' },
             { src: 'mcp-interactive.js', dest: 'mcp-interactive.js' },
             { src: 'mcp-chat', dest: 'mcp-chat' },
-            { src: 'mcp-chat-launcher.sh', dest: 'mcp-chat-launcher.sh' }
+            { src: 'mcp-chat-launcher.sh', dest: 'mcp-chat-launcher.sh' },
+            { src: 'ai_orchestrator.js', dest: 'ai_orchestrator.js' }
         ];
 
         // Copiar arquivos principais
@@ -849,6 +850,33 @@ export default class ModelFactory {
             console.log(`  ✓ Arquivos de padrões copiados`);
         } catch (error) {
             console.log(`  ⚠ Erro ao copiar padrões: ${error.message}`);
+        }
+
+        // Copiar libs
+        try {
+            const libsDir = path.join(process.cwd(), 'libs');
+            const destLibsDir = path.join(this.mcpDir, 'libs');
+
+            // Criar diretório libs se não existir
+            try {
+                await fs.access(destLibsDir);
+            } catch {
+                await fs.mkdir(destLibsDir, { recursive: true });
+            }
+
+            const libFiles = await fs.readdir(libsDir);
+            for (const file of libFiles) {
+                if (file.endsWith('.js')) {
+                    const srcPath = path.join(libsDir, file);
+                    const destPath = path.join(destLibsDir, file);
+                    const content = await fs.readFile(srcPath, 'utf8');
+                    await fs.writeFile(destPath, content);
+                }
+            }
+            console.log(`  ✓ Arquivos de libs copiados`);
+        } catch (error) {
+            // Silenciosamente ignora se não existir libs
+            // console.log(`  ⚠ Diretório libs não encontrado (normal em versões antigas)`);
         }
 
         // Copiar web_search e web_scraper

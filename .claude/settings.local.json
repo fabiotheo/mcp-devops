@@ -21,7 +21,10 @@
       "Bash(mcp-chat:*)",
       "Bash(/dev/null)",
       "Bash(cat:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(git rm:*)",
+      "Bash(git restore:*)",
+      "Bash(sudo cp:*)"
     ],
     "deny": [],
     "ask": []

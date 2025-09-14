@@ -100,11 +100,35 @@ Each pattern includes:
 
 ## Development Guidelines
 
+### Adding New Files to Installation
+**IMPORTANT**: When creating new files that need to be deployed to `~/.mcp-terminal/`, you MUST update `setup.js`:
+
+1. **For individual files**: Add to the `filesToCopy` array in `makeExecutable()` method (around line 805):
+```javascript
+const filesToCopy = [
+    { src: 'your-new-file.js', dest: 'your-new-file.js' },
+    // ... existing files
+];
+```
+
+2. **For new directories**: Add copying logic after the patterns section (around line 855):
+```javascript
+// Copy your new directory
+try {
+    const yourDir = path.join(process.cwd(), 'your-dir');
+    const destYourDir = path.join(this.mcpDir, 'your-dir');
+    // ... copy logic
+}
+```
+
+3. **Remember**: The system runs on both Mac (development) and Linux (production), so files must be properly copied during installation.
+
 ### Adding New AI Providers
 1. Create new provider class extending `BaseAIModel` in `ai_models/`
 2. Implement required methods: `initialize()`, `analyzeCommand()`, `askCommand()`
 3. Update `model_factory.js` to include the new provider
 4. Add configuration options for API keys and model selection
+5. **Add the new file to `setup.js` for deployment**
 
 ### Error Pattern Development
 - Add new patterns to appropriate JSON files in `patterns/`

@@ -69,10 +69,18 @@ export default class AICommandOrchestrator {
                     executionContext.isComplete = true;
                     break;
                 } else {
+                    if (this.config.verboseLogging) {
+                        console.log(chalk.blue(`\n🔄 Tarefa incompleta: ${completionCheck.reasoning}`));
+                        console.log(chalk.gray(`📝 Working Memory Lists: ${JSON.stringify(executionContext.workingMemory.discovered.lists)}`));
+                    }
+
                     const nextStep = await this.planNextCommands(executionContext, completionCheck.reasoning);
                     executionContext.metadata.aiCalls++;
 
                     if (nextStep.commands && nextStep.commands.length > 0) {
+                        if (this.config.verboseLogging) {
+                            console.log(chalk.green(`✅ Próximos comandos: ${nextStep.commands.join(', ')}`));
+                        }
                         executionContext.currentPlan.push(...nextStep.commands);
                     } else {
                         if (this.config.verboseLogging) {
@@ -145,26 +153,36 @@ Responda APENAS: {"isComplete": true} ou {"isComplete": false, "reasoning": "o q
     }
 
     async planNextCommands(context, reason) {
+        // Check if we have lists to iterate
+        let iterationHint = '';
+        if (context.workingMemory.discovered.lists && context.workingMemory.discovered.lists.length > 0) {
+            const lists = context.workingMemory.discovered.lists;
+            iterationHint = `\n⚠️ ATENÇÃO: Você descobriu a lista: [${lists.join(', ')}]
+VOCÊ DEVE EXECUTAR UM COMANDO PARA CADA ITEM DESTA LISTA.`;
+
+            // For fail2ban specifically
+            if (context.originalQuestion.toLowerCase().includes('fail2ban') ||
+                context.originalQuestion.toLowerCase().includes('bloqueado')) {
+                iterationHint += `\nPara fail2ban, execute: ${lists.map(jail => `fail2ban-client status ${jail}`).join(', ')}`;
+            }
+        }
+
         const prompt = `Memória de Trabalho:
 ${JSON.stringify(context.workingMemory, null, 2)}
 
 Tarefa incompleta porque: ${reason}
+${iterationHint}
 
-REGRAS OBRIGATÓRIAS:
-1. Se discovered.lists tem items, DEVE iterar sobre CADA um
-2. Se encontrou uma lista em output anterior, DEVE executar comando para cada item
-3. Comandos devem extrair dados específicos, não genéricos
+INSTRUÇÕES DIRETAS E OBRIGATÓRIAS:
+1. Se discovered.lists contém items, VOCÊ DEVE criar comandos para CADA item
+2. NÃO sugira ao usuário executar comandos - VOCÊ deve retorná-los
+3. Para fail2ban: se encontrou jails, execute "fail2ban-client status [jail]" para CADA jail
 
-Responda APENAS:
+Responda APENAS com JSON:
 {
   "commands": ["comando1", "comando2"],
   "updateMemory": {
-    "hypothesis": "novo raciocínio sobre o que fazer",
-    "discovered": {
-      "lists": [...],
-      "entities": {...},
-      "needsIteration": [...]
-    }
+    "hypothesis": "vou verificar cada item da lista"
   }
 }`;
 

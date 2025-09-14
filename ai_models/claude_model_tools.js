@@ -105,4 +105,16 @@ Forneça uma solução concisa.`;
 
         return this.askCommand(prompt, context);
     }
+
+    getProviderName() {
+        return 'Claude (Tools)';
+    }
+
+    getProviderInfo() {
+        return {
+            provider: 'Claude (Native Tools)',
+            model: this.modelName,
+            features: ['tools', 'parallel_execution', 'iterative_processing']
+        };
+    }
 }

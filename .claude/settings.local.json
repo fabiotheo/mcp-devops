@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git pull:*)",
+      "Bash(pnpm install:*)",
+      "Bash(node:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(chmod:*)",
+      "mcp__zen__planner",
+      "Bash(./mcp-chat --help)",
+      "Read(//usr/local/bin/**)",
+      "Bash(sudo ln:*)",
+      "Bash(~/.mcp-terminal/mcp-chat:*)",
+      "Bash(echo $PATH)",
+      "Bash(~/.local/bin/mcp-chat:*)",
+      "mcp__zen__codereview",
+      "mcp__zen__debug",
+      "Bash(timeout:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

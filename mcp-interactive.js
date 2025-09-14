@@ -10,6 +10,9 @@ import chalk from 'chalk';
 import ModelFactory from './ai_models/model_factory.js';
 import SystemDetector from './system_detector.js';
 import AICommandOrchestrator from './ai_orchestrator.js';
+import PersistentHistory from './libs/persistent-history.js';
+import KeybindingManager from './libs/keybinding-manager.js';
+import MultiLineInput from './libs/multiline-input.js';
 
 class ContextManager {
     constructor(maxTokens = 100000) {
@@ -95,6 +98,7 @@ class CommandProcessor {
         this.mcp = mcpInteractive;
         this.commands = {
             '/help': this.showHelp.bind(this),
+            '/shortcuts': this.showShortcuts.bind(this),
             '/clear': this.clearScreen.bind(this),
             '/reset': this.resetContext.bind(this),
             '/save': this.saveSession.bind(this),
@@ -123,16 +127,17 @@ class CommandProcessor {
         const help = `
 ${chalk.cyan('═══ Comandos Disponíveis ═══')}
 
-${chalk.yellow('/help')}     - Mostra esta ajuda
-${chalk.yellow('/clear')}    - Limpa a tela (mantém contexto)
-${chalk.yellow('/reset')}    - Reinicia o contexto da conversa
+${chalk.yellow('/help')}      - Mostra esta ajuda
+${chalk.yellow('/shortcuts')} - Mostra atalhos de teclado
+${chalk.yellow('/clear')}     - Limpa a tela (mantém contexto)
+${chalk.yellow('/reset')}     - Reinicia o contexto da conversa
 ${chalk.yellow('/save')} [nome] - Salva a sessão atual
 ${chalk.yellow('/load')} [nome] - Carrega uma sessão salva
-${chalk.yellow('/model')}    - Mostra/altera o modelo de IA
-${chalk.yellow('/exec')}     - Executa o último comando sugerido
-${chalk.yellow('/history')}  - Mostra histórico da sessão
-${chalk.yellow('/version')}  - Mostra informações da versão
-${chalk.yellow('/exit')}     - Sai do modo interativo
+${chalk.yellow('/model')}     - Mostra/altera o modelo de IA
+${chalk.yellow('/exec')}      - Executa o último comando sugerido
+${chalk.yellow('/history')}   - Mostra histórico da sessão
+${chalk.yellow('/version')}   - Mostra informações da versão
+${chalk.yellow('/exit')}      - Sai do modo interativo
 
 ${chalk.cyan('═══ Dicas ═══')}
 
@@ -140,8 +145,36 @@ ${chalk.cyan('═══ Dicas ═══')}
 • Use ${chalk.green('Tab')} para auto-completar comandos
 • Sessões são salvas automaticamente a cada 5 minutos
 • AI Orchestration está ${chalk.green('ativado')} para perguntas complexas
+• Digite ${chalk.cyan('/shortcuts')} para ver atalhos de teclado
 `;
         return help;
+    }
+
+    async showShortcuts() {
+        const shortcuts = `
+${chalk.cyan('═══ Atalhos de Teclado ═══')}
+
+${chalk.blue('Comandos Básicos:')}
+${chalk.yellow('ESC')}        - Cancela o input atual ${chalk.gray('(planejado)')}
+${chalk.yellow('Ctrl+C')}     - Força saída da aplicação
+${chalk.yellow('Ctrl+D')}     - Finaliza input multi-linha
+${chalk.yellow('Ctrl+L')}     - Limpa a tela ${chalk.gray('(planejado)')}
+${chalk.yellow('Ctrl+U')}     - Apaga toda a linha ${chalk.gray('(planejado)')}
+
+${chalk.blue('Navegação:')}
+${chalk.yellow('↑ / ↓')}      - Navega pelo histórico
+${chalk.yellow('Ctrl+A')}     - Move para início da linha
+${chalk.yellow('Ctrl+E')}     - Move para fim da linha
+${chalk.yellow('Tab')}        - Auto-completa comandos
+
+${chalk.blue('Multi-linha:')}
+${chalk.yellow('"""')}        - Inicia/termina bloco multi-linha
+${chalk.yellow('\\')} no fim   - Continua na próxima linha ${chalk.gray('(planejado)')}
+
+${chalk.gray('Nota: Alguns atalhos estão em desenvolvimento')}
+${chalk.gray('Veja o plano completo em docs/commands.md')}
+`;
+        return shortcuts;
     }
 
     async clearScreen() {
@@ -296,6 +329,8 @@ class REPLInterface extends EventEmitter {
         this.rl = null;
         this.multilineBuffer = '';
         this.inMultiline = false;
+        this.multilineInput = null;
+        this.keybindingManager = null;
     }
 
     initialize() {
@@ -303,20 +338,58 @@ class REPLInterface extends EventEmitter {
             input: process.stdin,
             output: process.stdout,
             prompt: chalk.cyan('mcp> '),
-            completer: this.autoComplete.bind(this)
+            completer: this.autoComplete.bind(this),
+            terminal: true
         });
 
+        // Inicializa MultiLineInput
+        this.multilineInput = new MultiLineInput({
+            blockDelimiter: '"""',
+            continuationChar: '\\',
+            continuationPrompt: chalk.gray('... '),
+            normalPrompt: chalk.cyan('mcp> ')
+        });
+
+        // Inicializa KeybindingManager
+        this.keybindingManager = new KeybindingManager(this.rl, {
+            bindings: {
+                escape: 'escape',
+                clearLine: 'ctrl+u',
+                clearScreen: 'ctrl+l'
+            }
+        });
+        this.keybindingManager.initialize();
+
+        // Handler para cancelamento com ESC
+        this.keybindingManager.on('cancel', () => {
+            if (this.multilineInput.cancel()) {
+                this.rl.setPrompt(chalk.cyan('mcp> '));
+                this.rl.prompt();
+            }
+        });
+
+
         this.rl.on('line', (line) => {
-            const processed = this.handleMultiline(line);
-            if (processed !== null) {
-                this.emit('line', processed);
+            const result = this.multilineInput.processInput(line);
+
+            if (!result.complete) {
+                // Continua capturando input
+                this.rl.setPrompt(result.prompt);
+                if (result.message) {
+                    process.stdout.write(result.message + '\n');
+                }
+                this.rl.prompt();
+            } else {
+                // Input completo, processa
+                this.multilineInput.reset();
+                this.rl.setPrompt(chalk.cyan('mcp> '));
+                this.emit('line', result.text);
             }
         });
 
         this.rl.on('SIGINT', () => {
-            if (this.inMultiline) {
-                this.inMultiline = false;
-                this.multilineBuffer = '';
+            if (this.multilineInput.isMultiline()) {
+                this.multilineInput.cancel();
                 this.rl.setPrompt(chalk.cyan('mcp> '));
                 this.rl.prompt();
             } else {
@@ -327,37 +400,13 @@ class REPLInterface extends EventEmitter {
 
     autoComplete(line) {
         const completions = [
-            '/help', '/clear', '/reset', '/save', '/load',
+            '/help', '/shortcuts', '/clear', '/reset', '/save', '/load',
             '/model', '/exec', '/history', '/exit', '/quit'
         ];
         const hits = completions.filter((c) => c.startsWith(line));
         return [hits.length ? hits : completions, line];
     }
 
-    handleMultiline(line) {
-        if (line === '"""') {
-            if (this.inMultiline) {
-                // Fim do multi-linha
-                const result = this.multilineBuffer.trimEnd();
-                this.multilineBuffer = '';
-                this.inMultiline = false;
-                this.rl.setPrompt(chalk.cyan('mcp> '));
-                return result;
-            } else {
-                // Início do multi-linha
-                this.inMultiline = true;
-                this.rl.setPrompt(chalk.gray('... '));
-                return null;
-            }
-        }
-
-        if (this.inMultiline) {
-            this.multilineBuffer += line + '\n';
-            return null;
-        }
-
-        return line;
-    }
 
     prompt() {
         this.rl.prompt();
@@ -390,6 +439,7 @@ class MCPInteractive extends EventEmitter {
         // Spinner animado com braille patterns para efeito suave
         this.spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
         // Alternativa: ['◐', '◓', '◑', '◒'] ou ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘']
+        this.persistentHistory = null;
         this.spinnerIndex = 0;
     }
 
@@ -441,8 +491,23 @@ class MCPInteractive extends EventEmitter {
             }
         );
 
+        // Inicializar histórico persistente
+        this.persistentHistory = new PersistentHistory({
+            historyFile: path.join(os.homedir(), '.mcp-terminal', 'history.json'),
+            maxEntries: modelConfig.history?.max_entries || 1000,
+            deduplicate: modelConfig.history?.deduplicate !== false
+        });
+        await this.persistentHistory.initialize();
+
         // Inicializar interface REPL
         this.replInterface.initialize();
+
+        // Carregar histórico no readline APÓS inicialização
+        if (this.persistentHistory.history.length > 0 && this.replInterface.rl) {
+            this.persistentHistory.history.forEach(cmd => {
+                this.replInterface.rl.history.push(cmd);
+            });
+        }
 
         // Configurar listeners
         this.replInterface.on('line', this.processInput.bind(this));
@@ -509,7 +574,9 @@ class MCPInteractive extends EventEmitter {
 
         console.log();
         console.log(chalk.cyan('─'.repeat(80)));
-        console.log(chalk.gray('💡 Digite'), chalk.cyan('/help'), chalk.gray('para comandos |'), chalk.cyan('/exit'), chalk.gray('para sair'));
+        console.log(chalk.gray('💡 Digite'), chalk.cyan('/help'), chalk.gray('para comandos |'),
+                    chalk.cyan('/shortcuts'), chalk.gray('para atalhos |'),
+                    chalk.cyan('/exit'), chalk.gray('para sair'));
         console.log(chalk.cyan('─'.repeat(80)));
         console.log();
     }
@@ -521,6 +588,11 @@ class MCPInteractive extends EventEmitter {
         }
 
         input = input.trim();
+
+        // Salvar no histórico persistente
+        if (this.persistentHistory && input !== '') {
+            await this.persistentHistory.add(input);
+        }
 
         // Verificar se é um comando
         if (input.startsWith('/')) {

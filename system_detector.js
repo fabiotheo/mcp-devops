@@ -75,6 +75,17 @@ class SystemDetector {
     }
 
     getDistribution() {
+        if (this.getOS() === 'Darwin') {
+            try {
+                const productName = execSync('sw_vers -productName', { encoding: 'utf8' }).trim();
+                if (productName === 'macOS') {
+                    return 'macos';
+                }
+                return productName.toLowerCase();
+            } catch {
+                return 'macos'; // Fallback for Darwin
+            }
+        }
         // Tenta várias formas de detectar a distribuição
         const methods = [
             () => {
@@ -109,6 +120,13 @@ class SystemDetector {
     }
 
     getVersion() {
+        if (this.getOS() === 'Darwin') {
+            try {
+                return execSync('sw_vers -productVersion', { encoding: 'utf8' }).trim();
+            } catch {
+                // Fallback to kernel version if sw_vers fails
+            }
+        }
         try {
             // Tenta pegar versão específica da distro
             if (fs.existsSync('/etc/os-release')) {
@@ -125,6 +143,14 @@ class SystemDetector {
     }
 
     getPackageManager() {
+        if (this.getOS() === 'Darwin') {
+            try {
+                execSync('which brew', { stdio: 'ignore' });
+                return 'brew';
+            } catch {
+                return 'unknown';
+            }
+        }
         const managers = [
             { cmd: 'apt', distros: ['ubuntu', 'debian', 'mint'] },
             { cmd: 'yum', distros: ['rhel', 'centos', 'fedora'] },
@@ -187,6 +213,20 @@ class SystemDetector {
         };
 
         const distroSpecific = {
+            macos: {
+                ...base,
+                memoryUsage: 'top -l 1 | grep PhysMem',
+                networkInfo: 'ifconfig',
+                install: 'brew install',
+                update: 'brew update && brew upgrade',
+                search: 'brew search',
+                removePackage: 'brew uninstall',
+                listInstalled: 'brew list --versions',
+                serviceStatus: 'brew services list',
+                serviceStart: 'brew services start',
+                serviceStop: 'brew services stop',
+                listServices: 'brew services list'
+            },
             ubuntu: {
                 ...base,
                 install: 'sudo apt install',
@@ -516,6 +556,9 @@ class SystemDetector {
                 case 'zypper':
                     execSync(`rpm -q ${packageName}`, { stdio: 'ignore' });
                     return true;
+                case 'brew':
+                    execSync(`brew list --formula | grep -q "^${packageName}$"`, { stdio: 'ignore' });
+                    return true;
                 default:
                     // Tenta verificar se o comando existe
                     execSync(`which ${packageName}`, { stdio: 'ignore' });
@@ -591,7 +634,7 @@ class SystemDetector {
             case 'listDirectoriesBySize':
                 return this.getListDirectoriesBySizeCommand(args[0] || '.');
             case 'findLargeFiles':
-                return `find ${args[0] || '.'} -type f -exec ls -lh {} \\; | sort -k5 -hr | head -20`;
+                return `find ${args[0] || '.'} -type f -exec ls -lh {} \; | sort -k5 -hr | head -20`;
             case 'processInfo':
                 return `ps aux | grep ${args[0]} | head -10`;
             case 'portInfo':
@@ -609,7 +652,8 @@ class SystemDetector {
             arch: `du -sh ${path}/* 2>/dev/null | sort -hr`,
             fedora: `du -sh ${path}/* 2>/dev/null | sort -hr`,
             centos: `du -sh ${path}/* 2>/dev/null | sort -hr`,
-            rhel: `du -sh ${path}/* 2>/dev/null | sort -hr`
+            rhel: `du -sh ${path}/* 2>/dev/null | sort -hr`,
+            macos: `du -sh ${path}/* 2>/dev/null | sort -hr`
         };
 
         return distroCommands[this.systemInfo.distro] || `du -sh ${path}/* 2>/dev/null | sort -hr`;
@@ -641,7 +685,7 @@ class SystemDetector {
                         const direction = line.includes('OUT') ? 'saída' : 'entrada';
                         blockedIPs.push({
                             ip: ipMatch[0],
-                            rule: line.replace(/^\[\d+\]\s+/, ''), // Remove o número da regra
+                            rule: line.replace(/^\\[\d+\\]\\s+/, ''), // Remove o número da regra
                             direction,
                             type: 'permanente'
                         });

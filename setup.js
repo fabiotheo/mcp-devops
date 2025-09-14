@@ -165,6 +165,66 @@ class MCPSetup {
         }
     }
 
+    async forceUpdate() {
+        try {
+            console.log('🔄 FORÇA ATUALIZAÇÃO - Copiando arquivos mesmo na mesma versão...\n');
+
+            const currentVersion = await this.getCurrentVersion();
+            console.log(`📊 Versão instalada: ${currentVersion || 'não encontrada'}`);
+            console.log(`📊 Versão atual do código: ${this.version}`);
+
+            if (currentVersion === this.version) {
+                console.log('⚠️ Mesma versão detectada, mas forçando atualização dos arquivos...\n');
+            }
+
+            // 1. Criar diretórios (caso não existam)
+            await this.createDirectories();
+
+            // 2. Backup da configuração atual
+            console.log('📦 Fazendo backup da configuração...');
+            let config = null;
+            try {
+                const configData = await fs.readFile(this.configPath, 'utf8');
+                config = JSON.parse(configData);
+                console.log('  ✓ Backup da configuração concluído');
+            } catch (error) {
+                console.log('  ⚠️ Não foi possível ler configuração existente, será criada uma nova');
+            }
+
+            // 3. Atualizar TODOS os arquivos de código forçadamente
+            console.log('📄 FORÇANDO atualização de todos os arquivos...');
+            await this.setupDependencies();
+            await this.makeExecutable();
+
+            // 4. Restaurar configuração
+            if (config) {
+                console.log('🔄 Restaurando configuração...');
+                await fs.writeFile(this.configPath, JSON.stringify(config, null, 2));
+                console.log('  ✓ Configuração restaurada');
+            }
+
+            // 5. Salvar versão (mesmo que seja a mesma)
+            await this.saveVersion();
+
+            console.log('\n✅ Força atualização concluída com sucesso!\n');
+            console.log('🔧 Arquivos atualizados:');
+            console.log('   • mcp-assistant.js');
+            console.log('   • mcp-client.js');
+            console.log('   • mcp-interactive.js');
+            console.log('   • ai_orchestrator.js');
+            console.log('   • system_detector.js');
+            console.log('   • Todos os outros arquivos do projeto\n');
+
+            console.log('📋 Próximos passos:');
+            console.log('1. Teste o assistente: mcp-assistant "teste"');
+            console.log('2. Verifique as configurações se necessário');
+
+        } catch (error) {
+            console.error('\n❌ Erro durante a força atualização:', error.message);
+            process.exit(1);
+        }
+    }
+
     async getCurrentVersion() {
         try {
             return await fs.readFile(this.versionFilePath, 'utf8');
@@ -1250,10 +1310,29 @@ async function main() {
     const isAuto = args.includes('--auto');
     const isUpgrade = args.includes('--upgrade');
     const isUninstall = args.includes('--uninstall');
+    const isForce = args.includes('--force');
+    const isHelp = args.includes('--help') || args.includes('-h');
     const removeAllData = args.includes('--remove-all-data');
+
+    if (isHelp) {
+        console.log('🚀 MCP Terminal Assistant Setup\n');
+        console.log('Opções disponíveis:');
+        console.log('  node setup.js                    - Instalação interativa');
+        console.log('  node setup.js --auto             - Instalação automática');
+        console.log('  node setup.js --upgrade          - Atualizar para nova versão');
+        console.log('  node setup.js --upgrade --auto   - Atualizar automaticamente');
+        console.log('  node setup.js --force            - ⚡ FORÇA atualização (mesma versão)');
+        console.log('  node setup.js --uninstall        - Desinstalar (manter configurações)');
+        console.log('  node setup.js --uninstall --remove-all-data - Remover tudo');
+        console.log('  node setup.js --help             - Mostrar esta ajuda\n');
+        console.log('💡 Nova opção --force: útil para desenvolvimento e testes!');
+        return;
+    }
 
     if (isUninstall) {
         await setup.uninstall(removeAllData);
+    } else if (isForce) {
+        await setup.forceUpdate();
     } else if (isUpgrade) {
         if (isAuto) {
             await setup.autoSetup(true);

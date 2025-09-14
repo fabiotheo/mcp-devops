@@ -48,6 +48,59 @@ export default class AICommandOrchestrator {
         }
     }
 
+    
+    // Método específico para processar fail2ban (SEMPRE funciona)
+    async handleFail2banQuestion(context) {
+        // Se a pergunta é sobre fail2ban, processa diretamente
+        if (!context.originalQuestion.toLowerCase().includes('fail2ban')) {
+            return false;
+        }
+
+        // Primeiro comando: obter lista de jails
+        if (context.executedCommands.length === 0) {
+            context.currentPlan.push('fail2ban-client status');
+            return true;
+        }
+
+        // Extrai jails do primeiro comando
+        const statusResult = context.results.find(r =>
+            r.command === 'fail2ban-client status'
+        );
+
+        if (statusResult && statusResult.output) {
+            const jailMatch = statusResult.output.match(/Jail list:\s*([^\n]+)/i);
+            if (jailMatch) {
+                const jails = jailMatch[1].trim().split(/[,\s]+/).filter(j => j);
+
+                // Verifica se já executou comandos para todos os jails
+                let allJailsChecked = true;
+                for (const jail of jails) {
+                    const hasJailCommand = context.executedCommands.some(cmd =>
+                        cmd === `fail2ban-client status ${jail}`
+                    );
+                    if (!hasJailCommand) {
+                        // Adiciona comando para verificar este jail
+                        context.currentPlan.push(`fail2ban-client status ${jail}`);
+                        allJailsChecked = false;
+                    }
+                }
+
+                // Se todos os jails foram verificados, sintetiza resposta
+                if (allJailsChecked && jails.length > 0) {
+                    const totalIPs = this.countFail2banIPs(context.results);
+                    context.directAnswer = totalIPs.message;
+                    context.isComplete = true;
+                    return false;
+                }
+
+                return !allJailsChecked;
+            }
+        }
+
+        return false;
+    }
+
+
     async orchestrateExecution(question, context) {
         this.startTime = Date.now();
 
@@ -94,6 +147,14 @@ export default class AICommandOrchestrator {
 
             // Step 2: Execução iterativa aprimorada
             while (executionContext.iteration < this.config.maxIterations && !executionContext.isComplete) {
+                // Verifica fail2ban específicamente (correção aplicada)
+                if (await this.handleFail2banQuestion(executionContext)) {
+                    // Continue o loop se fail2ban precisa de mais comandos
+                } else if (executionContext.isComplete) {
+                    // Fail2ban processado completamente
+                    break;
+                }
+
                 // Verifica timeout
                 if (Date.now() - this.startTime > this.config.maxExecutionTime) {
                     console.log(chalk.yellow('\n⚠️ Tempo limite excedido'));
@@ -227,6 +288,11 @@ Retorne APENAS um JSON válido (sem markdown, sem comentários):
         try {
             const response = await this.ai.askCommand(prompt, context);
 
+            // Verifica se temos resposta
+            if (!response) {
+                throw new Error('IA não retornou resposta');
+            }
+
             // Tenta extrair JSON da resposta
             let jsonStr = response;
 
@@ -318,6 +384,10 @@ Retorne um JSON:
 
         try {
             const response = await this.ai.askCommand(prompt, context.systemContext);
+
+            if (!response) {
+                throw new Error('IA não retornou resposta para síntese');
+            }
 
             let jsonStr = response;
             if (response.includes('```')) {
@@ -504,8 +574,11 @@ Retorne um JSON:
     }
 
     async evaluateProgressWithPattern(context) {
-        // Se tem um plano de padrão, usa ele primeiro
-        if (context.patternPlan) {
+        // Se PatternMatcher não está disponível, retorna false
+        if (!this.patternMatcher) return false;
+
+        // Se tem um plano de padrão E o PatternMatcher está disponível, usa ele primeiro
+        if (context.patternPlan && this.patternMatcher) {
             // Atualiza o plano com os resultados
             for (const result of context.results) {
                 const step = context.patternPlan.steps.find(s =>
@@ -518,7 +591,7 @@ Retorne um JSON:
             }
 
             // Verifica se o padrão está completo
-            if (this.patternMatcher.isComplete(context.patternPlan)) {
+            if (this.patternMatcher && this.patternMatcher.isComplete(context.patternPlan)) {
                 const aggregated = this.patternMatcher.aggregate(context.patternPlan);
                 return {
                     questionAnswered: true,
@@ -529,7 +602,7 @@ Retorne um JSON:
                     dataExtracted: aggregated,
                     reasoning: 'Padrão completo executado'
                 };
-            } else {
+            } else if (this.patternMatcher) {
                 // Pega próximos comandos do padrão
                 const nextCommands = this.patternMatcher.getNextCommands(
                     context.patternPlan,
@@ -544,6 +617,9 @@ Retorne um JSON:
                     dataExtracted: context.patternPlan.context.extracted,
                     reasoning: 'Continuando execução do padrão'
                 };
+            } else {
+                // PatternMatcher não disponível, usa avaliação normal
+                return this.evaluateProgress(context);
             }
         }
 
@@ -629,6 +705,24 @@ Retorne APENAS um JSON válido (sem markdown, sem comentários):
         try {
             const response = await this.ai.askCommand(prompt, context.systemContext);
 
+            if (!response) {
+                // Se não houver resposta da IA, usa detecção automática para fail2ban
+                if (context.originalQuestion.toLowerCase().includes('fail2ban')) {
+                    const jailsDetected = this.extractFail2banJails(context.results);
+                    if (jailsDetected.length > 0 && this.hasJailDetails(context.results, jailsDetected)) {
+                        const totalIPs = this.countFail2banIPs(context.results);
+                        return {
+                            questionAnswered: true,
+                            answer: totalIPs.message,
+                            confidence: 100,
+                            dataExtracted: totalIPs.details,
+                            reasoning: 'Resposta sintetizada automaticamente'
+                        };
+                    }
+                }
+                throw new Error('IA não retornou resposta para avaliação');
+            }
+
             // Extrai JSON
             let jsonStr = response;
             if (response.includes('```')) {
@@ -643,6 +737,14 @@ Retorne APENAS um JSON válido (sem markdown, sem comentários):
                 if (jailsDetected.length > 0 && !this.hasJailDetails(context.results, jailsDetected)) {
                     parsed.nextCommands = jailsDetected.map(jail => `fail2ban-client status ${jail}`);
                     parsed.reasoning = `Detectados ${jailsDetected.length} jails, verificando cada um para contar IPs`;
+                } else if (jailsDetected.length > 0 && this.hasJailDetails(context.results, jailsDetected)) {
+                    // Já temos todos os detalhes, sintetiza resposta
+                    const totalIPs = this.countFail2banIPs(context.results);
+                    parsed.questionAnswered = true;
+                    parsed.answer = totalIPs.message;
+                    parsed.confidence = 100;
+                    parsed.dataExtracted = totalIPs.details;
+                    parsed.reasoning = 'Todos os jails foram verificados e IPs contados';
                 }
             }
 
@@ -713,6 +815,47 @@ Retorne APENAS um JSON válido (sem markdown, sem comentários):
             if (!hasDetail) return false;
         }
         return true;
+    }
+
+    // Conta IPs bloqueados no fail2ban
+    countFail2banIPs(results) {
+        const details = {};
+        let totalCount = 0;
+
+        for (const result of results) {
+            if (result.command.includes('fail2ban-client status ') && result.output) {
+                const jailMatch = result.command.match(/status\s+(\S+)$/);
+                if (jailMatch) {
+                    const jail = jailMatch[1];
+
+                    // Procura por "Currently banned:" ou "Total banned:"
+                    const bannedMatch = result.output.match(/(?:Currently|Total)\s+banned:\s*(\d+)/i);
+                    if (bannedMatch) {
+                        const count = parseInt(bannedMatch[1]);
+                        details[jail] = count;
+                        totalCount += count;
+                    } else {
+                        // Fallback: conta IPs listados
+                        const ips = result.output.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) || [];
+                        details[jail] = ips.length;
+                        totalCount += ips.length;
+                    }
+                }
+            }
+        }
+
+        // Formata mensagem
+        const jailDetails = Object.entries(details)
+            .map(([jail, count]) => `${count} em ${jail}`)
+            .join(', ');
+
+        return {
+            message: totalCount === 0
+                ? 'Nenhum IP está bloqueado no fail2ban'
+                : `${totalCount} IP${totalCount !== 1 ? 's' : ''} ${totalCount !== 1 ? 'estão' : 'está'} bloqueado${totalCount !== 1 ? 's' : ''} no fail2ban${jailDetails ? ': ' + jailDetails : ''}`,
+            details: details,
+            total: totalCount
+        };
     }
 
     async executeNextBatch(context) {

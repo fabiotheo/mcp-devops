@@ -492,6 +492,7 @@ class MCPInteractive extends EventEmitter {
         this.systemDetector = new SystemDetector();
         this.sessionName = config.session || `session-${Date.now()}`;
         this.sessionPermissions = new Set();  // Armazena comandos já aprovados na sessão
+        this.exitOnNextInterrupt = false; // Flag para saída com Ctrl+C
         this.spinnerInterval = null;
         // Spinner animado com braille patterns para efeito suave
         this.spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -1262,16 +1263,19 @@ class MCPInteractive extends EventEmitter {
     }
 
     async handleInterrupt() {
-        console.log(chalk.yellow('\n\nUse /exit para sair ou Ctrl+C novamente para forçar saída'));
-        this.replInterface.prompt();
+        if (this.exitOnNextInterrupt) {
+            console.log(chalk.red('\nSaída forçada...'));
+            process.exit(0);
+        } else {
+            this.exitOnNextInterrupt = true;
+            console.log(chalk.yellow('\n\n(Pressione Ctrl+C novamente para forçar a saída)'));
+            this.replInterface.prompt(); // Manter o prompt
 
-        // Configurar handler para segunda interrupção
-        setTimeout(() => {
-            process.once('SIGINT', () => {
-                console.log(chalk.red('\nSaída forçada...'));
-                process.exit(0);
-            });
-        }, 100);
+            // Resetar a flag após um curto período se o usuário não pressionar novamente
+            setTimeout(() => {
+                this.exitOnNextInterrupt = false;
+            }, 2000); // Janela de 2 segundos
+        }
     }
 
     async shutdown() {

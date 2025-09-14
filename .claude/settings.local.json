@@ -24,7 +24,10 @@
       "Bash(echo:*)",
       "Bash(git rm:*)",
       "Bash(git restore:*)",
-      "Bash(sudo cp:*)"
+      "Bash(sudo cp:*)",
+      "Read(//private/var/log/**)",
+      "Read(//private/var/logs/**)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

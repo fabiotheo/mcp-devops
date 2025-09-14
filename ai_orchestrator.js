@@ -34,6 +34,15 @@ export default class AICommandOrchestrator {
             isComplete: false,
             directAnswer: null,
             metadata: { aiCalls: 0, blockedCommands: [] },
+            workingMemory: {
+                discovered: {
+                    lists: [],        // Ex: ["sshd", "apache"] - discovered entities that need iteration
+                    entities: {},     // Ex: {total_jails: 2, blocked_ips: 5}
+                    needsIteration: [] // Ex: ["check each jail for IPs"]
+                },
+                hypothesis: "",       // Current reasoning about what needs to be done
+                dataExtracted: {}     // Structured data extracted from command outputs
+            }
         };
 
         try {
@@ -116,23 +125,13 @@ Retorne APENAS um objeto JSON com a lista de comandos iniciais.
     }
 
     async isTaskComplete(context) {
-        const prompt = `Você é um juiz. Sua única função é determinar se uma pergunta foi completamente respondida com base nos dados fornecidos.
+        const prompt = `Memória de Trabalho:
+${JSON.stringify(context.workingMemory, null, 2)}
 
-<pergunta_original>
-${context.originalQuestion}
-</pergunta_original>
+Pergunta Original: ${context.originalQuestion}
 
-DADOS COLETADOS ATÉ AGORA:
-${context.results.map(r => `Comando: ${r.command}\nOutput: ${(r.output || r.error || 'vazio').substring(0, 1500)}...`).join('\n---\n') || 'Nenhum'}
-
-A pergunta foi completa e diretamente respondida pelos dados acima?
-- Se a pergunta foi "Quais IPs estão bloqueados?" e os dados mostram uma lista de IPs, a resposta
-       é SIM.
-- Se a pergunta foi "Quais IPs estão bloqueados?" e os dados mostram apenas uma lista de 'jails'
-       do fail2ban, a resposta é NÃO.
-
-Responda APENAS com um objeto JSON, nada mais.
-{"isComplete": true} ou {"isComplete": false, "reasoning": "Breve motivo pelo qual não está completo. Ex: 'Falta a lista de IPs para cada jail.' "}`;
+A pergunta foi COMPLETAMENTE respondida com os dados na memória?
+Responda APENAS: {"isComplete": true} ou {"isComplete": false, "reasoning": "o que falta"}`;
 
         try {
             const response = await this.ai.askCommand(prompt, context.systemContext);
@@ -146,27 +145,46 @@ Responda APENAS com um objeto JSON, nada mais.
     }
 
     async planNextCommands(context, reason) {
-        const prompt = `O assistente está tentando responder a uma pergunta, mas a tarefa ainda não está completa.
-${reason ? `Motivo: ${reason}` : ''}
+        const prompt = `Memória de Trabalho:
+${JSON.stringify(context.workingMemory, null, 2)}
 
-<pergunta_original>
-${context.originalQuestion}
-</pergunta_original>
+Tarefa incompleta porque: ${reason}
 
-HISTÓRICO DE COMANDOS E RESULTADOS:
-${context.results.map(r => `Comando: ${r.command}\nOutput: ${(r.output || r.error || 'vazio').substring(0, 1500)}...`).join('\n---\n') || 'Nenhum'}
+REGRAS OBRIGATÓRIAS:
+1. Se discovered.lists tem items, DEVE iterar sobre CADA um
+2. Se encontrou uma lista em output anterior, DEVE executar comando para cada item
+3. Comandos devem extrair dados específicos, não genéricos
 
-Qual é o próximo comando ou sequência de comandos que devem ser executados para obter a informação que falta?
-Pense passo a passo. Se o último comando listou itens (ex: jails, containers), o próximo passo é inspecionar cada um desses itens.
-
-Responda APENAS com um objeto JSON contendo a lista de próximos comandos.
-{"commands": ["comando1", "comando2"]}`;
+Responda APENAS:
+{
+  "commands": ["comando1", "comando2"],
+  "updateMemory": {
+    "hypothesis": "novo raciocínio sobre o que fazer",
+    "discovered": {
+      "lists": [...],
+      "entities": {...},
+      "needsIteration": [...]
+    }
+  }
+}`;
 
         try {
             const response = await this.ai.askCommand(prompt, context.systemContext);
             if (!response) throw new Error('IA não retornou resposta para planNextCommands');
             const jsonStr = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/)?.[1] || response;
-            return JSON.parse(jsonStr);
+            const result = JSON.parse(jsonStr);
+
+            // Update working memory if provided
+            if (result.updateMemory) {
+                if (result.updateMemory.hypothesis) {
+                    context.workingMemory.hypothesis = result.updateMemory.hypothesis;
+                }
+                if (result.updateMemory.discovered) {
+                    Object.assign(context.workingMemory.discovered, result.updateMemory.discovered);
+                }
+            }
+
+            return result;
         } catch (error) {
             console.error(chalk.red('❌ Erro ao planejar próximos comandos:'), error.message);
             return { commands: [] };
@@ -175,23 +193,18 @@ Responda APENAS com um objeto JSON contendo a lista de próximos comandos.
 
     async synthesizeDirectAnswer(context) {
         if (!context.results.length) return { directAnswer: "Nenhum comando foi executado, não foi possível obter uma resposta." };
-        const prompt = `Sua única tarefa é analisar os resultados de comandos e responder à pergunta original do usuário de forma direta.
 
-<pergunta_original>
-${context.originalQuestion}
-</pergunta_original>
+        // Use working memory data for synthesis
+        const prompt = `Memória de Trabalho Final:
+${JSON.stringify(context.workingMemory, null, 2)}
 
-HISTÓRICO DE COMANDOS E RESULTADOS:
-${context.results.map(r => `Comando: ${r.command}\nResultado:\n${(r.output || r.error || 'vazio').substring(0, 4000)}`).join('\n---\n')}
+Pergunta Original: ${context.originalQuestion}
 
-INSTRUÇÕES:
-1. Use APENAS os dados reais do histórico para formular a resposta.
-2. Responda à pergunta de forma concisa e direta.
-3. Se os dados não forem suficientes, afirme que a resposta não pôde ser encontrada com os dados coletados.
-4. NUNCA invente dados ou dê exemplos.
+Use APENAS os dados em workingMemory.dataExtracted para responder.
+Se há dados sobre jails/IPs, liste-os com números exatos.
+Seja direto e específico.
 
-Responda APENAS com um objeto JSON.
-{"directAnswer": "A resposta final e direta aqui."}`;
+Responda APENAS: {"directAnswer": "resposta direta com dados reais"}`;
 
         try {
             const response = await this.ai.askCommand(prompt, context.systemContext);
@@ -216,12 +229,75 @@ Responda APENAS com um objeto JSON.
             if (result) {
                 context.executedCommands.push(command);
                 context.results.push(result);
+
+                // Extract data and update working memory
+                this.extractDataFromOutput(context, command, result.output || '');
             }
             return true;
         } catch (error) {
             context.results.push({ command, error: error.message });
             return true;
         }
+    }
+
+    extractDataFromOutput(context, command, output) {
+        // Extract lists (common patterns)
+        if (command.includes('fail2ban-client status') && !command.includes('fail2ban-client status ')) {
+            // Main status command - extract jail list
+            const jailMatch = output.match(/Jail list:\s*([^\n]+)/i);
+            if (jailMatch) {
+                const jails = jailMatch[1].trim().split(/[,\s]+/).filter(j => j);
+                context.workingMemory.discovered.lists = jails;
+                context.workingMemory.discovered.entities.total_jails = jails.length;
+                context.workingMemory.discovered.needsIteration = ['check each jail for blocked IPs'];
+            }
+        } else if (command.includes('fail2ban-client status ')) {
+            // Jail-specific status - extract IPs
+            const jailName = command.match(/status\s+(\S+)$/)?.[1];
+            if (jailName) {
+                const ips = output.match(/\d+\.\d+\.\d+\.\d+/g) || [];
+                const totalMatch = output.match(/Total banned:\s*(\d+)/i);
+
+                if (!context.workingMemory.dataExtracted.jails) {
+                    context.workingMemory.dataExtracted.jails = {};
+                }
+                context.workingMemory.dataExtracted.jails[jailName] = {
+                    ips: ips,
+                    count: totalMatch ? parseInt(totalMatch[1]) : ips.length
+                };
+            }
+        } else if (command.includes('docker ps')) {
+            // Docker containers
+            const lines = output.split('\n').slice(1);
+            const containers = lines.filter(l => l.trim()).map(line => {
+                const parts = line.split(/\s{2,}/);
+                return parts[6] || parts[0]; // container name or ID
+            }).filter(c => c);
+            if (containers.length > 0) {
+                context.workingMemory.discovered.lists = containers;
+                context.workingMemory.discovered.entities.total_containers = containers.length;
+            }
+        } else if (command.includes('systemctl') && command.includes('--failed')) {
+            // Failed services
+            const services = [];
+            const lines = output.split('\n');
+            for (const line of lines) {
+                if (line.includes('.service') && line.includes('failed')) {
+                    const match = line.match(/●?\s*(\S+\.service)/);
+                    if (match) services.push(match[1]);
+                }
+            }
+            if (services.length > 0) {
+                context.workingMemory.discovered.lists = services;
+                context.workingMemory.discovered.entities.failed_services = services.length;
+            }
+        }
+
+        // Store raw output for reference
+        if (!context.workingMemory.dataExtracted.raw) {
+            context.workingMemory.dataExtracted.raw = {};
+        }
+        context.workingMemory.dataExtracted.raw[command] = output.substring(0, 500);
     }
 
     isCommandDangerous(command) {

@@ -28,7 +28,8 @@
       "Read(//private/var/log/**)",
       "Read(//private/var/logs/**)",
       "WebSearch",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "mcp__zen__analyze"
     ],
     "deny": [],
     "ask": []

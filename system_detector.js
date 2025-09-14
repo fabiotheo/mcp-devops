@@ -6,7 +6,37 @@ class SystemDetector {
     constructor() {
         this.systemInfo = null;
         this.installedPackages = null;
+        this.canUseSudo = this.checkSudoCapability();
         this.detectSystem();
+    }
+
+    // Verifica se pode usar sudo sem senha
+    checkSudoCapability() {
+        try {
+            // Tenta executar sudo -n (non-interactive) true
+            execSync('sudo -n true', { stdio: 'ignore' });
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    // Helper para executar comandos com sudo quando possível
+    execWithSudo(command, options = {}) {
+        try {
+            // Se pode usar sudo, tenta
+            if (this.canUseSudo) {
+                return execSync(`sudo ${command}`, { encoding: 'utf8', ...options }).trim();
+            }
+            // Senão, tenta sem sudo (pode falhar mas é melhor que nada)
+            return execSync(command, { encoding: 'utf8', ...options }).trim();
+        } catch (error) {
+            // Se falhar, retorna null ou string vazia dependendo do contexto
+            if (options.returnNull) {
+                return null;
+            }
+            return '';
+        }
     }
 
     detectSystem() {

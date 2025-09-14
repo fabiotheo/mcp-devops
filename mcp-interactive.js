@@ -147,7 +147,8 @@ ${chalk.cyan('═══ Dicas ═══')}
 
     async resetContext() {
         this.mcp.contextManager.reset();
-        return chalk.green('✓ Contexto reiniciado');
+        this.mcp.sessionPermissions.clear();  // Limpa permissões ao resetar contexto
+        return chalk.green('✓ Contexto e permissões reiniciados');
     }
 
     async saveSession(name) {
@@ -540,7 +541,7 @@ class MCPInteractive extends EventEmitter {
             if (question.toLowerCase().includes(service)) {
                 for (const cmd of commands) {
                     // Executa apenas se o usuário está pedindo informações atuais
-                    if (question.match(/(?:status|estado|ativas?|rodando|executando|quais|liste|mostrar?)/i)) {
+                    if (question.match(/(?:status|estado|ativas?|rodando|executando|quais|quant|liste|mostrar?|habilitad|regras?|bloqueado)/i)) {
                         const result = await this.executeCommand(cmd);
                         if (result) {
                             commandResults.push(result);
@@ -570,7 +571,7 @@ class MCPInteractive extends EventEmitter {
 
     // Executa um comando de forma segura com permissão
     async executeCommand(command) {
-        const { execSync } = await import('child_process');
+        const { spawn } = await import('child_process');
 
         try {
             // Adiciona sudo se necessário para comandos que normalmente precisam
@@ -620,48 +621,99 @@ class MCPInteractive extends EventEmitter {
 
             console.log(chalk.cyan(`\n▶ Executando: ${actualCommand}`));
 
-            const output = execSync(actualCommand, {
-                encoding: 'utf8',
-                timeout: 5000,  // Timeout de 5 segundos
-                maxBuffer: 1024 * 1024  // 1MB buffer
+            // Usa spawn para maior segurança (previne command injection)
+            return new Promise((resolve) => {
+                // Pega timeout da configuração ou usa padrão de 15 segundos
+                const commandTimeout = this.config.command_timeout || 15000;
+
+                // Executa comando via shell para suportar pipes e redirecionamentos
+                const child = spawn(actualCommand, [], {
+                    shell: true,  // Necessário para comandos com pipes
+                    encoding: 'utf8',
+                    timeout: commandTimeout
+                });
+
+                let stdout = '';
+                let stderr = '';
+                let outputShown = false;
+
+                child.stdout.on('data', (data) => {
+                    stdout += data.toString();
+                });
+
+                child.stderr.on('data', (data) => {
+                    stderr += data.toString();
+                });
+
+                child.on('close', (code) => {
+                    if (code === 0) {
+                        console.log(chalk.green('✓ Sucesso'));
+
+                        // Mostra o output do comando com formatação melhorada
+                        if (stdout && stdout.trim() && !outputShown) {
+                            console.log();
+                            console.log(chalk.bold.cyan('📄 Resultado do comando:'));
+                            console.log(chalk.gray('─'.repeat(45)));
+                            console.log(chalk.yellow(stdout.substring(0, 500)));
+                            if (stdout.length > 500) {
+                                console.log(chalk.gray('... (output truncado para 500 caracteres)'));
+                            }
+                            console.log(chalk.gray('─'.repeat(45)));
+                            console.log();
+                        }
+
+                        resolve({
+                            command: actualCommand,
+                            output: stdout.trim(),
+                            exitCode: 0,
+                            timestamp: new Date().toISOString()
+                        });
+                    } else {
+                        // Comando falhou mas pode ter output útil
+                        if (stdout || stderr) {
+                            console.log(chalk.yellow(`⚠️ Comando retornou erro mas tem output\n`));
+
+                            if ((stdout + stderr).trim()) {
+                                console.log(chalk.bold.yellow('📄 Output do erro:'));
+                                console.log(chalk.gray('─'.repeat(45)));
+                                console.log(chalk.red((stdout + stderr).substring(0, 500)));
+                                if ((stdout + stderr).length > 500) {
+                                    console.log(chalk.gray('... (output truncado)'));
+                                }
+                                console.log(chalk.gray('─'.repeat(45)));
+                                console.log();
+                            }
+
+                            resolve({
+                                command: actualCommand,
+                                output: (stdout + stderr).trim(),
+                                exitCode: code || 1,
+                                error: `Exit code: ${code}`,
+                                timestamp: new Date().toISOString()
+                            });
+                        } else {
+                            console.log(chalk.red(`✗ Comando falhou com código ${code}\n`));
+                            resolve(null);
+                        }
+                    }
+                });
+
+                child.on('error', (err) => {
+                    console.log(chalk.red(`✗ Falha ao executar: ${err.message}\n`));
+                    resolve(null);
+                });
+
+                // Timeout manual caso o timeout do spawn não funcione
+                setTimeout(() => {
+                    if (!child.killed) {
+                        child.kill('SIGTERM');
+                        console.log(chalk.yellow(`⚠️ Comando excedeu o tempo limite de ${commandTimeout/1000}s\n`));
+                    }
+                }, commandTimeout);
             });
 
-            console.log(chalk.green('✓ Sucesso'));
-
-            // Mostra o output do comando com formatação melhorada
-            if (output && output.trim()) {
-                console.log();
-                console.log(chalk.bold.cyan('📄 Resultado do comando:'));
-                console.log(chalk.gray('─'.repeat(45)));
-                console.log(chalk.yellow(output.substring(0, 500)));
-                if (output.length > 500) {
-                    console.log(chalk.gray('... (output truncado para 500 caracteres)'));
-                }
-                console.log(chalk.gray('─'.repeat(45)));
-            }
-            console.log();  // Linha em branco para separação
-
-            return {
-                command: actualCommand,
-                output: output.trim(),
-                exitCode: 0,
-                timestamp: new Date().toISOString()
-            };
-
         } catch (error) {
-            // Se o comando falhou mas tem output (stderr), ainda pode ser útil
-            if (error.stderr || error.stdout) {
-                console.log(chalk.yellow(`⚠️ Comando retornou erro mas tem output\n`));
-                return {
-                    command: command,
-                    output: (error.stdout || '') + (error.stderr || ''),
-                    exitCode: error.status || 1,
-                    error: error.message,
-                    timestamp: new Date().toISOString()
-                };
-            }
-
-            console.log(chalk.red(`✗ Falha ao executar: ${error.message}\n`));
+            console.log(chalk.red(`✗ Erro inesperado: ${error.message}\n`));
             return null;
         }
     }
@@ -753,31 +805,38 @@ class MCPInteractive extends EventEmitter {
     displayFormattedResponse(response) {
         console.log();  // Nova linha após limpar o spinner
 
-        // Divide a resposta em linhas para processar
-        const lines = response.split('\n');
-        let inCodeBlock = false;
-        let codeBlockContent = [];
+        // Primeiro, processa blocos de código de forma robusta
+        let processedResponse = response;
+        const codeBlocks = [];
+        let blockIndex = 0;
 
-        for (const line of lines) {
-            // Detecta blocos de código
-            if (line.startsWith('```')) {
-                if (inCodeBlock) {
-                    // Fim do bloco de código
+        // Extrai e substitui blocos de código temporariamente
+        processedResponse = processedResponse.replace(/```[\s\S]*?```/g, (match) => {
+            const placeholder = `___CODEBLOCK_${blockIndex}___`;
+            codeBlocks[blockIndex] = match;
+            blockIndex++;
+            return placeholder;
+        });
+
+        // Processa linhas com formatação
+        const lines = processedResponse.split('\n');
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+
+            // Restaura blocos de código
+            if (line.includes('___CODEBLOCK_')) {
+                const match = line.match(/___CODEBLOCK_(\d+)___/);
+                if (match) {
+                    const idx = parseInt(match[1]);
+                    const codeBlock = codeBlocks[idx];
+                    // Remove os ``` e extrai o conteúdo
+                    const codeContent = codeBlock.replace(/```[\s\S]*?\n([\s\S]*?)```/, '$1').trim();
                     console.log(chalk.gray('```'));
-                    console.log(chalk.green(codeBlockContent.join('\n')));
+                    console.log(chalk.green(codeContent));
                     console.log(chalk.gray('```'));
-                    codeBlockContent = [];
-                    inCodeBlock = false;
-                } else {
-                    // Início do bloco de código
-                    inCodeBlock = true;
+                    continue;
                 }
-                continue;
-            }
-
-            if (inCodeBlock) {
-                codeBlockContent.push(line);
-                continue;
             }
 
             // Aplica cores baseado no conteúdo

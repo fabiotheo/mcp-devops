@@ -706,11 +706,13 @@ class MCPInteractive extends EventEmitter {
         console.log(chalk.blue('🔄 Tentando carregar histórico...'));
         await this.loadCombinedHistory();
 
-        // Configurar Bracketed Paste Mode
-        this.setupBracketedPasteMode();
+        // Configurar Bracketed Paste Mode - DISABLED (was causing input issues)
+        // this.setupBracketedPasteMode();
 
         // Configurar listeners
-        // Line handling is now done in setupBracketedPasteMode
+        this.replInterface.rl.on('line', async (input) => {
+            await this.processInput(input);
+        });
         this.replInterface.on('interrupt', this.handleInterrupt.bind(this));
 
         // Configurar auto-save

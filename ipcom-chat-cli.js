@@ -407,17 +407,43 @@ machineCmd
         }
     });
 
-// ==================== COMANDO PADRÃO (MODO INTERATIVO) ====================
+// ==================== COMANDO CHAT (MODO INTERATIVO) ====================
 
 program
+    .command('chat')
+    .description('Iniciar modo interativo')
+    .option('--user <username>', 'Usar perfil de usuário específico')
     .option('--local', 'Usar apenas histórico local da máquina')
     .option('--hybrid', 'Usar modo híbrido (todos os históricos)')
     .action(async (options) => {
         // Redirecionar para modo interativo com flags apropriadas
         const args = ['mcp-interactive.js'];
 
+        if (options.user) args.push(`--user=${options.user}`);
         if (options.local) args.push('--local');
         if (options.hybrid) args.push('--hybrid');
+
+        const child = spawn('node', args, {
+            stdio: 'inherit',
+            cwd: path.dirname(new URL(import.meta.url).pathname)
+        });
+
+        child.on('error', (error) => {
+            console.error(chalk.red(`❌ Erro ao iniciar modo interativo: ${error.message}`));
+            process.exit(1);
+        });
+
+        child.on('exit', (code) => {
+            process.exit(code || 0);
+        });
+    });
+
+// ==================== COMANDO PADRÃO (MODO INTERATIVO) ====================
+
+program
+    .action(async () => {
+        // Se nenhum comando foi especificado, inicia modo interativo
+        const args = ['mcp-interactive.js'];
 
         const child = spawn('node', args, {
             stdio: 'inherit',

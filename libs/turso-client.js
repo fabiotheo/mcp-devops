@@ -512,15 +512,22 @@ export default class TursoHistoryClient {
                 break;
 
             default:
-                // Busca em todas as tabelas
+                // Busca em todas as tabelas - precisa especificar colunas para compatibilidade
                 sql = `
-                    SELECT 'global' as source, * FROM history_global
+                    SELECT 'global' as source, id, command, response, timestamp,
+                           machine_id, user_id, session_id, tokens_used, execution_time_ms
+                    FROM history_global
                     WHERE command LIKE ? OR response LIKE ?
                     UNION ALL
-                    SELECT 'user' as source, * FROM history_user
+                    SELECT 'user' as source, id, command, response, timestamp,
+                           machine_id, user_id, session_id, tokens_used, execution_time_ms
+                    FROM history_user
                     WHERE command LIKE ? OR response LIKE ?
                     UNION ALL
-                    SELECT 'machine' as source, * FROM history_machine
+                    SELECT 'machine' as source, id, command, response, timestamp,
+                           machine_id, NULL as user_id, session_id,
+                           NULL as tokens_used, NULL as execution_time_ms
+                    FROM history_machine
                     WHERE command LIKE ? OR response LIKE ?
                     ORDER BY timestamp DESC
                     LIMIT ?`;

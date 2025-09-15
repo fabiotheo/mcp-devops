@@ -46,7 +46,24 @@ class MCPSetup {
     }
 
     async setup() {
-        console.log('🚀 Configurando MCP Terminal Assistant...\n');
+        console.log('\n══════════════════════════════════════════════════════════════════');
+        console.log('         MCP TERMINAL ASSISTANT - SISTEMA DE INSTALAÇÃO');
+        console.log('══════════════════════════════════════════════════════════════════');
+        console.log();
+        console.log('👨‍💻 Desenvolvido por: Fábio Fernandes Theodoro');
+        console.log('🏢 Empresa: IP COM COMÉRCIO DE EQUIPAMENTOS DE TELEFONIA LTDA');
+        console.log('📧 Contato: fabio@ipcom.com.br');
+        console.log('🌐 Site: https://ipcom.com.br');
+        console.log('📦 GitHub: https://github.com/fabiotheo/mcp-devops');
+        console.log();
+        console.log('🎯 Finalidade: Sistema inteligente de assistência para equipes de');
+        console.log('   suporte e DevOps, especializado em administração de servidores');
+        console.log('   Linux/Unix com análise automática de erros e orquestração');
+        console.log('   inteligente de comandos.');
+        console.log();
+        console.log('══════════════════════════════════════════════════════════════════');
+        console.log();
+        console.log('🚀 Iniciando configuração do MCP Terminal Assistant...\n');
 
         try {
             // 1. Criar diretórios
@@ -70,11 +87,23 @@ class MCPSetup {
             // 7. Salvar versão atual
             await this.saveVersion();
 
-            console.log('\n✅ Instalação concluída com sucesso!');
-            console.log('\n📋 Próximos passos:');
+            console.log('\n══════════════════════════════════════════════════════════════════');
+            console.log('✅ INSTALAÇÃO CONCLUÍDA COM SUCESSO!');
+            console.log('══════════════════════════════════════════════════════════════════');
+            console.log();
+            console.log('📋 Próximos passos:');
             console.log('1. Reinicie seu terminal ou execute: source ~/.zshrc');
             console.log('2. Teste com: ask "como listar arquivos por tamanho"');
             console.log('3. Execute um comando que falhe para ver o monitoramento');
+            console.log();
+            console.log('💡 Comandos disponíveis:');
+            console.log('   • mcp-chat - Interface interativa com IA');
+            console.log('   • ask "sua pergunta" - Perguntas diretas');
+            console.log('   • mcp-configure - Reconfigurar o sistema');
+            console.log();
+            console.log('📧 Suporte: fabio@ipcom.com.br');
+            console.log('📦 Contribua: https://github.com/fabiotheo/mcp-devops');
+            console.log('══════════════════════════════════════════════════════════════════');
 
         } catch (error) {
             console.error('\n❌ Erro durante a instalação:', error.message);
@@ -84,6 +113,16 @@ class MCPSetup {
 
     async upgrade() {
         try {
+            if (!this.isAutoMode) {
+                console.log('\n══════════════════════════════════════════════════════════════════');
+                console.log('         MCP TERMINAL ASSISTANT - ATUALIZAÇÃO');
+                console.log('══════════════════════════════════════════════════════════════════');
+                console.log();
+                console.log('👨‍💻 Desenvolvido por: Fábio Fernandes Theodoro');
+                console.log('📦 GitHub: https://github.com/fabiotheo/mcp-devops');
+                console.log('══════════════════════════════════════════════════════════════════');
+                console.log();
+            }
             console.log('🔄 Atualizando MCP Terminal Assistant...\n');
 
             // 1. Verificar a versão atual
@@ -153,11 +192,24 @@ class MCPSetup {
             // 9. Salvar nova versão
             await this.saveVersion();
 
-            console.log('\n✅ Atualização concluída com sucesso!');
+            if (!this.isAutoMode) {
+                console.log('\n══════════════════════════════════════════════════════════════════');
+                console.log('✅ ATUALIZAÇÃO CONCLUÍDA COM SUCESSO!');
+                console.log('══════════════════════════════════════════════════════════════════');
+                console.log();
+            } else {
+                console.log('\n✅ Atualização automática concluída com sucesso!');
+            }
             console.log('\n📋 Próximos passos:');
             console.log('1. Reinicie seu terminal ou execute: source ~/.zshrc');
             console.log('2. Teste com: ask "como listar arquivos por tamanho"');
             console.log('3. Execute um comando que falhe para ver o monitoramento');
+            console.log();
+            console.log('📧 Suporte: fabio@ipcom.com.br');
+            console.log('📦 Contribua: https://github.com/fabiotheo/mcp-devops');
+            if (!this.isAutoMode) {
+                console.log('══════════════════════════════════════════════════════════════════');
+            }
 
         } catch (error) {
             console.error('\n❌ Erro durante a atualização:', error.message);

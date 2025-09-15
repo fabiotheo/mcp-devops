@@ -655,6 +655,21 @@ class MCPInteractive extends EventEmitter {
         console.log(chalk.white.bold(`                    MCP Terminal Assistant v${this.version || '1.0.22'}`));
         console.log(chalk.yellow('                        Modo Interativo Ativado'));
         console.log(chalk.cyan('═'.repeat(80)));
+
+        // Informações de autoria
+        console.log();
+        console.log(chalk.gray('👨‍💻 Desenvolvido por:'), chalk.white('Fábio Fernandes Theodoro'));
+        console.log(chalk.gray('🏢 Empresa:'), chalk.white('IP COM COMÉRCIO DE EQUIPAMENTOS DE TELEFONIA LTDA'));
+        console.log(chalk.gray('📧 Contato:'), chalk.white('fabio@ipcom.com.br'));
+        console.log(chalk.gray('🌐 Site:'), chalk.white('https://ipcom.com.br'));
+        console.log(chalk.gray('📦 GitHub:'), chalk.white('https://github.com/fabiotheo/mcp-devops'));
+        console.log();
+        console.log(chalk.cyan('═'.repeat(80)));
+        console.log(chalk.yellow.bold('🎯 Finalidade:'));
+        console.log(chalk.white('Sistema inteligente de assistência para equipes de suporte e DevOps,'));
+        console.log(chalk.white('especializado em administração de servidores Linux/Unix com análise'));
+        console.log(chalk.white('automática de erros e orquestração inteligente de comandos.'));
+        console.log(chalk.cyan('═'.repeat(80)));
         console.log();
 
         // Informações do sistema

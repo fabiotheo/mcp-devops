@@ -335,13 +335,20 @@ class REPLInterface extends EventEmitter {
     constructor() {
         super();
         this.rl = null;
-        this.multilineBuffer = '';
-        this.inMultiline = false;
         this.multilineInput = null;
         this.keybindingManager = null;
+
+        // Propriedades para o modo de colagem
+        this.isPasting = false;
+        this.pasteBuffer = '';
     }
 
     initialize() {
+        // Ativa o modo de colagem no terminal
+        if (process.stdout.isTTY) {
+            process.stdout.write('\x1b[?2004h');
+        }
+
         this.rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
@@ -349,6 +356,41 @@ class REPLInterface extends EventEmitter {
             completer: this.autoComplete.bind(this),
             terminal: true
         });
+
+        // --- NOVA LÓGICA DE CAPTURA DE INPUT (RAW MODE) ---
+        const PASTE_START = '\x1b[200~';
+        const PASTE_END = '\x1b[201~';
+
+        const originalStdinOn = process.stdin.on.bind(process.stdin);
+
+        process.stdin.on = (event, listener) => {
+            if (event === 'data') {
+                const customListener = (chunk) => {
+                    const data = chunk.toString();
+                    if (data === PASTE_START) {
+                        this.isPasting = true;
+                        this.pasteBuffer = '';
+                        return;
+                    }
+                    if (data === PASTE_END) {
+                        this.isPasting = false;
+                        const sanitizedPaste = this.pasteBuffer.replace(/\r/g, '\n');
+                        listener(sanitizedPaste);
+                        this.pasteBuffer = '';
+                        return;
+                    }
+                    if (this.isPasting) {
+                        this.pasteBuffer += data;
+                        return;
+                    }
+                    listener(chunk);
+                };
+                originalStdinOn(event, customListener);
+            } else {
+                originalStdinOn(event, listener);
+            }
+        };
+        // --- FIM DA NOVA LÓGICA ---
 
         // Inicializa MultiLineInput
         this.multilineInput = new MultiLineInput({
@@ -554,6 +596,10 @@ class REPLInterface extends EventEmitter {
     }
 
     close() {
+        // Desativa o modo de colagem antes de fechar
+        if (process.stdout.isTTY) {
+            process.stdout.write('\x1b[?2004l');
+        }
         if (this.rl) {
             this.rl.close();
         }
@@ -563,6 +609,7 @@ class REPLInterface extends EventEmitter {
         process.stdout.write(text);
     }
 }
+
 
 class MCPInteractive extends EventEmitter {
     constructor(config = {}) {

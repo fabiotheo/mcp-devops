@@ -827,18 +827,26 @@ class MCPInteractive extends EventEmitter {
                 console.log(chalk.yellow('⚠️  Turso client não disponível'));
             }
 
-            // 3. Remover duplicatas e reverter (mais recente primeiro para readline)
-            const uniqueHistory = [...new Set(combinedHistory)].reverse();
+            // 3. Remover duplicatas mantendo a ordem original (mais antigo primeiro)
+            const uniqueHistory = [...new Set(combinedHistory)];
             console.log(chalk.gray(`🔄 Histórico único: ${uniqueHistory.length} comandos`));
 
-            // 4. Carregar no readline
+            // 4. Carregar no readline - o readline espera ordem do mais NOVO para o mais ANTIGO
+            // O primeiro item do array history é o mais recente
             this.replInterface.rl.history = [];
-            uniqueHistory.forEach(cmd => {
-                this.replInterface.rl.history.unshift(cmd); // unshift para ordem correta
-            });
+
+            // Percorrer do final para o início (do mais novo para o mais antigo)
+            for (let i = uniqueHistory.length - 1; i >= 0; i--) {
+                this.replInterface.rl.history.push(uniqueHistory[i]);
+            }
+
+            // Resetar o índice do histórico para apontar para -1 (nenhum item selecionado)
+            // Isso garante que a primeira seta para cima pegue o último comando
+            this.replInterface.rl.historyIndex = -1;
 
             if (uniqueHistory.length > 0) {
                 console.log(chalk.green(`📚 Carregados ${uniqueHistory.length} comandos do histórico`));
+                console.log(chalk.gray(`   Último comando: ${uniqueHistory[uniqueHistory.length - 1]}`));
             } else {
                 console.log(chalk.yellow('📚 Nenhum comando encontrado no histórico'));
             }

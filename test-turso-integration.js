@@ -61,6 +61,13 @@ class TursoIntegrationTests {
 
             if (config.turso_url && config.turso_token) {
                 this.pass(testName, 'Configuração encontrada e válida');
+
+                // Verificar se é config de admin ou cliente
+                if (config.is_admin_config) {
+                    this.warn('Tipo de Config', 'Configuração de ADMIN detectada');
+                } else {
+                    this.pass('Tipo de Config', 'Configuração de CLIENTE detectada');
+                }
             } else {
                 this.fail(testName, 'Configuração incompleta');
             }
@@ -305,6 +312,24 @@ class TursoIntegrationTests {
         }
     }
 
+    // Testa verificador de schema
+    async testSchemaVerifier() {
+        const testName = 'Verificador de Schema';
+        try {
+            const result = await this.runCommand('node', [
+                'libs/turso-verify-schema.js'
+            ]);
+
+            if (result.code === 0 && result.stdout.includes('RELATÓRIO')) {
+                this.pass(testName, 'Verificação de schema executada com sucesso');
+            } else {
+                this.warn(testName, 'Verificação executada mas com avisos');
+            }
+        } catch (error) {
+            this.fail(testName, error.message);
+        }
+    }
+
     // Cleanup: deletar usuário de teste
     async cleanup() {
         const testName = 'Limpeza';
@@ -350,6 +375,7 @@ class TursoIntegrationTests {
 
         const tests = [
             () => this.testTursoConfig(),
+            () => this.testSchemaVerifier(),
             () => this.testUserCreation(),
             () => this.testUserList(),
             () => this.testUserUpdate(),

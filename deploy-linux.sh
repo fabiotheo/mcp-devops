@@ -171,9 +171,9 @@ pnpm install
 echo "🚀 Executando setup..."
 node setup.js --auto
 
-# Registrar máquina no Turso
-echo "📊 Registrando máquina..."
-node libs/machine-identity.js register
+# Configurar Turso para cliente (NÃO cria schema!)
+echo "📊 Configurando cliente Turso..."
+node libs/turso-client-setup.js --auto
 
 echo "✅ Instalação concluída!"
 INSTALL_SCRIPT

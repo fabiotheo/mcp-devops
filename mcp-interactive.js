@@ -697,10 +697,10 @@ class MCPInteractive extends EventEmitter {
         this.replInterface.initialize();
         console.log(chalk.blue('✅ Interface REPL inicializada'));
 
-        // Inicializar sistema de paste
-        console.log(chalk.blue('🔄 Inicializando sistema de paste...'));
-        this.pasteManager = new PasteManager(this.replInterface.rl, this.pasteAttachments);
-        console.log(chalk.blue('✅ Sistema de paste inicializado'));
+        // Inicializar sistema de paste - TEMPORARILY DISABLED
+        // console.log(chalk.blue('🔄 Inicializando sistema de paste...'));
+        // this.pasteManager = new PasteManager(this.replInterface.rl, this.pasteAttachments);
+        // console.log(chalk.blue('✅ Sistema de paste inicializado'));
 
         // Carregar histórico combinado (local + Turso) no readline
         console.log(chalk.blue('🔄 Tentando carregar histórico...'));
@@ -812,36 +812,36 @@ class MCPInteractive extends EventEmitter {
         this.replInterface.rl.removeAllListeners('line');
 
         this.replInterface.rl.on('line', async (input) => {
-            // Check for paste commands first
-            if (input.startsWith('/expand ')) {
-                self.pasteManager.handleExpandCommand(input);
-                self.replInterface.rl.prompt();
-                return;
-            }
+            // PASTE COMMANDS TEMPORARILY DISABLED
+            // if (input.startsWith('/expand ')) {
+            //     self.pasteManager.handleExpandCommand(input);
+            //     self.replInterface.rl.prompt();
+            //     return;
+            // }
 
-            if (input.startsWith('/remove ')) {
-                self.pasteManager.handleRemoveCommand(input);
-                self.replInterface.rl.prompt();
-                return;
-            }
+            // if (input.startsWith('/remove ')) {
+            //     self.pasteManager.handleRemoveCommand(input);
+            //     self.replInterface.rl.prompt();
+            //     return;
+            // }
 
-            if (input === '/list') {
-                self.pasteManager.handleListCommand();
-                self.replInterface.rl.prompt();
-                return;
-            }
+            // if (input === '/list') {
+            //     self.pasteManager.handleListCommand();
+            //     self.replInterface.rl.prompt();
+            //     return;
+            // }
 
-            if (input.startsWith('/save ')) {
-                await self.pasteManager.handleSaveCommand(input);
-                self.replInterface.rl.prompt();
-                return;
-            }
+            // if (input.startsWith('/save ')) {
+            //     await self.pasteManager.handleSaveCommand(input);
+            //     self.replInterface.rl.prompt();
+            //     return;
+            // }
 
-            if (input === '/clear-pastes') {
-                self.pasteManager.handleClearPastesCommand();
-                self.replInterface.rl.prompt();
-                return;
-            }
+            // if (input === '/clear-pastes') {
+            //     self.pasteManager.handleClearPastesCommand();
+            //     self.replInterface.rl.prompt();
+            //     return;
+            // }
 
             // Check if we're waiting for paste confirmation
             if (self.waitingForPasteConfirmation) {

@@ -700,6 +700,8 @@ class MCPInteractive extends EventEmitter {
         this.pasteTimer = null;
         this.isPasting = false;
         this.PASTE_TIMEOUT = 50; // 50ms para detectar paste
+        this.waitingForPasteConfirmation = false;
+        this.pendingPasteText = '';
 
         // Configurar listeners
         this.replInterface.on('line', this.handleLineInput.bind(this));
@@ -925,6 +927,20 @@ class MCPInteractive extends EventEmitter {
     }
 
     handleLineInput(line) {
+        // Se estamos esperando confirmação de paste, processar Enter
+        if (this.waitingForPasteConfirmation) {
+            if (line === '') {  // Enter pressionado
+                this.waitingForPasteConfirmation = false;
+                // Processar o texto colado que estava aguardando
+                this.processInput(this.pendingPasteText);
+                this.pendingPasteText = '';
+            } else {
+                // Adicionar mais texto ao buffer
+                this.pendingPasteText += '\n' + line;
+            }
+            return;
+        }
+
         // Detectar paste multilinha
         if (this.pasteTimer) {
             clearTimeout(this.pasteTimer);
@@ -935,23 +951,32 @@ class MCPInteractive extends EventEmitter {
 
         // Configurar timer para detectar fim do paste
         this.pasteTimer = setTimeout(async () => {
-            // Se temos múltiplas linhas, juntá-las
-            let input;
+            // Se temos múltiplas linhas, exibir e aguardar confirmação
             if (this.pasteBuffer.length > 1) {
                 // Múltiplas linhas detectadas - provavelmente um paste
-                input = this.pasteBuffer.join('\n');
-                console.log(chalk.gray('📋 Texto com múltiplas linhas detectado'));
+                const pastedText = this.pasteBuffer.join('\n');
+
+                // Exibir o texto colado
+                console.log(chalk.gray('\n📋 Texto com múltiplas linhas detectado:'));
+                console.log(chalk.cyan('─'.repeat(80)));
+                console.log(pastedText);
+                console.log(chalk.cyan('─'.repeat(80)));
+                console.log(chalk.yellow('Pressione Enter para enviar ou continue digitando...'));
+
+                // Guardar o texto e aguardar confirmação
+                this.pendingPasteText = pastedText;
+                this.waitingForPasteConfirmation = true;
+
+                // Mostrar prompt novamente
+                this.replInterface.prompt();
             } else {
-                // Linha única - entrada normal
-                input = this.pasteBuffer[0];
+                // Linha única - processar normalmente
+                await this.processInput(this.pasteBuffer[0]);
             }
 
             // Limpar buffer
             this.pasteBuffer = [];
             this.pasteTimer = null;
-
-            // Processar o input combinado
-            await this.processInput(input);
         }, this.PASTE_TIMEOUT);
     }
 

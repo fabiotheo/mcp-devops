@@ -373,17 +373,94 @@ class REPLInterface extends EventEmitter {
         });
 
         // Detecta quando o usuário digita "/" para mostrar comandos
-        let lastInput = '';
+        let commandMenuShown = false;
+        let lastLineLength = 0;
+
         this.rl.on('keypress', (char, key) => {
-            if (char === '/' && this.rl.line === '/') {
-                // Se digitou apenas "/", mostra automaticamente as opções
+            const currentLine = this.rl.line;
+
+            // Quando digitar "/" no início da linha
+            if (char === '/' && currentLine === '') {
+                // Aguarda o caractere ser adicionado à linha
                 setImmediate(() => {
-                    if (this.rl.line === '/') {
-                        // Simula TAB para mostrar completions
-                        this.rl.write(null, { name: 'tab' });
+                    if (this.rl.line === '/' && !commandMenuShown) {
+                        // Mostra o menu de comandos automaticamente
+                        const commands = {
+                            '/help': 'Mostrar ajuda e comandos disponíveis',
+                            '/shortcuts': 'Mostrar atalhos de teclado',
+                            '/clear': 'Limpar a tela',
+                            '/reset': 'Resetar contexto da conversa',
+                            '/save': 'Salvar sessão atual',
+                            '/load': 'Carregar sessão salva',
+                            '/model': 'Mudar modelo de IA',
+                            '/exec': 'Executar comando direto',
+                            '/history': 'Mostrar histórico',
+                            '/exit': 'Sair do programa',
+                            '/quit': 'Sair do programa'
+                        };
+
+                        console.log('\n' + chalk.cyan('═══ Comandos Disponíveis ═══'));
+                        for (const [cmd, desc] of Object.entries(commands)) {
+                            console.log(chalk.yellow(cmd.padEnd(12)) + chalk.gray(' - ' + desc));
+                        }
+                        console.log(chalk.cyan('═══════════════════════════════') + '\n');
+
+                        // Reposiciona o cursor e mantém o "/" na linha
+                        this.rl.prompt(true);
+                        commandMenuShown = true;
                     }
                 });
             }
+
+            // Se continuar digitando após "/", filtra os comandos
+            if (currentLine.startsWith('/') && currentLine.length > 1 && commandMenuShown) {
+                setImmediate(() => {
+                    const commands = {
+                        '/help': 'Mostrar ajuda e comandos disponíveis',
+                        '/shortcuts': 'Mostrar atalhos de teclado',
+                        '/clear': 'Limpar a tela',
+                        '/reset': 'Resetar contexto da conversa',
+                        '/save': 'Salvar sessão atual',
+                        '/load': 'Carregar sessão salva',
+                        '/model': 'Mudar modelo de IA',
+                        '/exec': 'Executar comando direto',
+                        '/history': 'Mostrar histórico',
+                        '/exit': 'Sair do programa',
+                        '/quit': 'Sair do programa'
+                    };
+
+                    const filtered = Object.entries(commands).filter(([cmd]) =>
+                        cmd.startsWith(this.rl.line)
+                    );
+
+                    if (filtered.length > 0 && filtered.length < Object.keys(commands).length) {
+                        // Limpa as linhas anteriores do menu (estimativa)
+                        process.stdout.write('\x1B[2K\x1B[1A'.repeat(13));
+
+                        console.log('\n' + chalk.cyan('═══ Comandos Filtrados ═══'));
+                        for (const [cmd, desc] of filtered) {
+                            const typed = this.rl.line;
+                            const remaining = cmd.slice(typed.length);
+                            console.log(
+                                chalk.green(typed) +
+                                chalk.yellow(remaining.padEnd(12 - typed.length)) +
+                                chalk.gray(' - ' + desc)
+                            );
+                        }
+                        console.log(chalk.cyan('═══════════════════════════════') + '\n');
+
+                        // Reposiciona o cursor
+                        this.rl.prompt(true);
+                    }
+                });
+            }
+
+            // Reset quando limpar a linha
+            if (currentLine === '' || !currentLine.startsWith('/')) {
+                commandMenuShown = false;
+            }
+
+            lastLineLength = currentLine.length;
         });
 
 

@@ -97,7 +97,7 @@ class MCPSetup {
             console.log('3. Execute um comando que falhe para ver o monitoramento');
             console.log();
             console.log('💡 Comandos disponíveis:');
-            console.log('   • mcp-chat - Interface interativa com IA');
+            console.log('   • ipcom-chat - Interface interativa com IA');
             console.log('   • ask "sua pergunta" - Perguntas diretas');
             console.log('   • mcp-configure - Reconfigurar o sistema');
             console.log();
@@ -923,8 +923,8 @@ export default class ModelFactory {
             { src: 'configure-ai.js', dest: 'configure-ai.js' },
             { src: 'mcp-configure', dest: 'mcp-configure' },
             { src: 'mcp-interactive.js', dest: 'mcp-interactive.js' },
-            { src: 'mcp-chat', dest: 'mcp-chat' },
-            { src: 'mcp-chat-launcher.sh', dest: 'mcp-chat-launcher.sh' },
+            { src: 'ipcom-chat', dest: 'ipcom-chat' },
+            { src: 'ipcom-chat-launcher.sh', dest: 'ipcom-chat-launcher.sh' },
             { src: 'ai_orchestrator.js', dest: 'ai_orchestrator.js' },
             { src: 'ai_orchestrator_tools.js', dest: 'ai_orchestrator_tools.js' },
             { src: 'ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' }
@@ -1043,8 +1043,8 @@ export default class ModelFactory {
             'configure-ai.js',
             'mcp-configure',
             'mcp-interactive.js',
-            'mcp-chat',
-            'mcp-chat-launcher.sh'
+            'ipcom-chat',
+            'ipcom-chat-launcher.sh'
         ];
 
         for (const script of scripts) {
@@ -1072,8 +1072,8 @@ export default class ModelFactory {
                 { from: path.join(this.mcpDir, 'mcp-assistant.js'), to: path.join(binDir, 'ask') },
                 { from: path.join(this.mcpDir, 'mcp-client.js'), to: path.join(binDir, 'mcp-monitor') },
                 { from: path.join(this.mcpDir, 'mcp-configure'), to: path.join(binDir, 'mcp-configure') },
-                { from: path.join(this.mcpDir, 'mcp-chat-launcher.sh'), to: path.join(binDir, 'mcp-chat') },
-                { from: path.join(this.mcpDir, 'mcp-chat-launcher.sh'), to: path.join(binDir, 'mcp') }
+                { from: path.join(this.mcpDir, 'ipcom-chat-launcher.sh'), to: path.join(binDir, 'ipcom-chat') },
+                { from: path.join(this.mcpDir, 'ipcom-chat-launcher.sh'), to: path.join(binDir, 'ipcom') }
             ];
 
             for (const link of links) {
@@ -1118,8 +1118,8 @@ export default class ModelFactory {
 
                         const globalLinks = [
                             { from: path.join(this.mcpDir, 'mcp-assistant.js'), to: path.join(dir, 'ask') },
-                            { from: path.join(this.mcpDir, 'mcp-chat-launcher.sh'), to: path.join(dir, 'mcp-chat') },
-                            { from: path.join(this.mcpDir, 'mcp-chat-launcher.sh'), to: path.join(dir, 'mcp') }
+                            { from: path.join(this.mcpDir, 'ipcom-chat-launcher.sh'), to: path.join(dir, 'ipcom-chat') },
+                            { from: path.join(this.mcpDir, 'ipcom-chat-launcher.sh'), to: path.join(dir, 'ipcom') }
                         ];
 
                         for (const link of globalLinks) {

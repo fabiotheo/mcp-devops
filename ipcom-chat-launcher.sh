@@ -1,5 +1,5 @@
 #!/bin/bash
-# MCP Chat Launcher Script - Universal (Mac/Linux)
+# IPCOM Chat Launcher Script - Universal (Mac/Linux)
 
 # Diretório de instalação do MCP (funciona em Mac e Linux)
 MCP_DIR="$HOME/.mcp-terminal"

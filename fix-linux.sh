@@ -27,7 +27,7 @@ fi
 if [ -f "$HOME/.mcp-terminal/libs/orchestration-animator.js" ]; then
     echo "✅ Correção aplicada com sucesso!"
     echo ""
-    echo "🎉 Agora você pode executar o mcp-chat normalmente."
+    echo "🎉 Agora você pode executar o ipcom-chat normalmente."
 else
     echo "❌ Erro ao copiar o arquivo."
     exit 1

@@ -39,7 +39,8 @@
       "Bash(./ipcom-chat:*)",
       "Bash(sed:*)",
       "Read(//Users/fabiotheodoro/.local/bin/**)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []

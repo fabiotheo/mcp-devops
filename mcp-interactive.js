@@ -790,10 +790,8 @@ class MCPInteractive extends EventEmitter {
     }
 
     setupBracketedPasteMode() {
-        // Simpler multiline detection without relying on bracketed paste mode
+        // Paste detection for multiline content
         const self = this;
-        this.multilineMode = false;
-        this.multilineBuffer = [];
         this.waitingForPasteConfirmation = false;
         this.pendingPasteText = '';
 
@@ -825,44 +823,6 @@ class MCPInteractive extends EventEmitter {
                 return;
             }
 
-            // Check if we're in multiline mode (user typed /multiline)
-            if (self.multilineMode) {
-                if (input === '/end' || input === '') {
-                    // End multiline mode
-                    self.multilineMode = false;
-                    const content = self.multilineBuffer.join('\n');
-                    self.multilineBuffer = [];
-
-                    if (content.trim()) {
-                        console.log(chalk.cyan('\n📋 Texto multilinha capturado:'));
-                        console.log(chalk.gray('─'.repeat(80)));
-                        console.log(content);
-                        console.log(chalk.gray('─'.repeat(80)));
-                        console.log(chalk.yellow('Pressione Enter para enviar ou digite algo para cancelar\n'));
-
-                        self.pendingPasteText = content;
-                        self.waitingForPasteConfirmation = true;
-                    } else {
-                        console.log(chalk.yellow('Modo multilinha cancelado (vazio)'));
-                    }
-                } else {
-                    // Add to buffer
-                    self.multilineBuffer.push(input);
-                    console.log(chalk.gray(`Linha ${self.multilineBuffer.length} adicionada. Digite /end ou Enter vazio para finalizar.`));
-                }
-                self.replInterface.prompt();
-                return;
-            }
-
-            // Check for /multiline command
-            if (input === '/multiline' || input === '/ml') {
-                self.multilineMode = true;
-                self.multilineBuffer = [];
-                console.log(chalk.cyan('\n📝 Modo multilinha ativado'));
-                console.log(chalk.gray('Digite ou cole seu texto. Finalize com /end ou Enter vazio.\n'));
-                self.replInterface.prompt();
-                return;
-            }
 
             // Normal single-line processing
             await self.processInput(input);
@@ -1029,9 +989,7 @@ class MCPInteractive extends EventEmitter {
         console.log(chalk.cyan('─'.repeat(80)));
         console.log(chalk.gray('💡 Digite'), chalk.cyan('/help'), chalk.gray('para comandos |'),
                     chalk.cyan('/shortcuts'), chalk.gray('para atalhos |'),
-                    chalk.cyan('/multiline'), chalk.gray('para modo multilinha'));
-        console.log(chalk.gray('   '), chalk.cyan('/exit'), chalk.gray('para sair |'),
-                    chalk.gray('Use'), chalk.cyan('/ml'), chalk.gray('como atalho para /multiline'));
+                    chalk.cyan('/exit'), chalk.gray('para sair'));
         console.log(chalk.cyan('─'.repeat(80)));
         console.log();
     }

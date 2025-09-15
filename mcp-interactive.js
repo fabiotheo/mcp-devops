@@ -782,23 +782,32 @@ class MCPInteractive extends EventEmitter {
     }
 
     async loadCombinedHistory() {
-        if (!this.replInterface.rl) return;
+        console.log(chalk.gray('🔍 Iniciando carregamento do histórico...'));
+
+        if (!this.replInterface.rl) {
+            console.log(chalk.yellow('⚠️  Interface readline não disponível'));
+            return;
+        }
 
         const combinedHistory = [];
 
         try {
             // 1. Carregar histórico local (PersistentHistory)
+            console.log(chalk.gray(`📂 Histórico local: ${this.persistentHistory.history.length} comandos`));
             if (this.persistentHistory.history.length > 0) {
                 combinedHistory.push(...this.persistentHistory.history);
             }
 
             // 2. Carregar histórico do Turso se disponível
             if (this.tursoClient) {
+                console.log(chalk.gray('🔗 Carregando histórico do Turso...'));
                 try {
                     const tursoHistory = await this.tursoClient.getHistory(50); // Últimos 50 comandos
+                    console.log(chalk.gray(`📊 Turso retornou: ${tursoHistory.length} entradas`));
 
                     // Extrair apenas os comandos (sem as respostas)
                     const tursoCommands = tursoHistory.map(h => h.command).filter(cmd => cmd);
+                    console.log(chalk.gray(`💬 Comandos válidos do Turso: ${tursoCommands.length}`));
 
                     // Adicionar comandos do Turso que não estão no histórico local
                     tursoCommands.forEach(cmd => {
@@ -807,12 +816,15 @@ class MCPInteractive extends EventEmitter {
                         }
                     });
                 } catch (error) {
-                    // Silenciosamente falha se Turso não estiver disponível
+                    console.log(chalk.yellow(`⚠️  Erro ao carregar do Turso: ${error.message}`));
                 }
+            } else {
+                console.log(chalk.yellow('⚠️  Turso client não disponível'));
             }
 
             // 3. Remover duplicatas e reverter (mais recente primeiro para readline)
             const uniqueHistory = [...new Set(combinedHistory)].reverse();
+            console.log(chalk.gray(`🔄 Histórico único: ${uniqueHistory.length} comandos`));
 
             // 4. Carregar no readline
             this.replInterface.rl.history = [];
@@ -821,11 +833,13 @@ class MCPInteractive extends EventEmitter {
             });
 
             if (uniqueHistory.length > 0) {
-                console.log(chalk.gray(`📚 Carregados ${uniqueHistory.length} comandos do histórico`));
+                console.log(chalk.green(`📚 Carregados ${uniqueHistory.length} comandos do histórico`));
+            } else {
+                console.log(chalk.yellow('📚 Nenhum comando encontrado no histórico'));
             }
 
         } catch (error) {
-            console.log(chalk.yellow(`⚠️  Erro ao carregar histórico: ${error.message}`));
+            console.log(chalk.red(`❌ Erro ao carregar histórico: ${error.message}`));
         }
     }
 

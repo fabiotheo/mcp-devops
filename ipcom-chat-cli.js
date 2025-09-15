@@ -178,6 +178,50 @@ userCmd
 
 const historyCmd = program.command('history');
 
+// Comando base para mostrar histórico
+historyCmd
+    .description('Mostrar histórico de comandos')
+    .option('--limit <number>', 'Número de comandos a mostrar', '20')
+    .option('--user <username>', 'Filtrar por usuário')
+    .option('--format <format>', 'Formato de saída (table, json)', 'table')
+    .action(async (options) => {
+        const client = await initTursoClient();
+
+        if (options.user) {
+            await client.setUser(options.user);
+        }
+
+        try {
+            const history = await client.getHistory(parseInt(options.limit));
+
+            if (history.length === 0) {
+                console.log(chalk.yellow('Nenhum comando encontrado no histórico.'));
+                return;
+            }
+
+            if (options.format === 'json') {
+                console.log(JSON.stringify(history, null, 2));
+            } else {
+                console.log(chalk.cyan('\n═══ Histórico de Comandos ═══\n'));
+                history.forEach((h, index) => {
+                    const date = new Date(h.timestamp * 1000).toLocaleString('pt-BR');
+                    console.log(chalk.gray(`[${index + 1}] ${date}`));
+                    console.log(chalk.white(`Comando: ${h.command}`));
+                    if (h.response) {
+                        const truncated = h.response.length > 100
+                            ? h.response.substring(0, 100) + '...'
+                            : h.response;
+                        console.log(chalk.green(`Resposta: ${truncated}`));
+                    }
+                    console.log('');
+                });
+            }
+
+        } catch (error) {
+            console.error(chalk.red(`Erro ao buscar histórico: ${error.message}`));
+        }
+    });
+
 historyCmd
     .command('stats')
     .description('Mostrar estatísticas do histórico')

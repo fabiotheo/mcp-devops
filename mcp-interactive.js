@@ -687,12 +687,8 @@ class MCPInteractive extends EventEmitter {
         // Inicializar interface REPL
         this.replInterface.initialize();
 
-        // Carregar histórico no readline APÓS inicialização
-        if (this.persistentHistory.history.length > 0 && this.replInterface.rl) {
-            this.persistentHistory.history.forEach(cmd => {
-                this.replInterface.rl.history.push(cmd);
-            });
-        }
+        // Carregar histórico combinado (local + Turso) no readline
+        await this.loadCombinedHistory();
 
         // Configurar listeners
         this.replInterface.on('line', this.processInput.bind(this));
@@ -782,6 +778,54 @@ class MCPInteractive extends EventEmitter {
             console.log(chalk.yellow(`⚠️  Não foi possível conectar ao Turso: ${error.message}`));
             console.log(chalk.gray('Continuando com histórico local apenas...'));
             this.tursoEnabled = false;
+        }
+    }
+
+    async loadCombinedHistory() {
+        if (!this.replInterface.rl) return;
+
+        const combinedHistory = [];
+
+        try {
+            // 1. Carregar histórico local (PersistentHistory)
+            if (this.persistentHistory.history.length > 0) {
+                combinedHistory.push(...this.persistentHistory.history);
+            }
+
+            // 2. Carregar histórico do Turso se disponível
+            if (this.tursoClient) {
+                try {
+                    const tursoHistory = await this.tursoClient.getHistory(50); // Últimos 50 comandos
+
+                    // Extrair apenas os comandos (sem as respostas)
+                    const tursoCommands = tursoHistory.map(h => h.command).filter(cmd => cmd);
+
+                    // Adicionar comandos do Turso que não estão no histórico local
+                    tursoCommands.forEach(cmd => {
+                        if (!combinedHistory.includes(cmd)) {
+                            combinedHistory.push(cmd);
+                        }
+                    });
+                } catch (error) {
+                    // Silenciosamente falha se Turso não estiver disponível
+                }
+            }
+
+            // 3. Remover duplicatas e reverter (mais recente primeiro para readline)
+            const uniqueHistory = [...new Set(combinedHistory)].reverse();
+
+            // 4. Carregar no readline
+            this.replInterface.rl.history = [];
+            uniqueHistory.forEach(cmd => {
+                this.replInterface.rl.history.unshift(cmd); // unshift para ordem correta
+            });
+
+            if (uniqueHistory.length > 0) {
+                console.log(chalk.gray(`📚 Carregados ${uniqueHistory.length} comandos do histórico`));
+            }
+
+        } catch (error) {
+            console.log(chalk.yellow(`⚠️  Erro ao carregar histórico: ${error.message}`));
         }
     }
 

@@ -16,14 +16,17 @@ class PasteManager {
     }
 
     setupDetection() {
+        // TEMPORARILY DISABLED - paste detection interfering with normal input
         // Enable bracketed paste mode
-        this.detector.enableBracketedPaste();
+        // this.detector.enableBracketedPaste();
 
         // Use readline's keypress events instead of raw mode
-        if (this.readline.input.isTTY) {
-            this.readline.input.setRawMode(true);
-            this.readline.input.on('keypress', this.handleKeypress.bind(this));
-        }
+        // if (this.readline.input.isTTY) {
+        //     this.readline.input.setRawMode(true);
+        //     this.readline.input.on('keypress', this.handleKeypress.bind(this));
+        // }
+
+        console.log('📎 Paste detection temporarily disabled to fix input issues');
     }
 
     handleKeypress(str, key) {

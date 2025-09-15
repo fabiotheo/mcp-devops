@@ -695,14 +695,8 @@ class MCPInteractive extends EventEmitter {
         console.log(chalk.blue('🔄 Tentando carregar histórico...'));
         await this.loadCombinedHistory();
 
-        // Inicializar buffer para detecção de paste multilinha
-        this.pasteBuffer = [];
-        this.pasteTimer = null;
-        this.isPasting = false;
-        this.PASTE_TIMEOUT = 100; // Aumentado para 100ms para capturar melhor pastes maiores
-        this.waitingForPasteConfirmation = false;
-        this.pendingPasteText = '';
-        this.lastLineTime = Date.now();
+        // Configurar Bracketed Paste Mode
+        this.setupBracketedPasteMode();
 
         // Configurar listeners
         this.replInterface.on('line', this.handleLineInput.bind(this));
@@ -793,6 +787,110 @@ class MCPInteractive extends EventEmitter {
             console.log(chalk.gray('Continuando com histórico local apenas...'));
             this.tursoEnabled = false;
         }
+    }
+
+    setupBracketedPasteMode() {
+        // Variáveis para controle do bracketed paste
+        this.pasteBuffer = '';
+        this.inPasteMode = false;
+        this.waitingForPasteConfirmation = false;
+        this.pendingPasteText = '';
+
+        // Habilitar bracketed paste mode no terminal
+        process.stdout.write('\x1b[?2004h');
+
+        // Desabilitar ao sair
+        process.on('exit', () => {
+            process.stdout.write('\x1b[?2004l\n');
+        });
+
+        // Interceptar input raw para detectar paste
+        const originalEmit = this.replInterface.rl._onLine;
+        const self = this;
+
+        // Override do processamento de linha do readline
+        this.replInterface.rl._onLine = function(line) {
+            // Se estamos em modo paste, adicionar ao buffer
+            if (self.inPasteMode) {
+                self.pasteBuffer += line + '\n';
+                return;
+            }
+
+            // Verificar se a linha contém marcadores de paste
+            if (line.includes('\x1b[200~')) {
+                // Início de paste detectado
+                self.inPasteMode = true;
+                self.pasteBuffer = '';
+
+                // Extrair conteúdo após o marcador de início
+                const startIdx = line.indexOf('\x1b[200~') + 6;
+                const remaining = line.substring(startIdx);
+
+                // Verificar se o fim do paste está na mesma linha
+                if (remaining.includes('\x1b[201~')) {
+                    const endIdx = remaining.indexOf('\x1b[201~');
+                    const pastedContent = remaining.substring(0, endIdx);
+                    self.inPasteMode = false;
+
+                    // Processar o conteúdo colado
+                    self.handlePastedContent(pastedContent);
+                    return;
+                } else {
+                    // Paste continua em próximas linhas
+                    self.pasteBuffer = remaining + '\n';
+                    return;
+                }
+            }
+
+            // Verificar marcador de fim de paste
+            if (line.includes('\x1b[201~')) {
+                const endIdx = line.indexOf('\x1b[201~');
+                const lastPart = line.substring(0, endIdx);
+                self.pasteBuffer += lastPart;
+                self.inPasteMode = false;
+
+                // Processar o conteúdo colado completo
+                self.handlePastedContent(self.pasteBuffer);
+                self.pasteBuffer = '';
+                return;
+            }
+
+            // Linha normal - chamar processamento original
+            originalEmit.call(this, line);
+        }.bind(this.replInterface.rl);
+    }
+
+    handlePastedContent(content) {
+        // Remover espaços em branco do final
+        content = content.trimEnd();
+
+        // Se não tem conteúdo, ignorar
+        if (!content) {
+            this.replInterface.prompt();
+            return;
+        }
+
+        // Verificar se tem múltiplas linhas
+        const lines = content.split('\n');
+
+        if (lines.length > 1) {
+            // Mostrar o conteúdo colado formatado
+            console.log(chalk.gray('\n📋 Texto com múltiplas linhas detectado:'));
+            console.log(chalk.cyan('─'.repeat(80)));
+            console.log(content);
+            console.log(chalk.cyan('─'.repeat(80)));
+            console.log(chalk.yellow('Pressione Enter para enviar ou Ctrl+C para cancelar\n'));
+
+            // Armazenar para processamento após confirmação
+            this.pendingPasteText = content;
+            this.waitingForPasteConfirmation = true;
+        } else {
+            // Linha única - processar diretamente
+            this.processInput(content);
+        }
+
+        // Mostrar prompt
+        this.replInterface.prompt();
     }
 
     async loadCombinedHistory() {
@@ -936,63 +1034,17 @@ class MCPInteractive extends EventEmitter {
                 this.processInput(this.pendingPasteText);
                 this.pendingPasteText = '';
             } else {
-                // Adicionar mais texto ao buffer
-                this.pendingPasteText += '\n' + line;
+                // Cancelar com qualquer outro input
+                console.log(chalk.yellow('Operação cancelada'));
+                this.waitingForPasteConfirmation = false;
+                this.pendingPasteText = '';
+                this.replInterface.prompt();
             }
             return;
         }
 
-        // Calcular tempo entre linhas para detectar paste
-        const now = Date.now();
-        const timeSinceLastLine = now - this.lastLineTime;
-        this.lastLineTime = now;
-
-        // Se a linha chegou muito rápido (< 10ms), é definitivamente um paste
-        const isLikelyPaste = timeSinceLastLine < 10 || this.pasteBuffer.length > 0;
-
-        // Detectar paste multilinha
-        if (this.pasteTimer) {
-            clearTimeout(this.pasteTimer);
-        }
-
-        // Adicionar linha ao buffer
-        this.pasteBuffer.push(line);
-
-        // Se parece ser um paste, aguardar mais tempo
-        const timeout = isLikelyPaste ? this.PASTE_TIMEOUT : 20;
-
-        // Configurar timer para detectar fim do paste
-        this.pasteTimer = setTimeout(async () => {
-            // Se temos múltiplas linhas ou linhas vazias (que indicam quebras), exibir e aguardar confirmação
-            const hasEmptyLines = this.pasteBuffer.some(l => l.trim() === '');
-            const hasMultipleLines = this.pasteBuffer.length > 1;
-
-            if (hasMultipleLines || hasEmptyLines) {
-                // Múltiplas linhas detectadas - provavelmente um paste
-                const pastedText = this.pasteBuffer.join('\n');
-
-                // Exibir o texto colado
-                console.log(chalk.gray('\n📋 Texto com múltiplas linhas detectado:'));
-                console.log(chalk.cyan('─'.repeat(80)));
-                console.log(pastedText);
-                console.log(chalk.cyan('─'.repeat(80)));
-                console.log(chalk.yellow('Pressione Enter para enviar ou continue digitando...'));
-
-                // Guardar o texto e aguardar confirmação
-                this.pendingPasteText = pastedText;
-                this.waitingForPasteConfirmation = true;
-
-                // Mostrar prompt novamente
-                this.replInterface.prompt();
-            } else {
-                // Linha única - processar normalmente
-                await this.processInput(this.pasteBuffer[0]);
-            }
-
-            // Limpar buffer
-            this.pasteBuffer = [];
-            this.pasteTimer = null;
-        }, timeout);
+        // Processar linha normal
+        this.processInput(line);
     }
 
     async processInput(input) {

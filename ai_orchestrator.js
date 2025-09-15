@@ -22,7 +22,7 @@ export default class AICommandOrchestrator {
         this.startTime = null;
     }
 
-    async orchestrateExecution(question, context) {
+    async orchestrateExecution(question, context, animator = null) {
         this.startTime = Date.now();
         const executionContext = {
             originalQuestion: question,
@@ -46,6 +46,9 @@ export default class AICommandOrchestrator {
         };
 
         try {
+            if (animator) {
+                animator.updateStatus('Analisando pergunta e planejando comandos');
+            }
             const initialPlan = await this.planInitialCommands(executionContext);
             executionContext.currentPlan = initialPlan.commands || [];
             executionContext.metadata.aiCalls++;
@@ -57,11 +60,14 @@ export default class AICommandOrchestrator {
                 }
 
                 if (executionContext.currentPlan.length > 0) {
-                    await this.executeNextBatch(executionContext);
+                    await this.executeNextBatch(executionContext, animator);
                     executionContext.iteration++;
                     continue;
                 }
 
+                if (animator) {
+                    animator.updateStatus('Verificando se a tarefa está completa');
+                }
                 const completionCheck = await this.isTaskComplete(executionContext);
                 executionContext.metadata.aiCalls++;
 
@@ -74,6 +80,9 @@ export default class AICommandOrchestrator {
                         console.log(chalk.gray(`📝 Working Memory Lists: ${JSON.stringify(executionContext.workingMemory.discovered.lists)}`));
                     }
 
+                    if (animator) {
+                        animator.updateStatus('Planejando próximos comandos');
+                    }
                     const nextStep = await this.planNextCommands(executionContext, completionCheck.reasoning);
                     executionContext.metadata.aiCalls++;
 
@@ -82,6 +91,9 @@ export default class AICommandOrchestrator {
                             console.log(chalk.green(`✅ Próximos comandos: ${nextStep.commands.join(', ')}`));
                         }
                         executionContext.currentPlan.push(...nextStep.commands);
+                        if (animator) {
+                            animator.showProgress(executionContext.iteration, this.config.maxIterations, 'Executando comandos');
+                        }
                     } else {
                         if (this.config.verboseLogging) {
                             console.log(chalk.yellow('⚠️ IA não conseguiu determinar o próximo passo. Encerrando.'));
@@ -91,6 +103,9 @@ export default class AICommandOrchestrator {
                 }
             }
 
+            if (animator) {
+                animator.updateStatus('Preparando resposta final');
+            }
             const synthesis = await this.synthesizeDirectAnswer(executionContext);
             executionContext.directAnswer = synthesis.directAnswer;
 
@@ -290,7 +305,7 @@ Responda APENAS: {"directAnswer": "resposta direta com dados reais"}`;
         }
     }
 
-    async executeNextBatch(context) {
+    async executeNextBatch(context, animator = null) {
         const command = context.currentPlan.shift();
         if (!command) return false;
 
@@ -299,6 +314,9 @@ Responda APENAS: {"directAnswer": "resposta direta com dados reais"}`;
             return true;
         }
         try {
+            if (animator) {
+                animator.addCommand(command);
+            }
             const result = await this.executor.executeCommand(command);
             if (result) {
                 context.executedCommands.push(command);

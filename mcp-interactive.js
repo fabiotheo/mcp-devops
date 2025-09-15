@@ -15,6 +15,7 @@ import AICommandOrchestratorBash from './ai_orchestrator_bash.js';
 import PersistentHistory from './libs/persistent-history.js';
 import KeybindingManager from './libs/keybinding-manager.js';
 import MultiLineInput from './libs/multiline-input.js';
+import { orchestrationAnimator } from './libs/orchestration-animator.js';
 
 class ContextManager {
     constructor(maxTokens = 100000) {
@@ -716,7 +717,7 @@ class MCPInteractive extends EventEmitter {
 
             if (shouldOrchestrate && this.config.ai_orchestration?.enabled !== false) {
                 // Usa orquestração inteligente para perguntas complexas
-                console.log(chalk.gray('\n🤖 Iniciando análise inteligente...'));
+                orchestrationAnimator.start('Iniciando análise inteligente');
 
                 const systemInfo = this.systemDetector.getSystemInfo();
                 const systemContext = {
@@ -726,8 +727,11 @@ class MCPInteractive extends EventEmitter {
                     commands: this.systemDetector.getSystemCommands() || {}
                 };
 
-                // Executa orquestração
-                const result = await this.commandOrchestrator.orchestrateExecution(question, systemContext);
+                // Executa orquestração com animator
+                const result = await this.commandOrchestrator.orchestrateExecution(question, systemContext, orchestrationAnimator);
+
+                // Para a animação
+                orchestrationAnimator.stop(result.success ? 'Análise concluída com sucesso!' : 'Análise concluída');
 
                 if (result.success && (result.directAnswer || result.finalAnswer)) {
                     // PRIMEIRO: Mostra resposta direta e clara

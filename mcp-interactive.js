@@ -724,7 +724,7 @@ class MCPInteractive extends EventEmitter {
             // Verificar se existe configuração do Turso
             const tursoConfigPath = path.join(os.homedir(), '.mcp-terminal', 'turso-config.json');
             if (!existsSync(tursoConfigPath)) {
-                console.log(chalk.gray('ℹ️  Turso não configurado. Use: node libs/turso-setup.js'));
+                console.log(chalk.gray('ℹ️  Turso não configurado. Use: node libs/turso-client-setup.js'));
                 return;
             }
 

@@ -29,7 +29,7 @@ async function initTursoClient() {
 
     if (!existsSync(configPath)) {
         console.error(chalk.red('❌ Turso não configurado.'));
-        console.log(chalk.yellow('Execute primeiro: node libs/turso-setup.js'));
+        console.log(chalk.yellow('Execute primeiro: node libs/turso-client-setup.js'));
         process.exit(1);
     }
 

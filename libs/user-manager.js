@@ -275,7 +275,7 @@ export default class UserManager {
 if (import.meta.url === `file://${process.argv[1]}`) {
     (async () => {
         console.log('UserManager CLI');
-        console.log('Este módulo deve ser usado através do ipcom-chat ou turso-setup.js');
+        console.log('Este módulo deve ser usado através do ipcom-chat-cli.js');
         console.log('\nExemplos:');
         console.log('  ipcom-chat user create --username john --name "John Doe" --email john@example.com');
         console.log('  ipcom-chat user list');

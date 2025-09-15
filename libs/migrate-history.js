@@ -30,7 +30,7 @@ class HistoryMigrator {
         // Check if Turso is configured
             if (!existsSync(this.tursoConfigFile)) {
             console.error(chalk.red('❌ Turso não configurado.'));
-                console.log(chalk.yellow('Execute primeiro: node libs/turso-setup.js'));
+                console.log(chalk.yellow('Execute primeiro: node libs/turso-client-setup.js'));
             return false;
         }
 

@@ -1129,8 +1129,8 @@ export default class ModelFactory {
                 { from: path.join(this.mcpDir, 'mcp-assistant.js'), to: path.join(binDir, 'ask') },
                 { from: path.join(this.mcpDir, 'mcp-client.js'), to: path.join(binDir, 'mcp-monitor') },
                 { from: path.join(this.mcpDir, 'mcp-configure'), to: path.join(binDir, 'mcp-configure') },
-                { from: path.join(this.mcpDir, 'ipcom-chat-launcher.sh'), to: path.join(binDir, 'ipcom-chat') },
-                { from: path.join(this.mcpDir, 'ipcom-chat-launcher.sh'), to: path.join(binDir, 'ipcom') }
+                { from: path.join(this.mcpDir, 'ipcom-chat'), to: path.join(binDir, 'ipcom-chat') },
+                { from: path.join(this.mcpDir, 'ipcom-chat'), to: path.join(binDir, 'ipcom') }
             ];
 
             for (const link of links) {
@@ -1175,8 +1175,8 @@ export default class ModelFactory {
 
                         const globalLinks = [
                             { from: path.join(this.mcpDir, 'mcp-assistant.js'), to: path.join(dir, 'ask') },
-                            { from: path.join(this.mcpDir, 'ipcom-chat-launcher.sh'), to: path.join(dir, 'ipcom-chat') },
-                            { from: path.join(this.mcpDir, 'ipcom-chat-launcher.sh'), to: path.join(dir, 'ipcom') }
+                            { from: path.join(this.mcpDir, 'ipcom-chat'), to: path.join(dir, 'ipcom-chat') },
+                            { from: path.join(this.mcpDir, 'ipcom-chat'), to: path.join(dir, 'ipcom') }
                         ];
 
                         for (const link of globalLinks) {

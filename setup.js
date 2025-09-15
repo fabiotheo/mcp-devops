@@ -924,6 +924,7 @@ export default class ModelFactory {
             { src: 'mcp-configure', dest: 'mcp-configure' },
             { src: 'mcp-interactive.js', dest: 'mcp-interactive.js' },
             { src: 'ipcom-chat', dest: 'ipcom-chat' },
+            { src: 'ipcom-chat-cli.js', dest: 'ipcom-chat-cli.js' },
             { src: 'ipcom-chat-launcher.sh', dest: 'ipcom-chat-launcher.sh' },
             { src: 'ai_orchestrator.js', dest: 'ai_orchestrator.js' },
             { src: 'ai_orchestrator_tools.js', dest: 'ai_orchestrator_tools.js' },

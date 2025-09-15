@@ -1,3 +1,10 @@
 #!/usr/bin/env node
 
-import('./mcp-interactive.js');
+// Check if running with arguments for CLI commands
+if (process.argv.length > 2) {
+    // If arguments provided, use CLI interface
+    await import('./ipcom-chat-cli.js');
+} else {
+    // No arguments - run interactive mode
+    await import('./mcp-interactive.js');
+}

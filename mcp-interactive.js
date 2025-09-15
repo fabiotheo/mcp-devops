@@ -16,6 +16,8 @@ import PersistentHistory from './libs/persistent-history.js';
 import KeybindingManager from './libs/keybinding-manager.js';
 import MultiLineInput from './libs/multiline-input.js';
 import { orchestrationAnimator } from './libs/orchestration-animator.js';
+import TursoHistoryClient from './libs/turso-client.js';
+import UserManager from './libs/user-manager.js';
 
 class ContextManager {
     constructor(maxTokens = 100000) {
@@ -579,6 +581,13 @@ class MCPInteractive extends EventEmitter {
         // Alternativa: ['◐', '◓', '◑', '◒'] ou ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘']
         this.persistentHistory = null;
         this.spinnerIndex = 0;
+
+        // Turso integration
+        this.tursoClient = null;
+        this.userManager = null;
+        this.tursoEnabled = false;
+        this.currentUser = null;
+        this.historyMode = 'global'; // global, user, machine, hybrid
     }
 
     async initialize() {
@@ -672,6 +681,9 @@ class MCPInteractive extends EventEmitter {
         });
         await this.persistentHistory.initialize();
 
+        // Inicializar Turso se configurado
+        await this.initializeTurso(modelConfig);
+
         // Inicializar interface REPL
         this.replInterface.initialize();
 
@@ -704,6 +716,72 @@ class MCPInteractive extends EventEmitter {
             } catch (error) {
                 console.log(chalk.yellow(`Não foi possível retomar sessão '${this.config.resume}'`));
             }
+        }
+    }
+
+    async initializeTurso(modelConfig) {
+        try {
+            // Verificar se existe configuração do Turso
+            const tursoConfigPath = path.join(os.homedir(), '.mcp-terminal', 'turso-config.json');
+            if (!existsSync(tursoConfigPath)) {
+                console.log(chalk.gray('ℹ️  Turso não configurado. Use: node libs/turso-setup.js'));
+                return;
+            }
+
+            // Carregar configuração do Turso
+            const tursoConfig = JSON.parse(await fs.readFile(tursoConfigPath, 'utf8'));
+
+            // Parse command line arguments
+            const args = process.argv.slice(2);
+            const userFlag = args.find(arg => arg.startsWith('--user='));
+            const username = userFlag ? userFlag.split('=')[1] : null;
+            const localMode = args.includes('--local');
+            const hybridMode = args.includes('--hybrid');
+
+            // Determinar modo de histórico
+            if (username) {
+                this.historyMode = 'user';
+                this.currentUser = username;
+            } else if (localMode) {
+                this.historyMode = 'machine';
+            } else if (hybridMode) {
+                this.historyMode = 'hybrid';
+            } else {
+                this.historyMode = tursoConfig.history_mode || 'global';
+            }
+
+            // Inicializar cliente Turso
+            this.tursoClient = new TursoHistoryClient({
+                ...tursoConfig,
+                history_mode: this.historyMode,
+                debug: false
+            });
+
+            await this.tursoClient.initialize();
+
+            // Se modo usuário, configurar usuário
+            if (username) {
+                try {
+                    const user = await this.tursoClient.setUser(username);
+                    console.log(chalk.green(`✓ Logado como: ${username}`));
+                } catch (error) {
+                    console.log(chalk.red(`❌ ${error.message}`));
+                    console.log(chalk.yellow('Por favor, verifique o nome de usuário ou execute sem a flag --user.'));
+                    console.log(chalk.gray('Para criar um novo usuário: ipcom-chat user create --username <user> --name "<nome>" --email <email>'));
+                    process.exit(1);
+                }
+            }
+
+            // Inicializar UserManager
+            this.userManager = new UserManager(this.tursoClient.client);
+
+            this.tursoEnabled = true;
+            console.log(chalk.green(`✓ Turso conectado (modo: ${this.historyMode})`));
+
+        } catch (error) {
+            console.log(chalk.yellow(`⚠️  Não foi possível conectar ao Turso: ${error.message}`));
+            console.log(chalk.gray('Continuando com histórico local apenas...'));
+            this.tursoEnabled = false;
         }
     }
 
@@ -782,6 +860,9 @@ class MCPInteractive extends EventEmitter {
             await this.persistentHistory.add(input);
         }
 
+        // Comando será salvo após receber resposta da IA (linha 939)
+        // Removido saveCommand duplicado que salvava antes da resposta
+
         // Verificar se é um comando
         if (input.startsWith('/')) {
             const result = await this.commandProcessor.execute(input);
@@ -839,6 +920,19 @@ class MCPInteractive extends EventEmitter {
 
                         // Adiciona ao contexto
                         this.contextManager.addMessage('assistant', result.directAnswer);
+
+                        // Salvar resposta no Turso
+                        if (this.tursoEnabled) {
+                            try {
+                                await this.tursoClient.saveCommand(question, result.directAnswer, {
+                                    session_id: this.sessionName,
+                                    tokens_used: result.metadata?.tokensUsed,
+                                    execution_time_ms: result.duration
+                                });
+                            } catch (error) {
+                                // Silenciosamente continua
+                            }
+                        }
                     }
 
                     // SEGUNDO: Mostra detalhes técnicos (se houver)
@@ -972,6 +1066,17 @@ class MCPInteractive extends EventEmitter {
 
         // Adiciona resposta ao contexto
         this.contextManager.addMessage('assistant', response);
+
+        // Salvar resposta no Turso
+        if (this.tursoEnabled) {
+            try {
+                await this.tursoClient.saveCommand(question, response, {
+                    session_id: this.sessionName
+                });
+            } catch (error) {
+                // Silenciosamente continua
+            }
+        }
 
         // Exibir resposta formatada
         this.displayFormattedResponse(response);

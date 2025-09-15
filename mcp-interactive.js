@@ -360,7 +360,7 @@ class REPLInterface extends EventEmitter {
             terminal: true
         });
 
-        // --- NOVA LÓGICA DE CAPTURA DE INPUT (STREAM INTERMEDIÁRIO) ---
+        // --- LÓGICA DE CAPTURA DE INPUT (STREAM INTERMEDIÁRIO) ---
         const PASTE_START = '\x1b[200~';
         const PASTE_END = '\x1b[201~';
 
@@ -371,7 +371,7 @@ class REPLInterface extends EventEmitter {
         process.stdin.on('data', (chunk) => {
             this.inputBuffer += chunk.toString('utf8');
 
-            while (true) {
+            while (this.inputBuffer.length > 0) {
                 if (this.isPasting) {
                     const end_index = this.inputBuffer.indexOf(PASTE_END);
                     if (end_index !== -1) {
@@ -379,9 +379,16 @@ class REPLInterface extends EventEmitter {
                         this.inputBuffer = this.inputBuffer.substring(end_index + PASTE_END.length);
 
                         this.isPasting = false;
-                        const sanitizedPaste = this.pasteBuffer.replace(/\r/g, '\n');
-                        myInputStream.write(sanitizedPaste);
+                        const sanitizedPaste = this.pasteBuffer.trim().replace(/\r/g, '\n');
                         this.pasteBuffer = '';
+
+                        // **A CORREÇÃO:** Se for multi-linha, envolve com """ para usar o modo de bloco.
+                        if (sanitizedPaste.includes('\n')) {
+                            myInputStream.write(`"""\n${sanitizedPaste}\n"""\n`);
+                        } else {
+                            myInputStream.write(sanitizedPaste);
+                        }
+
                     } else {
                         this.pasteBuffer += this.inputBuffer;
                         this.inputBuffer = '';
@@ -402,7 +409,7 @@ class REPLInterface extends EventEmitter {
                 }
             }
         });
-        // --- FIM DA NOVA LÓGICA ---
+        // --- FIM DA LÓGICA ---
 
         // Inicializa MultiLineInput
         this.multilineInput = new MultiLineInput({
@@ -621,6 +628,7 @@ class REPLInterface extends EventEmitter {
         process.stdout.write(text);
     }
 }
+
 
 
 

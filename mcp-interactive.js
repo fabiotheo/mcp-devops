@@ -2,6 +2,7 @@
 
 import readline from 'readline';
 import { EventEmitter } from 'events';
+import { PassThrough } from 'stream';
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
@@ -341,6 +342,7 @@ class REPLInterface extends EventEmitter {
         // Propriedades para o modo de colagem
         this.isPasting = false;
         this.pasteBuffer = '';
+        this.inputBuffer = ''; // Buffer para lidar com chunks de dados
     }
 
     initialize() {
@@ -349,47 +351,57 @@ class REPLInterface extends EventEmitter {
             process.stdout.write('\x1b[?2004h');
         }
 
+        const myInputStream = new PassThrough();
         this.rl = readline.createInterface({
-            input: process.stdin,
+            input: myInputStream,
             output: process.stdout,
             prompt: chalk.cyan('mcp> '),
             completer: this.autoComplete.bind(this),
             terminal: true
         });
 
-        // --- NOVA LÓGICA DE CAPTURA DE INPUT (RAW MODE) ---
+        // --- NOVA LÓGICA DE CAPTURA DE INPUT (STREAM INTERMEDIÁRIO) ---
         const PASTE_START = '\x1b[200~';
         const PASTE_END = '\x1b[201~';
 
-        const originalStdinOn = process.stdin.on.bind(process.stdin);
+        if (process.stdin.isTTY) {
+            process.stdin.setRawMode(true);
+        }
 
-        process.stdin.on = (event, listener) => {
-            if (event === 'data') {
-                const customListener = (chunk) => {
-                    const data = chunk.toString();
-                    if (data === PASTE_START) {
-                        this.isPasting = true;
-                        this.pasteBuffer = '';
-                        return;
-                    }
-                    if (data === PASTE_END) {
+        process.stdin.on('data', (chunk) => {
+            this.inputBuffer += chunk.toString('utf8');
+
+            while (true) {
+                if (this.isPasting) {
+                    const end_index = this.inputBuffer.indexOf(PASTE_END);
+                    if (end_index !== -1) {
+                        this.pasteBuffer += this.inputBuffer.substring(0, end_index);
+                        this.inputBuffer = this.inputBuffer.substring(end_index + PASTE_END.length);
+
                         this.isPasting = false;
                         const sanitizedPaste = this.pasteBuffer.replace(/\r/g, '\n');
-                        listener(sanitizedPaste);
+                        myInputStream.write(sanitizedPaste);
                         this.pasteBuffer = '';
-                        return;
+                    } else {
+                        this.pasteBuffer += this.inputBuffer;
+                        this.inputBuffer = '';
+                        break;
                     }
-                    if (this.isPasting) {
-                        this.pasteBuffer += data;
-                        return;
+                } else {
+                    const start_index = this.inputBuffer.indexOf(PASTE_START);
+                    if (start_index !== -1) {
+                        const before = this.inputBuffer.substring(0, start_index);
+                        myInputStream.write(before);
+                        this.inputBuffer = this.inputBuffer.substring(start_index + PASTE_START.length);
+                        this.isPasting = true;
+                    } else {
+                        myInputStream.write(this.inputBuffer);
+                        this.inputBuffer = '';
+                        break;
                     }
-                    listener(chunk);
-                };
-                originalStdinOn(event, customListener);
-            } else {
-                originalStdinOn(event, listener);
+                }
             }
-        };
+        });
         // --- FIM DA NOVA LÓGICA ---
 
         // Inicializa MultiLineInput
@@ -609,6 +621,7 @@ class REPLInterface extends EventEmitter {
         process.stdout.write(text);
     }
 }
+
 
 
 class MCPInteractive extends EventEmitter {

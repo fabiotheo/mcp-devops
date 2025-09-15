@@ -890,23 +890,48 @@ class MCPInteractive extends EventEmitter {
     shouldUseOrchestration(question) {
         const q = question.toLowerCase();
 
-        // Padrões que indicam necessidade de múltiplos comandos
+        // Padrões que indicam necessidade de executar comandos
         const patterns = [
-            /quant[oa]s?\s+\w+/,  // quantos IPs, quantas regras
-            /quais?\s+(?:os?\s+)?(?:ips?|endereços?)/,  // quais IPs, quais os IPs
-            /list[ea]r?\s+(?:todos?|todas?)/,  // listar todos
-            /mostrar?\s+(?:todos?|todas?|detalhes?)/,  // mostrar detalhes
-            /status\s+(?:completo|detalhado)/,  // status completo
-            /informações?\s+(?:completas?|detalhadas?)/,  // informações completas
-            /analis[ea]r?\s+/,  // analisar logs
-            /verificar?\s+/,  // verificar sistema
-            /diagnóstico/,  // diagnóstico
-            /relatório/,  // relatório
-            /fail2ban/i,  // QUALQUER menção a fail2ban - sempre usar orquestração
-            /bloqueado|banido/,  // IPs bloqueados/banidos
-            /docker.*(?:containers?|imagens?|volumes?)/,  // docker específico
-            /systemd?.*service/,  // serviços systemd
-            /logs?.*(?:erro|warning|critical)/  // análise de logs
+            // Comandos de listagem e análise
+            /list[ea]/i,  // liste, listar
+            /mostr[ea]/i,  // mostre, mostrar
+            /exib[ia]/i,  // exiba, exibir
+            /quais?\s+(?:são|os?|as?)/i,  // quais são, quais os
+            /quant[oa]s?\s+/i,  // quantos, quantas
+
+            // Análise de recursos do sistema
+            /(?:memória|memoria|ram|cpu|disco|processos?|apps?|aplicações?|aplicativos?)/i,
+            /(?:consumo|uso|utilização|ocupação)/i,
+            /(?:espaço|tamanho|portas?|serviços?)/i,
+
+            // Comandos específicos
+            /top\s+\d+/i,  // top 5, top 10
+            /primeiros?\s+\d+/i,  // primeiros 5
+            /últimos?\s+\d+/i,  // últimos 10
+            /maiores?\s+/i,  // maiores consumidores
+
+            // Análise e verificação
+            /status\s+/i,  // status de qualquer coisa
+            /informações?\s+/i,  // informações sobre
+            /analis[ea]r?\s+/i,  // analisar
+            /verificar?\s+/i,  // verificar
+            /diagnóstico/i,  // diagnóstico
+            /relatório/i,  // relatório
+
+            // Serviços específicos
+            /fail2ban/i,  // fail2ban
+            /docker/i,  // docker
+            /systemd?/i,  // systemd
+            /nginx/i,  // nginx
+            /apache/i,  // apache
+            /mysql/i,  // mysql
+            /postgres/i,  // postgres
+
+            // Estados e condições
+            /bloqueado|banido/i,  // IPs bloqueados
+            /rodando|executando|ativo/i,  // processos rodando
+            /parado|inativo|morto/i,  // serviços parados
+            /erro|warning|critical/i  // logs de erro
         ];
 
         return patterns.some(pattern => pattern.test(q));

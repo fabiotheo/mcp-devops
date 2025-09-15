@@ -695,8 +695,14 @@ class MCPInteractive extends EventEmitter {
         console.log(chalk.blue('🔄 Tentando carregar histórico...'));
         await this.loadCombinedHistory();
 
+        // Inicializar buffer para detecção de paste multilinha
+        this.pasteBuffer = [];
+        this.pasteTimer = null;
+        this.isPasting = false;
+        this.PASTE_TIMEOUT = 50; // 50ms para detectar paste
+
         // Configurar listeners
-        this.replInterface.on('line', this.processInput.bind(this));
+        this.replInterface.on('line', this.handleLineInput.bind(this));
         this.replInterface.on('interrupt', this.handleInterrupt.bind(this));
 
         // Configurar auto-save
@@ -916,6 +922,37 @@ class MCPInteractive extends EventEmitter {
                     chalk.cyan('/exit'), chalk.gray('para sair'));
         console.log(chalk.cyan('─'.repeat(80)));
         console.log();
+    }
+
+    handleLineInput(line) {
+        // Detectar paste multilinha
+        if (this.pasteTimer) {
+            clearTimeout(this.pasteTimer);
+        }
+
+        // Adicionar linha ao buffer
+        this.pasteBuffer.push(line);
+
+        // Configurar timer para detectar fim do paste
+        this.pasteTimer = setTimeout(async () => {
+            // Se temos múltiplas linhas, juntá-las
+            let input;
+            if (this.pasteBuffer.length > 1) {
+                // Múltiplas linhas detectadas - provavelmente um paste
+                input = this.pasteBuffer.join('\n');
+                console.log(chalk.gray('📋 Texto com múltiplas linhas detectado'));
+            } else {
+                // Linha única - entrada normal
+                input = this.pasteBuffer[0];
+            }
+
+            // Limpar buffer
+            this.pasteBuffer = [];
+            this.pasteTimer = null;
+
+            // Processar o input combinado
+            await this.processInput(input);
+        }, this.PASTE_TIMEOUT);
     }
 
     async processInput(input) {

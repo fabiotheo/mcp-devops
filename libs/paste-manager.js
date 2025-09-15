@@ -29,6 +29,7 @@ class PasteManager {
     handleKeypress(str, key) {
         if (!str) return true;
 
+        // Only handle bracketed paste sequences, disable fallback detection for now
         if (this.detector.detectPasteStart(str)) {
             this.startPasteCapture();
             return;
@@ -43,11 +44,11 @@ class PasteManager {
             return;
         }
 
-        // Check fallback detection
-        if (this.detector.useFallbackDetection(str)) {
-            this.startFallbackCapture(str);
-            return;
-        }
+        // DISABLED: Fallback detection is too aggressive
+        // if (this.detector.useFallbackDetection(str)) {
+        //     this.startFallbackCapture(str);
+        //     return;
+        // }
 
         // Let readline handle normal input
         return true;

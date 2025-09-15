@@ -410,14 +410,12 @@ machineCmd
 // ==================== COMANDO PADRÃO (MODO INTERATIVO) ====================
 
 program
-    .option('--user <username>', 'Usar perfil de usuário específico')
     .option('--local', 'Usar apenas histórico local da máquina')
     .option('--hybrid', 'Usar modo híbrido (todos os históricos)')
     .action(async (options) => {
-        // Redirecionar para mcp-interactive.js com flags apropriadas
+        // Redirecionar para modo interativo com flags apropriadas
         const args = ['mcp-interactive.js'];
 
-        if (options.user) args.push(`--user=${options.user}`);
         if (options.local) args.push('--local');
         if (options.hybrid) args.push('--hybrid');
 

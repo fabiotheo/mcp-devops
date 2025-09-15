@@ -37,7 +37,9 @@
       "Bash(./ipcom-chat --help)",
       "Bash(./ipcom-chat history:*)",
       "Bash(./ipcom-chat:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Read(//Users/fabiotheodoro/.local/bin/**)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

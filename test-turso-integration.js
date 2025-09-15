@@ -255,7 +255,7 @@ class TursoIntegrationTests {
         const testName = 'Modo Interativo com Usuário';
         try {
             // Criar processo filho
-            const child = spawn('node', ['mcp-interactive.js', `--user=${this.testUser}`], {
+            const child = spawn('node', ['ipcom-chat', `--user=${this.testUser}`], {
                 stdio: 'pipe'
             });
 

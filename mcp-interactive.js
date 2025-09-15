@@ -1,331 +1,509 @@
 #!/usr/bin/env node
 
+/**
+ * MCP Terminal Assistant - Modo Interativo
+ * Sistema de chat interativo com IA para assistência em comandos Linux
+ * Desenvolvido por: Fábio Fernandes Theodoro
+ * Empresa: IP COM COMÉRCIO DE EQUIPAMENTOS DE TELEFONIA LTDA
+ */
+
 import readline from 'readline';
+import chalk from 'chalk';
 import { EventEmitter } from 'events';
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import os from 'os';
-import chalk from 'chalk';
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+
+// Importações locais
 import ModelFactory from './ai_models/model_factory.js';
-import SystemDetector from './system_detector.js';
+import SystemDetector from './libs/system_detector.js';
 import AICommandOrchestrator from './ai_orchestrator.js';
-import AICommandOrchestratorWithTools from './ai_orchestrator_tools.js';
+import AICommandOrchestratorTools from './ai_orchestrator_tools.js';
 import AICommandOrchestratorBash from './ai_orchestrator_bash.js';
-import PersistentHistory from './libs/persistent-history.js';
-import KeybindingManager from './libs/keybinding-manager.js';
-import MultiLineInput from './libs/multiline-input.js';
-import { orchestrationAnimator } from './libs/orchestration-animator.js';
 import TursoHistoryClient from './libs/turso-client.js';
 import UserManager from './libs/user-manager.js';
+import PersistentHistory from './libs/persistent-history.js';
+import SessionPersistence from './libs/session-persistence.js';
 
+// Classes Internas
 class ContextManager {
-    constructor(maxTokens = 100000) {
+    constructor(maxTokens = 32000) {
         this.messages = [];
         this.maxTokens = maxTokens;
-        this.summary = null;
-        this.tokenEstimate = 0;
     }
 
     addMessage(role, content) {
-        this.messages.push({
-            role,
-            content,
-            timestamp: new Date()
-        });
-        this.optimizeIfNeeded();
+        this.messages.push({ role, content });
+        this.trimContext();
     }
 
-    getContext(format = 'array') {
-        if (this.summary) {
-            return [
-                { role: 'system', content: this.summary },
-                ...this.messages.slice(-10)
-            ];
+    trimContext() {
+        // Simples estimativa de tokens (4 chars = 1 token)
+        let totalChars = 0;
+        let cutIndex = 0;
+
+        for (let i = this.messages.length - 1; i >= 0; i--) {
+            totalChars += this.messages[i].content.length;
+            if (totalChars / 4 > this.maxTokens) {
+                cutIndex = i + 1;
+                break;
+            }
         }
+
+        if (cutIndex > 0) {
+            this.messages = this.messages.slice(cutIndex);
+        }
+    }
+
+    getContext() {
         return this.messages;
     }
+}
 
-    estimateTokens(text) {
-        // Estimativa simples: ~4 caracteres por token
-        return Math.ceil(text.length / 4);
+class ShortcutsManager {
+    constructor() {
+        this.shortcuts = {
+            'lt': 'ls -lht | head -20',
+            'll': 'ls -lah',
+            'la': 'ls -a',
+            'l': 'ls',
+            'cd..': 'cd ..',
+            'cls': 'clear',
+            'h': 'history',
+            'grep': 'grep --color=auto',
+            'df': 'df -h',
+            'free': 'free -h',
+            'ps': 'ps aux',
+            'netstat': 'netstat -tuln',
+            'ports': 'netstat -tuln | grep LISTEN',
+            'myip': 'curl -s ifconfig.me',
+            'weather': 'curl wttr.in',
+            'speedtest': 'curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -',
+            'sysinfo': 'uname -a && lsb_release -a 2>/dev/null || cat /etc/os-release',
+            'diskusage': 'du -sh * | sort -rh | head -20',
+            'topmem': 'ps aux | sort -nrk 4 | head -10',
+            'topcpu': 'ps aux | sort -nrk 3 | head -10',
+            'update': 'sudo apt update && sudo apt upgrade',
+            'search': 'apt search',
+            'install': 'sudo apt install',
+            'remove': 'sudo apt remove',
+            'services': 'systemctl list-units --type=service --state=running',
+            'logs': 'journalctl -xe',
+            'reboot': 'sudo reboot',
+            'shutdown': 'sudo shutdown -h now',
+            'mount': 'mount | column -t',
+            'path': 'echo $PATH | tr ":" "\n"',
+            'aliases': 'alias',
+            'functions': 'declare -F',
+            'variables': 'env',
+            'connections': 'ss -tunap',
+            'firewall': 'sudo iptables -L -n -v',
+            'users': 'who',
+            'groups': 'groups',
+            'permissions': 'ls -la',
+            'findfile': 'find . -name',
+            'findtext': 'grep -r',
+            'count': 'wc -l',
+            'tail': 'tail -f',
+            'head': 'head -n 20',
+            'sort': 'sort -n',
+            'unique': 'sort | uniq',
+            'diff': 'diff -u',
+            'tar': 'tar -czvf',
+            'untar': 'tar -xzvf',
+            'zip': 'zip -r',
+            'unzip': 'unzip',
+            'wget': 'wget -c',
+            'curl': 'curl -O',
+            'ssh': 'ssh -v',
+            'scp': 'scp -r',
+            'rsync': 'rsync -avz',
+            'git': 'git status',
+            'gitlog': 'git log --oneline --graph --decorate',
+            'gitdiff': 'git diff',
+            'gitadd': 'git add .',
+            'gitcommit': 'git commit -m',
+            'gitpush': 'git push',
+            'gitpull': 'git pull',
+            'docker': 'docker ps -a',
+            'dockerimages': 'docker images',
+            'dockerlogs': 'docker logs -f',
+            'dockerexec': 'docker exec -it',
+            'dockerstop': 'docker stop',
+            'dockerstart': 'docker start',
+            'dockerrm': 'docker rm',
+            'dockerrmi': 'docker rmi',
+            'compose': 'docker-compose',
+            'composeup': 'docker-compose up -d',
+            'composedown': 'docker-compose down',
+            'composelogs': 'docker-compose logs -f',
+            'k8s': 'kubectl get all',
+            'k8spods': 'kubectl get pods',
+            'k8slogs': 'kubectl logs -f',
+            'k8sexec': 'kubectl exec -it',
+            'nginx': 'sudo nginx -t',
+            'nginxreload': 'sudo nginx -s reload',
+            'apache': 'sudo apache2ctl -t',
+            'apachereload': 'sudo systemctl reload apache2',
+            'mysql': 'mysql -u root -p',
+            'postgres': 'psql -U postgres',
+            'mongo': 'mongo',
+            'redis': 'redis-cli',
+            'npm': 'npm list',
+            'npminstall': 'npm install',
+            'npmstart': 'npm start',
+            'npmtest': 'npm test',
+            'python': 'python3',
+            'pip': 'pip3 list',
+            'pipinstall': 'pip3 install',
+            'venv': 'python3 -m venv',
+            'activate': 'source venv/bin/activate',
+            'deactivate': 'deactivate',
+            'node': 'node',
+            'pm2': 'pm2 list',
+            'pm2logs': 'pm2 logs',
+            'pm2restart': 'pm2 restart',
+            'yarn': 'yarn',
+            'yarninstall': 'yarn install',
+            'yarnstart': 'yarn start',
+            'yarntest': 'yarn test'
+        };
     }
 
-    getTokenCount() {
-        let total = 0;
-        for (const msg of this.messages) {
-            total += this.estimateTokens(msg.content);
+    get(shortcut) {
+        return this.shortcuts[shortcut] || null;
+    }
+
+    list() {
+        return this.shortcuts;
+    }
+
+    formatList() {
+        const categories = {
+            'Navegação': ['lt', 'll', 'la', 'l', 'cd..', 'cls'],
+            'Sistema': ['h', 'sysinfo', 'df', 'free', 'ps', 'topmem', 'topcpu'],
+            'Rede': ['netstat', 'ports', 'myip', 'connections', 'firewall'],
+            'Busca': ['findfile', 'findtext', 'grep'],
+            'Git': ['git', 'gitlog', 'gitdiff', 'gitadd', 'gitcommit', 'gitpush', 'gitpull'],
+            'Docker': ['docker', 'dockerimages', 'dockerlogs', 'compose', 'composeup'],
+            'Pacotes': ['update', 'search', 'install', 'remove'],
+            'Serviços': ['services', 'logs', 'nginx', 'apache', 'mysql', 'redis'],
+            'Node/NPM': ['npm', 'npminstall', 'node', 'pm2', 'yarn'],
+            'Python': ['python', 'pip', 'pipinstall', 'venv', 'activate'],
+            'Arquivos': ['tar', 'untar', 'zip', 'unzip', 'wget', 'curl', 'rsync'],
+            'Utilitários': ['weather', 'speedtest', 'count', 'sort', 'unique', 'diff']
+        };
+
+        let output = '';
+        for (const [category, shortcuts] of Object.entries(categories)) {
+            output += chalk.cyan(`\n${category}:\n`);
+            for (const shortcut of shortcuts) {
+                if (this.shortcuts[shortcut]) {
+                    output += chalk.yellow(`  /${shortcut}`) + chalk.gray(' → ') + chalk.white(this.shortcuts[shortcut]) + '\n';
+                }
+            }
         }
-        if (this.summary) {
-            total += this.estimateTokens(this.summary);
-        }
-        return total;
-    }
-
-    optimizeIfNeeded() {
-        const tokenCount = this.getTokenCount();
-        if (tokenCount > this.maxTokens * 0.8) {
-            this.summarizeOldMessages();
-        }
-    }
-
-    async summarizeOldMessages() {
-        // Mantém últimas 20 mensagens + cria summary das antigas
-        if (this.messages.length > 20) {
-            const toSummarize = this.messages.slice(0, -20);
-            const summaryContent = toSummarize.map(m =>
-                `${m.role}: ${m.content.substring(0, 100)}...`
-            ).join('\n');
-
-            this.summary = `Resumo de conversas anteriores (${toSummarize.length} mensagens):\n${summaryContent}`;
-            this.messages = this.messages.slice(-20);
-        }
-    }
-
-    reset() {
-        this.messages = [];
-        this.summary = null;
-        this.tokenEstimate = 0;
-    }
-
-    getHistory(limit = 10) {
-        const recent = this.messages.slice(-limit);
-        return recent.map(msg => ({
-            role: msg.role,
-            content: msg.content,
-            time: msg.timestamp.toLocaleTimeString()
-        }));
+        return output;
     }
 }
 
 class CommandProcessor {
     constructor(mcpInteractive) {
         this.mcp = mcpInteractive;
-        this.commands = {
-            '/help': this.showHelp.bind(this),
-            '/shortcuts': this.showShortcuts.bind(this),
-            '/clear': this.clearScreen.bind(this),
-            '/reset': this.resetContext.bind(this),
-            '/save': this.saveSession.bind(this),
-            '/load': this.loadSession.bind(this),
-            '/model': this.changeModel.bind(this),
-            '/exec': this.executeCommand.bind(this),
-            '/history': this.showHistory.bind(this),
-            '/version': this.showVersion.bind(this),
-            '/exit': this.exit.bind(this),
-            '/quit': this.exit.bind(this)
-        };
+        this.shortcuts = new ShortcutsManager();
     }
 
-    async execute(input) {
-        const [command, ...args] = input.split(' ');
-        const handler = this.commands[command];
-
-        if (!handler) {
-            return chalk.red(`Comando desconhecido: ${command}. Digite /help para ajuda.`);
+    async process(input) {
+        // Verificar comandos especiais
+        if (input.startsWith('/')) {
+            return await this.handleCommand(input);
         }
 
-        return await handler(args.join(' '));
+        // Processar como pergunta normal
+        return false;
     }
 
-    async showHelp() {
-        const help = `
-${chalk.cyan('═══ Comandos Disponíveis ═══')}
+    async handleCommand(command) {
+        const [cmd, ...args] = command.slice(1).split(' ');
+        const fullArg = args.join(' ');
 
-${chalk.yellow('/help')}      - Mostra esta ajuda
-${chalk.yellow('/shortcuts')} - Mostra atalhos de teclado
-${chalk.yellow('/clear')}     - Limpa a tela (mantém contexto)
-${chalk.yellow('/reset')}     - Reinicia o contexto da conversa
-${chalk.yellow('/save')} [nome] - Salva a sessão atual
-${chalk.yellow('/load')} [nome] - Carrega uma sessão salva
-${chalk.yellow('/model')}     - Mostra/altera o modelo de IA
-${chalk.yellow('/exec')}      - Executa o último comando sugerido
-${chalk.yellow('/history')}   - Mostra histórico da sessão
-${chalk.yellow('/version')}   - Mostra informações da versão
-${chalk.yellow('/exit')}      - Sai do modo interativo
+        switch (cmd) {
+            case 'help':
+            case 'h':
+            case '?':
+                this.showHelp();
+                return true;
 
-${chalk.cyan('═══ Dicas ═══')}
+            case 'shortcuts':
+            case 's':
+                this.showShortcuts();
+                return true;
 
-• Digite ${chalk.green('"""')} para entrada multi-linha
-• Use ${chalk.green('Tab')} para auto-completar comandos
-• Sessões são salvas automaticamente a cada 5 minutos
-• AI Orchestration está ${chalk.green('ativado')} para perguntas complexas
-• Digite ${chalk.cyan('/shortcuts')} para ver atalhos de teclado
-`;
-        return help;
+            case 'clear':
+            case 'cls':
+            case 'c':
+                console.clear();
+                console.log(chalk.cyan('Terminal limpo'));
+                return true;
+
+            case 'exit':
+            case 'quit':
+            case 'q':
+                await this.mcp.shutdown();
+                return true;
+
+            case 'save':
+                await this.saveSession(fullArg);
+                return true;
+
+            case 'load':
+                await this.loadSession(fullArg);
+                return true;
+
+            case 'sessions':
+                await this.listSessions();
+                return true;
+
+            case 'reset':
+                this.resetContext();
+                return true;
+
+            case 'model':
+                this.showModelInfo();
+                return true;
+
+            case 'system':
+                this.showSystemInfo();
+                return true;
+
+            case 'exec':
+            case 'run':
+            case '!':
+                if (fullArg) {
+                    await this.executeSystemCommand(fullArg);
+                } else {
+                    console.log(chalk.yellow('Uso: /exec <comando>'));
+                }
+                return true;
+
+            case 'context':
+                this.showContext();
+                return true;
+
+            case 'token':
+            case 'tokens':
+                this.showTokenUsage();
+                return true;
+
+            default:
+                // Verificar se é um shortcut
+                const shortcutCmd = this.shortcuts.get(cmd);
+                if (shortcutCmd) {
+                    await this.executeSystemCommand(shortcutCmd + (fullArg ? ' ' + fullArg : ''));
+                    return true;
+                }
+
+                console.log(chalk.yellow(`Comando desconhecido: /${cmd}`));
+                console.log(chalk.gray('Digite /help para ver comandos disponíveis'));
+                return true;
+        }
     }
 
-    async showShortcuts() {
-        const shortcuts = `
-${chalk.cyan('═══ Atalhos de Teclado ═══')}
-
-${chalk.blue('Comandos Básicos:')}
-${chalk.yellow('ESC')}        - Cancela o input atual
-${chalk.yellow('Ctrl+C')}     - Força saída da aplicação
-${chalk.yellow('Ctrl+D')}     - Finaliza input multi-linha
-${chalk.yellow('Ctrl+L')}     - Limpa a tela
-${chalk.yellow('Ctrl+U')}     - Apaga toda a linha
-${chalk.yellow('Ctrl+K')}     - Apaga até o fim da linha
-${chalk.yellow('Ctrl+W')}     - Apaga palavra anterior
-
-${chalk.blue('Navegação:')}
-${chalk.yellow('↑ / ↓')}      - Navega pelo histórico ${chalk.green('(persistente)')}
-${chalk.yellow('Ctrl+A')}     - Move para início da linha
-${chalk.yellow('Ctrl+E')}     - Move para fim da linha
-${chalk.yellow('Tab')}        - Auto-completa comandos
-
-${chalk.blue('Multi-linha:')}
-${chalk.yellow('"""')}        - Inicia/termina bloco multi-linha
-${chalk.yellow('\\')} no fim   - Continua na próxima linha
-
-${chalk.gray('Use /help para mais comandos')}
-`;
-        return shortcuts;
+    showHelp() {
+        console.log(chalk.cyan('\n═══ Comandos Disponíveis ═══\n'));
+        console.log(chalk.yellow('/help, /h, /?') + chalk.gray(' - Mostrar esta ajuda'));
+        console.log(chalk.yellow('/shortcuts, /s') + chalk.gray(' - Listar atalhos disponíveis'));
+        console.log(chalk.yellow('/clear, /cls, /c') + chalk.gray(' - Limpar terminal'));
+        console.log(chalk.yellow('/exit, /quit, /q') + chalk.gray(' - Sair do modo interativo'));
+        console.log(chalk.yellow('/save [nome]') + chalk.gray(' - Salvar sessão atual'));
+        console.log(chalk.yellow('/load [nome]') + chalk.gray(' - Carregar sessão salva'));
+        console.log(chalk.yellow('/sessions') + chalk.gray(' - Listar sessões salvas'));
+        console.log(chalk.yellow('/reset') + chalk.gray(' - Resetar contexto da conversa'));
+        console.log(chalk.yellow('/model') + chalk.gray(' - Informações do modelo de IA'));
+        console.log(chalk.yellow('/system') + chalk.gray(' - Informações do sistema'));
+        console.log(chalk.yellow('/exec <cmd>') + chalk.gray(' - Executar comando no sistema'));
+        console.log(chalk.yellow('/context') + chalk.gray(' - Mostrar contexto atual'));
+        console.log(chalk.yellow('/tokens') + chalk.gray(' - Mostrar uso de tokens'));
+        console.log(chalk.gray('\nDica: Use /<shortcut> para comandos rápidos (ex: /ll, /df, /git)'));
+        console.log();
     }
 
-    async clearScreen() {
-        console.clear();
-        return chalk.green('✓ Tela limpa (contexto mantido)');
+    showShortcuts() {
+        console.log(chalk.cyan('\n═══ Atalhos Disponíveis ═══'));
+        console.log(this.shortcuts.formatList());
+        console.log(chalk.gray('\nUso: /<atalho> [argumentos]'));
+        console.log(chalk.gray('Exemplo: /findfile "*.log"'));
+        console.log();
     }
 
-    async resetContext() {
-        this.mcp.contextManager.reset();
-        this.mcp.sessionPermissions.clear();  // Limpa permissões ao resetar contexto
-        return chalk.green('✓ Contexto e permissões reiniciados');
+    async executeSystemCommand(command) {
+        console.log(chalk.gray(`Executando: ${command}`));
+
+        return new Promise((resolve) => {
+            const child = spawn(command, [], {
+                shell: true,
+                stdio: 'inherit'
+            });
+
+            child.on('error', (error) => {
+                console.error(chalk.red(`Erro: ${error.message}`));
+                resolve();
+            });
+
+            child.on('exit', (code) => {
+                if (code !== 0 && code !== null) {
+                    console.log(chalk.yellow(`Comando finalizado com código: ${code}`));
+                }
+                resolve();
+            });
+        });
     }
 
     async saveSession(name) {
-        if (!name) {
-            name = `session-${Date.now()}`;
+        const sessionName = name || `session-${Date.now()}`;
+        try {
+            await this.mcp.sessionPersistence.save(sessionName, this.mcp.contextManager.getContext());
+            console.log(chalk.green(`✓ Sessão salva como '${sessionName}'`));
+        } catch (error) {
+            console.error(chalk.red(`Erro ao salvar sessão: ${error.message}`));
         }
-        await this.mcp.sessionPersistence.save(name, this.mcp.contextManager.getContext());
-        return chalk.green(`✓ Sessão salva como: ${name}`);
     }
 
     async loadSession(name) {
         if (!name) {
-            return chalk.red('Por favor, especifique o nome da sessão');
+            console.log(chalk.yellow('Uso: /load <nome-da-sessão>'));
+            return;
         }
+
         try {
             const context = await this.mcp.sessionPersistence.load(name);
             this.mcp.contextManager.messages = context;
-            return chalk.green(`✓ Sessão '${name}' carregada`);
+            console.log(chalk.green(`✓ Sessão '${name}' carregada`));
         } catch (error) {
-            return chalk.red(`Erro ao carregar sessão: ${error.message}`);
+            console.error(chalk.red(`Erro ao carregar sessão: ${error.message}`));
         }
-    }
-
-    async changeModel(modelName) {
-        if (!modelName) {
-            const info = await this.mcp.aiModel.getProviderInfo();
-            return chalk.cyan(`Modelo atual: ${info.model}\nProvedor: ${info.provider}`);
-        }
-        // TODO: Implementar troca de modelo
-        return chalk.yellow('Troca de modelo será implementada em breve');
-    }
-
-    async executeCommand() {
-        // TODO: Implementar execução do último comando
-        return chalk.yellow('Execução de comando será implementada em breve');
-    }
-
-    async showHistory() {
-        const history = this.mcp.contextManager.getHistory();
-        if (history.length === 0) {
-            return chalk.yellow('Histórico vazio');
-        }
-
-        let output = chalk.cyan('\n═══ Histórico da Sessão ═══\n\n');
-        for (const msg of history) {
-            const roleColor = msg.role === 'user' ? chalk.blue : chalk.green;
-            output += `${roleColor(`[${msg.time}] ${msg.role}:`)} ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}\n`;
-        }
-        return output;
-    }
-
-    async showVersion() {
-        const version = this.mcp.version || '1.0.22';
-        const systemInfo = this.mcp.systemDetector?.getSystemInfo() || {};
-        const providerInfo = this.mcp.aiModel?.getProviderInfo() || {};
-
-        const versionInfo = `
-${chalk.cyan('═══ Informações da Versão ═══')}
-
-${chalk.blue('▶ MCP Terminal:')} v${version}
-${chalk.blue('▶ Sistema:')} ${systemInfo.os || 'Unknown'} ${systemInfo.distro || ''}
-${chalk.blue('▶ IA Model:')} ${providerInfo.model || 'Not configured'}
-${chalk.blue('▶ AI Orchestration:')} ${chalk.green('Enabled')}
-${chalk.blue('▶ Node.js:')} ${process.version}
-
-${chalk.gray('© 2024 IPCOM - AI Tool for Linux')}
-`;
-        return versionInfo;
-    }
-
-    async exit() {
-        await this.mcp.shutdown();
-        return null; // Sinaliza saída
-    }
-}
-
-class SessionPersistence {
-    constructor(sessionDir = null) {
-        this.sessionDir = sessionDir || path.join(os.homedir(), '.mcp-terminal', 'sessions');
-        this.autoSaveTimer = null;
-        this.ensureDir();
-    }
-
-    async ensureDir() {
-        if (!existsSync(this.sessionDir)) {
-            await fs.mkdir(this.sessionDir, { recursive: true });
-        }
-    }
-
-    async save(sessionName, context) {
-        const filePath = path.join(this.sessionDir, `${sessionName}.json`);
-        const data = {
-            version: '1.0',
-            timestamp: new Date(),
-            context: context,
-            metadata: {
-                messageCount: context.length
-            }
-        };
-        await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-    }
-
-    async load(sessionName) {
-        const filePath = path.join(this.sessionDir, `${sessionName}.json`);
-        const data = JSON.parse(await fs.readFile(filePath, 'utf8'));
-        return data.context;
     }
 
     async listSessions() {
-        const files = await fs.readdir(this.sessionDir);
-        return files
-            .filter(f => f.endsWith('.json'))
-            .map(f => f.replace('.json', ''));
-    }
-
-    enableAutoSave(sessionName, contextManager, interval = 300000) {
-        if (this.autoSaveTimer) {
-            clearInterval(this.autoSaveTimer);
-        }
-
-        this.autoSaveTimer = setInterval(async () => {
-            try {
-                await this.save(sessionName, contextManager.getContext());
-            } catch (error) {
-                console.error(chalk.red('Erro no auto-save:', error.message));
+        try {
+            const sessions = await this.mcp.sessionPersistence.list();
+            if (sessions.length === 0) {
+                console.log(chalk.yellow('Nenhuma sessão salva'));
+                return;
             }
-        }, interval);
+
+            console.log(chalk.cyan('\n═══ Sessões Salvas ═══\n'));
+            for (const session of sessions) {
+                const info = await this.mcp.sessionPersistence.getInfo(session);
+                console.log(chalk.yellow(`• ${session}`));
+                if (info) {
+                    console.log(chalk.gray(`  Mensagens: ${info.messageCount}`));
+                    console.log(chalk.gray(`  Modificada: ${new Date(info.lastModified).toLocaleString()}`));
+                }
+            }
+            console.log();
+        } catch (error) {
+            console.error(chalk.red(`Erro ao listar sessões: ${error.message}`));
+        }
     }
 
-    stopAutoSave() {
-        if (this.autoSaveTimer) {
-            clearInterval(this.autoSaveTimer);
-            this.autoSaveTimer = null;
+    resetContext() {
+        this.mcp.contextManager.messages = [];
+        console.log(chalk.green('✓ Contexto resetado'));
+    }
+
+    showModelInfo() {
+        const info = this.mcp.aiModel.getProviderInfo();
+        console.log(chalk.cyan('\n═══ Informações do Modelo ═══\n'));
+        console.log(chalk.yellow('Provider:'), info.provider);
+        console.log(chalk.yellow('Modelo:'), info.model);
+        console.log(chalk.yellow('Contexto Máximo:'), `${this.mcp.contextManager.maxTokens} tokens`);
+        console.log();
+    }
+
+    showSystemInfo() {
+        const info = this.mcp.systemDetector.getSystemInfo();
+        console.log(chalk.cyan('\n═══ Informações do Sistema ═══\n'));
+        console.log(chalk.yellow('OS:'), info.os);
+        console.log(chalk.yellow('Distribuição:'), info.distro || 'N/A');
+        console.log(chalk.yellow('Versão:'), info.version || 'N/A');
+        console.log(chalk.yellow('Kernel:'), info.kernel || 'N/A');
+        console.log(chalk.yellow('Arquitetura:'), info.arch || 'N/A');
+        console.log(chalk.yellow('Hostname:'), info.hostname || 'N/A');
+        console.log();
+    }
+
+    showContext() {
+        const context = this.mcp.contextManager.getContext();
+        console.log(chalk.cyan('\n═══ Contexto da Conversa ═══\n'));
+        console.log(chalk.yellow(`Total de mensagens: ${context.length}`));
+
+        if (context.length > 0) {
+            console.log(chalk.gray('\nÚltimas 5 mensagens:'));
+            const recent = context.slice(-5);
+            for (const msg of recent) {
+                const preview = msg.content.substring(0, 100);
+                const suffix = msg.content.length > 100 ? '...' : '';
+                console.log(chalk.blue(`[${msg.role}]:`), preview + suffix);
+            }
         }
+        console.log();
+    }
+
+    showTokenUsage() {
+        const context = this.mcp.contextManager.getContext();
+        let totalChars = 0;
+        for (const msg of context) {
+            totalChars += msg.content.length;
+        }
+        const estimatedTokens = Math.round(totalChars / 4);
+        const maxTokens = this.mcp.contextManager.maxTokens;
+        const percentage = Math.round((estimatedTokens / maxTokens) * 100);
+
+        console.log(chalk.cyan('\n═══ Uso de Tokens ═══\n'));
+        console.log(chalk.yellow('Tokens estimados:'), `${estimatedTokens} / ${maxTokens} (${percentage}%)`);
+        console.log(chalk.yellow('Caracteres totais:'), totalChars);
+        console.log(chalk.yellow('Mensagens no contexto:'), context.length);
+
+        // Barra de progresso
+        const barLength = 40;
+        const filled = Math.round((percentage / 100) * barLength);
+        const bar = '█'.repeat(filled) + '░'.repeat(barLength - filled);
+        console.log(chalk.cyan('Uso: [') + bar + chalk.cyan(']'));
+        console.log();
+    }
+}
+
+// Classe para gerenciar entrada multilinha
+class MultilineInput {
+    constructor() {
+        this.multilineBuffer = '';
+        this.isCollecting = false;
+    }
+
+    processInput(line) {
+        if (!this.isCollecting && line === '```') {
+            this.isCollecting = true;
+            this.multilineBuffer = '';
+            return { collecting: true };
+        }
+
+        if (this.isCollecting) {
+            if (line === '```') {
+                this.isCollecting = false;
+                const result = this.multilineBuffer;
+                this.multilineBuffer = '';
+                return { collecting: false, content: result };
+            } else {
+                this.multilineBuffer += line + '\n';
+                return { collecting: true };
+            }
+        }
+
+        return { collecting: false, content: line };
     }
 }
 
@@ -333,219 +511,28 @@ class REPLInterface extends EventEmitter {
     constructor() {
         super();
         this.rl = null;
-        this.multilineBuffer = '';
-        this.inMultiline = false;
-        this.multilineInput = null;
-        this.keybindingManager = null;
     }
 
     initialize() {
         this.rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
-            prompt: chalk.cyan('mcp> '),
-            completer: this.autoComplete.bind(this),
-            terminal: true
+            prompt: chalk.blue('mcp> '),
+            terminal: true,
+            historySize: 1000,
+            removeHistoryDuplicates: true
         });
 
-        // Inicializa MultiLineInput
-        this.multilineInput = new MultiLineInput({
-            blockDelimiter: '"""',
-            continuationChar: '\\',
-            continuationPrompt: chalk.gray('... '),
-            normalPrompt: chalk.cyan('mcp> ')
-        });
-
-        // Inicializa KeybindingManager
-        this.keybindingManager = new KeybindingManager(this.rl, {
-            bindings: {
-                escape: 'escape',
-                clearLine: 'ctrl+u',
-                clearScreen: 'ctrl+l'
-            }
-        });
-        this.keybindingManager.initialize();
-
-        // Handler para cancelamento com ESC
-        this.keybindingManager.on('cancel', () => {
-            if (this.multilineInput.cancel()) {
-                this.rl.setPrompt(chalk.cyan('mcp> '));
-                this.rl.prompt();
-            }
-        });
-
-        // Detecta quando o usuário digita "/" para mostrar comandos
-        let commandMenuShown = false;
-        let lastLineLength = 0;
-
-        this.rl.on('keypress', (char, key) => {
-            const currentLine = this.rl.line;
-
-            // Quando digitar "/" no início da linha
-            if (char === '/' && currentLine === '') {
-                // Aguarda o caractere ser adicionado à linha
-                setImmediate(() => {
-                    if (this.rl.line === '/' && !commandMenuShown) {
-                        // Mostra o menu de comandos automaticamente
-                        const commands = {
-                            '/help': 'Mostrar ajuda e comandos disponíveis',
-                            '/shortcuts': 'Mostrar atalhos de teclado',
-                            '/clear': 'Limpar a tela',
-                            '/reset': 'Resetar contexto da conversa',
-                            '/save': 'Salvar sessão atual',
-                            '/load': 'Carregar sessão salva',
-                            '/model': 'Mudar modelo de IA',
-                            '/exec': 'Executar comando direto',
-                            '/history': 'Mostrar histórico',
-                            '/exit': 'Sair do programa',
-                            '/quit': 'Sair do programa'
-                        };
-
-                        console.log('\n' + chalk.cyan('═══ Comandos Disponíveis ═══'));
-                        for (const [cmd, desc] of Object.entries(commands)) {
-                            console.log(chalk.yellow(cmd.padEnd(12)) + chalk.gray(' - ' + desc));
-                        }
-                        console.log(chalk.cyan('═══════════════════════════════') + '\n');
-
-                        // Reposiciona o cursor e mantém o "/" na linha
-                        this.rl.prompt(true);
-                        commandMenuShown = true;
-                    }
-                });
-            }
-
-            // Se continuar digitando após "/", filtra os comandos
-            if (currentLine.startsWith('/') && currentLine.length > 1 && commandMenuShown) {
-                setImmediate(() => {
-                    const commands = {
-                        '/help': 'Mostrar ajuda e comandos disponíveis',
-                        '/shortcuts': 'Mostrar atalhos de teclado',
-                        '/clear': 'Limpar a tela',
-                        '/reset': 'Resetar contexto da conversa',
-                        '/save': 'Salvar sessão atual',
-                        '/load': 'Carregar sessão salva',
-                        '/model': 'Mudar modelo de IA',
-                        '/exec': 'Executar comando direto',
-                        '/history': 'Mostrar histórico',
-                        '/exit': 'Sair do programa',
-                        '/quit': 'Sair do programa'
-                    };
-
-                    const filtered = Object.entries(commands).filter(([cmd]) =>
-                        cmd.startsWith(this.rl.line)
-                    );
-
-                    if (filtered.length > 0 && filtered.length < Object.keys(commands).length) {
-                        // Limpa as linhas anteriores do menu (estimativa)
-                        process.stdout.write('\x1B[2K\x1B[1A'.repeat(13));
-
-                        console.log('\n' + chalk.cyan('═══ Comandos Filtrados ═══'));
-                        for (const [cmd, desc] of filtered) {
-                            const typed = this.rl.line;
-                            const remaining = cmd.slice(typed.length);
-                            console.log(
-                                chalk.green(typed) +
-                                chalk.yellow(remaining.padEnd(12 - typed.length)) +
-                                chalk.gray(' - ' + desc)
-                            );
-                        }
-                        console.log(chalk.cyan('═══════════════════════════════') + '\n');
-
-                        // Reposiciona o cursor
-                        this.rl.prompt(true);
-                    }
-                });
-            }
-
-            // Reset quando limpar a linha
-            if (currentLine === '' || !currentLine.startsWith('/')) {
-                commandMenuShown = false;
-            }
-
-            lastLineLength = currentLine.length;
-        });
-
-
-        this.rl.on('line', (line) => {
-            const result = this.multilineInput.processInput(line);
-
-            if (!result.complete) {
-                // Continua capturando input
-                this.rl.setPrompt(result.prompt);
-                if (result.message) {
-                    process.stdout.write(result.message + '\n');
-                }
-                this.rl.prompt();
-            } else {
-                // Input completo, processa
-                this.multilineInput.reset();
-                this.rl.setPrompt(chalk.cyan('mcp> '));
-                this.emit('line', result.text);
-            }
-        });
-
-        this.rl.on('SIGINT', () => {
-            if (this.multilineInput.isMultiline()) {
-                this.multilineInput.cancel();
-                this.rl.setPrompt(chalk.cyan('mcp> '));
-                this.rl.prompt();
-            } else {
-                this.emit('interrupt');
-            }
-        });
+        // Configurar para manter histórico
+        this.rl.history = [];
+        this.rl.historyIndex = -1;
     }
 
-    autoComplete(line, callback) {
-        const commands = {
-            '/help': 'Mostrar ajuda e comandos disponíveis',
-            '/shortcuts': 'Mostrar atalhos de teclado',
-            '/clear': 'Limpar a tela',
-            '/reset': 'Resetar contexto da conversa',
-            '/save': 'Salvar sessão atual',
-            '/load': 'Carregar sessão salva',
-            '/model': 'Mudar modelo de IA',
-            '/exec': 'Executar comando direto',
-            '/history': 'Mostrar histórico',
-            '/exit': 'Sair do programa',
-            '/quit': 'Sair do programa'
-        };
-
-        const completions = Object.keys(commands);
-
-        // Se digitou apenas "/" mostra todas as opções com descrições
-        if (line === '/') {
-            // Mostra menu de comandos formatado
-            console.log('\n' + chalk.cyan('═══ Comandos Disponíveis ═══'));
-            for (const [cmd, desc] of Object.entries(commands)) {
-                console.log(chalk.yellow(cmd.padEnd(12)) + chalk.gray(' - ' + desc));
-            }
-            console.log(chalk.cyan('═══════════════════════════════\n'));
-
-            // Retorna todas as completions
-            if (callback) {
-                callback(null, [completions, line]);
-            }
-            return [completions, line];
+    on(event, handler) {
+        if (this.rl) {
+            this.rl.on(event, handler);
         }
-
-        // Caso contrário, filtra baseado no que foi digitado
-        const hits = completions.filter((c) => c.startsWith(line));
-
-        // Se tem múltiplas opções e o usuário pressionou TAB
-        if (hits.length > 1 && line.length > 1) {
-            console.log('\n' + chalk.cyan('Opções:'));
-            hits.forEach(cmd => {
-                console.log(chalk.yellow(cmd) + chalk.gray(' - ' + commands[cmd]));
-            });
-            console.log();
-        }
-
-        if (callback) {
-            callback(null, [hits.length ? hits : completions, line]);
-        }
-        return [hits.length ? hits : completions, line];
     }
-
 
     prompt() {
         this.rl.prompt();
@@ -647,8 +634,8 @@ class MCPInteractive extends EventEmitter {
             );
             console.log(chalk.green('✓ Usando orquestrador com ferramenta Bash persistente'));
         } else if (useToolsOrchestrator && this.aiModel.supportsTools && this.aiModel.supportsTools()) {
-            // Usar novo orquestrador com Tools nativas
-            this.commandOrchestrator = new AICommandOrchestratorWithTools(
+            // Usar orquestrador com tools nativo
+            this.commandOrchestrator = new AICommandOrchestratorTools(
                 this.aiModel,
                 commandExecutor,
                 {
@@ -657,26 +644,25 @@ class MCPInteractive extends EventEmitter {
                     verboseLogging: modelConfig.ai_orchestration?.verbose_logging || false
                 }
             );
-            console.log(chalk.green('✓ Usando orquestrador com Tools nativas do Claude'));
+            console.log(chalk.green('✓ Usando orquestrador com ferramentas nativas'));
         } else {
-            // Usar orquestrador tradicional
+            // Usar orquestrador padrão com regex
             this.commandOrchestrator = new AICommandOrchestrator(
                 this.aiModel,
-                commandExecutor,  // Passa apenas o executor, não toda a instância
+                commandExecutor,
                 {
-                    maxIterations: modelConfig.ai_orchestration?.max_iterations || 5,
-                    maxExecutionTime: modelConfig.ai_orchestration?.max_execution_time || 30000,
-                    enableCache: modelConfig.ai_orchestration?.enable_cache !== false,
-                    verboseLogging: modelConfig.ai_orchestration?.verbose_logging || false,
-                    cacheDurationHours: modelConfig.cache_duration_hours || 1
+                    maxIterations: modelConfig.ai_orchestration?.max_iterations || 10,
+                    maxExecutionTime: modelConfig.ai_orchestration?.max_execution_time || 60000,
+                    verboseLogging: modelConfig.ai_orchestration?.verbose_logging || false
                 }
             );
+            console.log(chalk.green('✓ Usando orquestrador padrão com detecção por regex'));
         }
 
         // Inicializar histórico persistente
         this.persistentHistory = new PersistentHistory({
-            historyFile: path.join(os.homedir(), '.mcp-terminal', 'history.json'),
-            maxEntries: modelConfig.history?.max_entries || 1000,
+            historyFile: modelConfig.history?.file || path.join(os.homedir(), '.mcp-terminal', 'history.json'),
+            maxSize: modelConfig.history?.max_size || 1000,
             deduplicate: modelConfig.history?.deduplicate !== false
         });
         await this.persistentHistory.initialize();
@@ -695,11 +681,10 @@ class MCPInteractive extends EventEmitter {
         console.log(chalk.blue('🔄 Tentando carregar histórico...'));
         await this.loadCombinedHistory();
 
-        // Configurar Bracketed Paste Mode
-        this.setupBracketedPasteMode();
+        // Configurar detecção de paste multilinha
+        this.setupMultilineDetection();
 
         // Configurar listeners
-        // Line handling is now done in setupBracketedPasteMode
         this.replInterface.on('interrupt', this.handleInterrupt.bind(this));
 
         // Configurar auto-save
@@ -725,181 +710,207 @@ class MCPInteractive extends EventEmitter {
 
     async initializeTurso(modelConfig) {
         try {
-            // Verificar se existe configuração do Turso
             const tursoConfigPath = path.join(os.homedir(), '.mcp-terminal', 'turso-config.json');
-            if (!existsSync(tursoConfigPath)) {
-                console.log(chalk.gray('ℹ️  Turso não configurado. Use: node libs/turso-client-setup.js'));
-                return;
-            }
 
-            // Carregar configuração do Turso
-            const tursoConfig = JSON.parse(await fs.readFile(tursoConfigPath, 'utf8'));
+            if (existsSync(tursoConfigPath)) {
+                console.log(chalk.blue('📦 Configuração do Turso encontrada'));
+                const tursoConfig = JSON.parse(await fs.readFile(tursoConfigPath, 'utf8'));
 
-            // Parse command line arguments
-            const args = process.argv.slice(2);
-            const userFlag = args.find(arg => arg.startsWith('--user='));
-            const username = userFlag ? userFlag.split('=')[1] : null;
-            const localMode = args.includes('--local');
-            const hybridMode = args.includes('--hybrid');
+                this.tursoClient = new TursoHistoryClient({
+                    ...tursoConfig,
+                    debug: false // Desabilitar debug em produção
+                });
 
-            // Determinar modo de histórico
-            if (username) {
-                this.historyMode = 'user';
-                this.currentUser = username;
-            } else if (localMode) {
-                this.historyMode = 'machine';
-            } else if (hybridMode) {
-                this.historyMode = 'hybrid';
-            } else {
-                this.historyMode = tursoConfig.history_mode || 'global';
-            }
+                console.log(chalk.blue('🔗 Conectando ao Turso...'));
+                await this.tursoClient.initialize();
+                console.log(chalk.green('✅ Turso conectado'));
 
-            // Inicializar cliente Turso
-            this.tursoClient = new TursoHistoryClient({
-                ...tursoConfig,
-                history_mode: this.historyMode,
-                debug: false
-            });
+                // Gerenciador de usuários
+                this.userManager = new UserManager(this.tursoClient.client);
 
-            await this.tursoClient.initialize();
-
-            // Se modo usuário, configurar usuário
-            if (username) {
-                try {
-                    const user = await this.tursoClient.setUser(username);
-                    console.log(chalk.green(`✓ Logado como: ${username}`));
-                } catch (error) {
-                    console.log(chalk.red(`❌ ${error.message}`));
-                    console.log(chalk.yellow('Por favor, verifique o nome de usuário ou execute sem a flag --user.'));
-                    console.log(chalk.gray('Para criar um novo usuário: ipcom-chat user create --username <user> --name "<nome>" --email <email>'));
-                    process.exit(1);
+                // Configurar usuário e modo
+                const args = process.argv.slice(2);
+                for (let i = 0; i < args.length; i++) {
+                    if (args[i].startsWith('--user=')) {
+                        const username = args[i].split('=')[1];
+                        if (username) {
+                            await this.setUser(username);
+                        }
+                    } else if (args[i] === '--local') {
+                        this.historyMode = 'machine';
+                        console.log(chalk.blue('📍 Modo: Histórico local da máquina'));
+                    } else if (args[i] === '--hybrid') {
+                        this.historyMode = 'hybrid';
+                        console.log(chalk.blue('🔀 Modo: Histórico híbrido (todos)'));
+                    }
                 }
+
+                this.tursoEnabled = true;
+                console.log(chalk.green('✅ Histórico distribuído ativado'));
+            } else {
+                console.log(chalk.gray('ℹ️  Turso não configurado - usando apenas histórico local'));
             }
-
-            // Inicializar UserManager
-            this.userManager = new UserManager(this.tursoClient.client);
-
-            this.tursoEnabled = true;
-            console.log(chalk.green(`✓ Turso conectado (modo: ${this.historyMode})`));
-
         } catch (error) {
-            console.log(chalk.yellow(`⚠️  Não foi possível conectar ao Turso: ${error.message}`));
-            console.log(chalk.gray('Continuando com histórico local apenas...'));
-            this.tursoEnabled = false;
+            console.log(chalk.yellow(`⚠️  Turso não disponível: ${error.message}`));
+            console.log(chalk.gray('Continuando com histórico local apenas'));
         }
     }
 
-    setupBracketedPasteMode() {
-        // Simpler multiline detection without relying on bracketed paste mode
+    async setUser(username) {
+        try {
+            const user = await this.userManager.getUser(username);
+            if (user) {
+                this.currentUser = user;
+                await this.tursoClient.setUser(username);
+                this.historyMode = 'user';
+                console.log(chalk.green(`✅ Usuário definido: ${user.name} (${username})`));
+                console.log(chalk.blue('👤 Modo: Histórico do usuário'));
+            } else {
+                console.log(chalk.yellow(`⚠️  Usuário '${username}' não encontrado`));
+            }
+        } catch (error) {
+            console.log(chalk.yellow(`⚠️  Erro ao definir usuário: ${error.message}`));
+        }
+    }
+
+    setupMultilineDetection() {
         const self = this;
-        this.multilineMode = false;
-        this.multilineBuffer = [];
+        this.pasteBuffer = [];
+        this.pasteTimer = null;
         this.waitingForPasteConfirmation = false;
         this.pendingPasteText = '';
 
-        // Override the line event handler
-        const originalLineHandler = this.replInterface.rl._events.line;
+        // Track input speed to detect paste
+        let lastInputTime = Date.now();
+        let rapidInputCount = 0;
+        let inputBuffer = '';
 
-        this.replInterface.rl.removeAllListeners('line');
+        // Override _addHistory to prevent multiline from being added to history
+        const originalAddHistory = this.replInterface.rl._addHistory;
+        this.replInterface.rl._addHistory = function() {
+            // Only add to history if not multiline
+            if (!this.line || !this.line.includes('\n')) {
+                return originalAddHistory.call(this);
+            }
+            return this.history[0];
+        };
 
+        // Override the line handler
         this.replInterface.rl.on('line', async (input) => {
-            // Check if we're waiting for paste confirmation
+            // If waiting for confirmation
             if (self.waitingForPasteConfirmation) {
                 if (input === '') {
-                    // User pressed Enter - send the multiline content
                     self.waitingForPasteConfirmation = false;
                     const content = self.pendingPasteText;
                     self.pendingPasteText = '';
-
-                    // Process the multiline content as a single input
                     await self.processInput(content);
                 } else {
-                    // User typed something else - cancel
                     self.waitingForPasteConfirmation = false;
                     self.pendingPasteText = '';
-                    console.log(chalk.yellow('Entrada multilinha cancelada'));
-
-                    // Process the new input normally
                     await self.processInput(input);
                 }
                 return;
             }
 
-            // Check if we're in multiline mode (user typed /multiline)
-            if (self.multilineMode) {
-                if (input === '/end' || input === '') {
-                    // End multiline mode
-                    self.multilineMode = false;
-                    const content = self.multilineBuffer.join('\n');
-                    self.multilineBuffer = [];
+            // Check if the input contains newlines (multiline paste detected)
+            if (input.includes('\n')) {
+                const lines = input.split('\n').filter(l => l.trim());
 
-                    if (content.trim()) {
-                        console.log(chalk.cyan('\n📋 Texto multilinha capturado:'));
-                        console.log(chalk.gray('─'.repeat(80)));
-                        console.log(content);
-                        console.log(chalk.gray('─'.repeat(80)));
-                        console.log(chalk.yellow('Pressione Enter para enviar ou digite algo para cancelar\n'));
+                if (lines.length > 1) {
+                    console.log(chalk.cyan('\n📋 Detected multiline paste:'));
+                    console.log(chalk.gray('─'.repeat(50)));
+                    lines.forEach((line, i) => {
+                        console.log(chalk.gray(`${(i+1).toString().padStart(3)} │ `) + line);
+                    });
+                    console.log(chalk.gray('─'.repeat(50)));
+                    console.log(chalk.yellow('Press Enter to send or type anything to cancel\n'));
 
-                        self.pendingPasteText = content;
-                        self.waitingForPasteConfirmation = true;
-                    } else {
-                        console.log(chalk.yellow('Modo multilinha cancelado (vazio)'));
-                    }
-                } else {
-                    // Add to buffer
-                    self.multilineBuffer.push(input);
-                    console.log(chalk.gray(`Linha ${self.multilineBuffer.length} adicionada. Digite /end ou Enter vazio para finalizar.`));
+                    self.pendingPasteText = input;
+                    self.waitingForPasteConfirmation = true;
+                    self.replInterface.prompt();
+                    return;
                 }
-                self.replInterface.prompt();
-                return;
-            }
-
-            // Check for /multiline command
-            if (input === '/multiline' || input === '/ml') {
-                self.multilineMode = true;
-                self.multilineBuffer = [];
-                console.log(chalk.cyan('\n📝 Modo multilinha ativado'));
-                console.log(chalk.gray('Digite ou cole seu texto. Finalize com /end ou Enter vazio.\n'));
-                self.replInterface.prompt();
-                return;
             }
 
             // Normal single-line processing
             await self.processInput(input);
         });
-    }
 
-    handlePastedContent(content) {
-        // Remover espaços em branco do final
-        content = content.trimEnd();
+        // Override keypress to detect rapid input (paste)
+        const stdin = process.stdin;
+        if (stdin.setRawMode) {
+            // Store original keypress handler
+            const originalKeypressHandler = this.replInterface.rl._onKeypress;
 
-        // Se não tem conteúdo, ignorar
-        if (!content) {
-            this.replInterface.prompt();
-            return;
+            this.replInterface.rl._onKeypress = function(char, key) {
+                const now = Date.now();
+                const timeDiff = now - lastInputTime;
+                lastInputTime = now;
+
+                // Detect rapid input (paste)
+                if (timeDiff < 10 && char && char !== '\r' && char !== '\n') {
+                    rapidInputCount++;
+                    inputBuffer += char;
+
+                    // Clear existing timer
+                    if (self.pasteTimer) {
+                        clearTimeout(self.pasteTimer);
+                    }
+
+                    // Set timer to process after paste completes
+                    self.pasteTimer = setTimeout(() => {
+                        if (rapidInputCount > 20 && inputBuffer.includes('\n')) {
+                            // Likely a multiline paste
+                            rapidInputCount = 0;
+
+                            // Clear the current line
+                            this.line = '';
+                            this.cursor = 0;
+                            this._refreshLine();
+
+                            // Show the pasted content
+                            const lines = inputBuffer.split('\n').filter(l => l.trim());
+                            console.log(chalk.cyan('\n📋 Detected multiline paste:'));
+                            console.log(chalk.gray('─'.repeat(50)));
+                            lines.forEach((line, i) => {
+                                console.log(chalk.gray(`${(i+1).toString().padStart(3)} │ `) + line);
+                            });
+                            console.log(chalk.gray('─'.repeat(50)));
+                            console.log(chalk.yellow('Press Enter to send or type anything to cancel\n'));
+
+                            self.pendingPasteText = inputBuffer;
+                            self.waitingForPasteConfirmation = true;
+                            inputBuffer = '';
+                            self.replInterface.prompt();
+                        } else {
+                            // Regular input, add to line
+                            if (inputBuffer) {
+                                this.line += inputBuffer;
+                                this.cursor += inputBuffer.length;
+                                this._refreshLine();
+                            }
+                            rapidInputCount = 0;
+                            inputBuffer = '';
+                        }
+                    }, 50);
+                } else {
+                    // Reset rapid input detection if input is slow
+                    if (timeDiff > 50) {
+                        rapidInputCount = 0;
+                        if (inputBuffer) {
+                            // Add buffered input to line
+                            this.line += inputBuffer;
+                            this.cursor += inputBuffer.length;
+                            this._refreshLine();
+                            inputBuffer = '';
+                        }
+                    }
+                }
+
+                // Call original handler
+                return originalKeypressHandler.call(this, char, key);
+            };
         }
-
-        // Verificar se tem múltiplas linhas
-        const lines = content.split('\n');
-
-        if (lines.length > 1) {
-            // Mostrar o conteúdo colado formatado
-            console.log(chalk.gray('\n📋 Texto com múltiplas linhas detectado:'));
-            console.log(chalk.cyan('─'.repeat(80)));
-            console.log(content);
-            console.log(chalk.cyan('─'.repeat(80)));
-            console.log(chalk.yellow('Pressione Enter para enviar ou Ctrl+C para cancelar\n'));
-
-            // Armazenar para processamento após confirmação
-            this.pendingPasteText = content;
-            this.waitingForPasteConfirmation = true;
-        } else {
-            // Linha única - processar diretamente
-            this.processInput(content);
-        }
-
-        // Mostrar prompt
-        this.replInterface.prompt();
     }
 
     async loadCombinedHistory() {
@@ -939,59 +950,46 @@ class MCPInteractive extends EventEmitter {
                 } catch (error) {
                     console.log(chalk.yellow(`⚠️  Erro ao carregar do Turso: ${error.message}`));
                 }
-            } else {
-                console.log(chalk.yellow('⚠️  Turso client não disponível'));
             }
 
-            // 3. Remover duplicatas mantendo a ordem original (mais antigo primeiro)
+            // 3. Remover duplicatas mantendo ordem (comandos mais recentes primeiro)
             const uniqueHistory = [...new Set(combinedHistory)];
-            console.log(chalk.gray(`🔄 Histórico único: ${uniqueHistory.length} comandos`));
+            console.log(chalk.gray(`📝 Total após deduplicação: ${uniqueHistory.length} comandos únicos`));
 
-            // 4. Carregar no readline - o readline espera ordem do mais NOVO para o mais ANTIGO
-            // O primeiro item do array history é o mais recente
+            // 4. Limpar histórico existente do readline
             this.replInterface.rl.history = [];
 
-            // Percorrer do final para o início (do mais novo para o mais antigo)
+            // 5. Adicionar ao histórico do readline na ordem correta
+            // O readline espera o histórico na ordem: mais recente no índice 0
+            // Como nosso histórico já está com os mais recentes primeiro, adicionamos na ordem reversa
             for (let i = uniqueHistory.length - 1; i >= 0; i--) {
                 this.replInterface.rl.history.push(uniqueHistory[i]);
             }
 
-            // Resetar o índice do histórico para apontar para -1 (nenhum item selecionado)
-            // Isso garante que a primeira seta para cima pegue o último comando
+            // 6. Resetar o índice do histórico
             this.replInterface.rl.historyIndex = -1;
 
-            if (uniqueHistory.length > 0) {
-                console.log(chalk.green(`📚 Carregados ${uniqueHistory.length} comandos do histórico`));
-                console.log(chalk.gray(`   Último comando: ${uniqueHistory[uniqueHistory.length - 1]}`));
-            } else {
-                console.log(chalk.yellow('📚 Nenhum comando encontrado no histórico'));
-            }
+            console.log(chalk.green(`✅ Histórico carregado: ${this.replInterface.rl.history.length} comandos disponíveis`));
 
+            // Debug: mostrar os primeiros comandos do histórico
+            if (this.replInterface.rl.history.length > 0) {
+                console.log(chalk.gray('📌 Comandos recentes no histórico:'));
+                const recentCommands = this.replInterface.rl.history.slice(0, 3);
+                recentCommands.forEach((cmd, i) => {
+                    const preview = cmd.length > 50 ? cmd.substring(0, 50) + '...' : cmd;
+                    console.log(chalk.gray(`   ${i + 1}. ${preview}`));
+                });
+            }
         } catch (error) {
             console.log(chalk.red(`❌ Erro ao carregar histórico: ${error.message}`));
+            console.error(error);
         }
     }
 
     async start() {
         await this.initialize();
-        this.showWelcome();
-        this.replInterface.prompt();
-    }
 
-    showWelcome() {
-        console.clear();
-
-        // ASCII Art do IPCOM
-        console.log(chalk.cyan(`  ___ ____   ____ ___  __  __
- |_ _|  _ \\ / ___/ _ \\|  \\/  |
-  | || |_) | |  | | | | |\\/| |
-  | ||  __/| |__| |_| | |  | |
- |___|_|  __\\____\\___/|_|  |_|  _    __              _     _
-    / \\  |_ _| |_   _|__   ___ | |  / _| ___  _ __  | |   (_)_ __  _   ___  __
-   / _ \\  | |    | |/ _ \\ / _ \\| | | |_ / _ \\| '__| | |   | | '_ \\| | | \\ \\/ /
-  / ___ \\ | |    | | (_) | (_) | | |  _| (_) | |    | |___| | | | | |_| |>  <
- /_/   \\_\\___|   |_|\\___/ \\___/|_| |_|  \\___/|_|    |_____|_|_| |_|\\__,_/_/\\_\\
-`));
+        // Exibir banner de boas-vindas
 
         console.log(chalk.cyan('═'.repeat(80)));
         console.log(chalk.white.bold(`                    MCP Terminal Assistant v${this.version || '1.0.22'}`));
@@ -1029,15 +1027,14 @@ class MCPInteractive extends EventEmitter {
         console.log(chalk.cyan('─'.repeat(80)));
         console.log(chalk.gray('💡 Digite'), chalk.cyan('/help'), chalk.gray('para comandos |'),
                     chalk.cyan('/shortcuts'), chalk.gray('para atalhos |'),
-                    chalk.cyan('/multiline'), chalk.gray('para modo multilinha'));
-        console.log(chalk.gray('   '), chalk.cyan('/exit'), chalk.gray('para sair |'),
-                    chalk.gray('Use'), chalk.cyan('/ml'), chalk.gray('como atalho para /multiline'));
+                    chalk.cyan('/exit'), chalk.gray('para sair'));
+        console.log(chalk.gray('   Cole texto multilinha e o sistema detecta automaticamente'));
         console.log(chalk.cyan('─'.repeat(80)));
         console.log();
     }
 
     handleLineInput(line) {
-        // This is now handled in setupBracketedPasteMode
+        // This is now handled in setupMultilineDetection
         // Keeping for compatibility
         this.processInput(line);
     }
@@ -1055,184 +1052,62 @@ class MCPInteractive extends EventEmitter {
             await this.persistentHistory.add(input);
         }
 
-        // Comando será salvo após receber resposta da IA (linha 939)
-        // Removido saveCommand duplicado que salvava antes da resposta
-
         // Verificar se é um comando
-        if (input.startsWith('/')) {
-            const result = await this.commandProcessor.execute(input);
-            if (result === null) {
-                // Comando de saída
-                return;
-            }
-            console.log(result);
+        const isCommand = await this.commandProcessor.process(input);
+        if (isCommand) {
             this.replInterface.prompt();
             return;
         }
 
-        // Processar pergunta normal
+        // Processar como pergunta para IA
         await this.handleQuestion(input);
         this.replInterface.prompt();
     }
 
     async handleQuestion(question) {
-        try {
-            // Adiciona ao contexto
-            this.contextManager.addMessage('user', question);
+        // Adiciona pergunta ao contexto
+        this.contextManager.addMessage('user', question);
 
-            // Verifica se deve usar orquestração inteligente
-            const shouldOrchestrate = this.shouldUseOrchestration(question);
+        // Iniciar animação de loading
+        this.startSpinner();
 
-            if (shouldOrchestrate && this.config.ai_orchestration?.enabled !== false) {
-                // Usa orquestração inteligente para perguntas complexas
-                orchestrationAnimator.start('Iniciando análise inteligente');
-
-                const systemInfo = this.systemDetector.getSystemInfo();
-                const systemContext = {
-                    ...systemInfo,
-                    packageManager: systemInfo.packageManager || 'apt',
-                    capabilities: this.systemDetector.getSystemCapabilities() || [],
-                    commands: this.systemDetector.getSystemCommands() || {}
-                };
-
-                // Executa orquestração com animator
-                const result = await this.commandOrchestrator.orchestrateExecution(question, systemContext, orchestrationAnimator);
-
-                // Para a animação
-                orchestrationAnimator.stop(result.success ? 'Análise concluída com sucesso!' : 'Análise concluída');
-
-                if (result.success && (result.directAnswer || result.finalAnswer)) {
-                    // PRIMEIRO: Mostra resposta direta e clara
-                    if (result.directAnswer) {
-                        console.log();
-                        console.log(chalk.cyan('═══════════════════════════════════════════════════════'));
-                        console.log(chalk.bold.white('📊 RESPOSTA:'));
-                        console.log(chalk.cyan('───────────────────────────────────────────────────────'));
-                        console.log();
-                        console.log(chalk.white(result.directAnswer));
-                        console.log();
-                        console.log(chalk.cyan('═══════════════════════════════════════════════════════'));
-
-                        // Adiciona ao contexto
-                        this.contextManager.addMessage('assistant', result.directAnswer);
-
-                        // Salvar resposta no Turso
-                        if (this.tursoEnabled) {
-                            try {
-                                await this.tursoClient.saveCommand(question, result.directAnswer, {
-                                    session_id: this.sessionName,
-                                    tokens_used: result.metadata?.tokensUsed,
-                                    execution_time_ms: result.duration
-                                });
-                            } catch (error) {
-                                // Silenciosamente continua
-                            }
-                        }
-                    }
-
-                    // SEGUNDO: Mostra detalhes técnicos (se houver)
-                    if (result.technicalDetails || result.executedCommands.length > 0) {
-                        console.log();
-                        console.log(chalk.gray('📝 Detalhes Técnicos:'));
-
-                        // Comandos executados
-                        if (result.executedCommands.length > 0) {
-                            console.log(chalk.gray(`  • Comandos executados: ${result.executedCommands.join(', ')}`));
-                        }
-
-                        // Métricas
-                        if (result.metadata) {
-                            console.log(chalk.gray(`  • Tempo: ${(result.duration / 1000).toFixed(1)}s`));
-                            if (result.metadata.cacheHits > 0) {
-                                console.log(chalk.gray(`  • Cache hits: ${result.metadata.cacheHits}`));
-                            }
-                        }
-
-                        // Resumo técnico
-                        if (result.technicalDetails) {
-                            console.log(chalk.gray(`  • ${result.technicalDetails}`));
-                        }
-                    }
-
-                    // TERCEIRO: Resposta detalhada adicional (se existir e for diferente)
-                    if (result.finalAnswer && result.finalAnswer !== result.directAnswer) {
-                        console.log();
-                        console.log(chalk.gray('💡 Informações Adicionais:'));
-                        console.log(chalk.gray(result.finalAnswer));
-                    }
-                } else {
-                    // Fallback para método tradicional se não encontrou resposta
-                    await this.handleQuestionTraditional(question);
-                }
-            } else {
-                // Usa método tradicional para perguntas simples
-                await this.handleQuestionTraditional(question);
-            }
-
-        } catch (error) {
-            this.stopSpinner();
-            console.error(chalk.red(`\n✗ Erro: ${error.message}\n`));
-        }
-    }
-
-    // Decide se deve usar orquestração baseado na pergunta
-    shouldUseOrchestration(question) {
-        const q = question.toLowerCase();
-
-        // Padrões que indicam necessidade de executar comandos
-        const patterns = [
-            // Comandos de listagem e análise
-            /list[ea]/i,  // liste, listar
-            /mostr[ea]/i,  // mostre, mostrar
-            /exib[ia]/i,  // exiba, exibir
-            /quais?\s+(?:são|os?|as?)/i,  // quais são, quais os
-            /quant[oa]s?\s+/i,  // quantos, quantas
-
-            // Análise de recursos do sistema
-            /(?:memória|memoria|ram|cpu|disco|processos?|apps?|aplicações?|aplicativos?)/i,
-            /(?:consumo|uso|utilização|ocupação)/i,
-            /(?:espaço|tamanho|portas?|serviços?)/i,
-
-            // Comandos específicos
-            /top\s+\d+/i,  // top 5, top 10
-            /primeiros?\s+\d+/i,  // primeiros 5
-            /últimos?\s+\d+/i,  // últimos 10
-            /maiores?\s+/i,  // maiores consumidores
-
-            // Análise e verificação
-            /status\s+/i,  // status de qualquer coisa
-            /informações?\s+/i,  // informações sobre
-            /analis[ea]r?\s+/i,  // analisar
-            /verificar?\s+/i,  // verificar
-            /diagnóstico/i,  // diagnóstico
-            /relatório/i,  // relatório
-
-            // Serviços específicos
-            /fail2ban/i,  // fail2ban
-            /docker/i,  // docker
-            /systemd?/i,  // systemd
-            /nginx/i,  // nginx
-            /apache/i,  // apache
-            /mysql/i,  // mysql
-            /postgres/i,  // postgres
-
-            // Estados e condições
-            /bloqueado|banido/i,  // IPs bloqueados
-            /rodando|executando|ativo/i,  // processos rodando
-            /parado|inativo|morto/i,  // serviços parados
-            /erro|warning|critical/i  // logs de erro
-        ];
-
-        return patterns.some(pattern => pattern.test(q));
-    }
-
-    // Método tradicional (mantido para perguntas simples)
-    async handleQuestionTraditional(question) {
-        // Detecta e executa comandos mencionados na pergunta (SEM spinner ainda)
+        // Detectar e executar comandos se necessário
         const commandResults = await this.detectAndExecuteCommands(question);
 
-        // SÓ AGORA inicia animação de loading (após permissões)
-        this.startSpinner(' Processando com IA');
+        // Checar se a pergunta requer execução de comandos usando o orquestrador
+        if (this.shouldUseOrchestrator(question)) {
+            console.log(chalk.gray('\n🤖 Orquestrando comandos para responder sua pergunta...\n'));
+
+            const systemInfo = this.systemDetector.getSystemInfo();
+            const context = this.contextManager.getContext();
+
+            const result = await this.commandOrchestrator.orchestrate(question, {
+                systemInfo,
+                context,
+                sessionPermissions: this.sessionPermissions
+            });
+
+            // Parar animação de loading
+            this.stopSpinner();
+
+            // Adicionar resposta ao contexto
+            this.contextManager.addMessage('assistant', result.response);
+
+            // Salvar no Turso
+            if (this.tursoEnabled) {
+                try {
+                    await this.tursoClient.saveCommand(question, result.response, {
+                        session_id: this.sessionName
+                    });
+                } catch (error) {
+                    // Silenciosamente continua
+                }
+            }
+
+            // Exibir resposta formatada
+            this.displayFormattedResponse(result.response);
+            return;
+        }
 
         // Obtém resposta da IA com contexto
         const context = this.contextManager.getContext();
@@ -1283,46 +1158,35 @@ class MCPInteractive extends EventEmitter {
 
         // Padrões para detectar pedidos de execução de comandos
         const executePatterns = [
-            /(?:execute|executar?|run|rodar?|pode\s+(?:executar|rodar)|me\s+(?:mostre|passe|dê))\s+(?:o\s+)?(?:comando\s+)?[`"]?([^`"\n]+)[`"]?/gi,
-            /(?:qual|quais|me\s+(?:dê|passe|mostre))\s+(?:o\s+)?(?:resultado|output|saída)\s+(?:do\s+)?(?:comando\s+)?[`"]?([^`"\n]+)[`"]?/gi,
-            /(?:status|informações?|detalhes?)\s+(?:do|da|de)\s+([a-zA-Z0-9_\-]+)/gi
+            /execute[:\s]+`([^`]+)`/gi,
+            /run[:\s]+`([^`]+)`/gi,
+            /comando[:\s]+`([^`]+)`/gi,
+            /executar[:\s]+`([^`]+)`/gi,
+            /rodar[:\s]+`([^`]+)`/gi
         ];
 
-        // Comandos comuns que o usuário pode querer executar
-        const commonCommands = {
-            'fail2ban': ['fail2ban-client status'],  // Removido systemctl status duplicado
-            'firewall': ['ufw status', 'iptables -L -n'],
-            'docker': ['docker ps', 'docker stats --no-stream'],
-            'sistema': ['uname -a', 'lsb_release -a'],
-            'rede': ['ip a'],
-            'processos': ['ps aux | head -20']
-        };
-
-        // Verifica se a pergunta menciona algum serviço/comando conhecido
-        for (const [service, commands] of Object.entries(commonCommands)) {
-            if (question.toLowerCase().includes(service)) {
-                for (const cmd of commands) {
-                    // Executa apenas se o usuário está pedindo informações atuais
-                    if (question.match(/(?:status|estado|ativas?|rodando|executando|quais|quant|liste|mostrar?|habilitad|regras?|bloqueado)/i)) {
-                        const result = await this.executeCommand(cmd);
-                        if (result) {
-                            commandResults.push(result);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Busca por comandos específicos mencionados
         for (const pattern of executePatterns) {
             let match;
-            pattern.lastIndex = 0; // Reset regex
             while ((match = pattern.exec(question)) !== null) {
-                const command = match[1].trim();
-                if (command && !command.includes('&&') && !command.includes(';') && !command.includes('|>')) {
-                    const result = await this.executeCommand(command);
-                    if (result) {
-                        commandResults.push(result);
+                const command = match[1];
+                console.log(chalk.gray(`\n🔧 Executando: ${command}`));
+
+                const result = await this.executeCommand(command);
+                commandResults.push({
+                    command,
+                    ...result
+                });
+
+                // Mostrar resultado
+                if (result.exitCode === 0) {
+                    console.log(chalk.green('✓ Comando executado com sucesso'));
+                    if (result.output) {
+                        console.log(chalk.gray(result.output));
+                    }
+                } else {
+                    console.log(chalk.red(`✗ Erro no comando (código ${result.exitCode})`));
+                    if (result.error) {
+                        console.log(chalk.red(result.error));
                     }
                 }
             }
@@ -1331,357 +1195,99 @@ class MCPInteractive extends EventEmitter {
         return commandResults;
     }
 
-    // Executa um comando de forma segura com permissão
+    // Executa comando do sistema
     async executeCommand(command) {
-        const { spawn } = await import('child_process');
-
-        try {
-            // Adiciona sudo se necessário para comandos que normalmente precisam
-            let actualCommand = command;
-            const needsSudo = [
-                'fail2ban-client',
-                'iptables',
-                'netstat -tlnp',
-                'systemctl status',
-                'ufw status'
-            ].some(cmd => command.startsWith(cmd));
-
-            if (needsSudo && !command.startsWith('sudo')) {
-                actualCommand = `sudo ${command}`;
-            }
-
-            // Para o spinner antes de pedir permissão (se estiver rodando)
-            this.stopSpinner();
-
-            // Verifica se precisa pedir permissão
-            const needsPermission = !this.sessionPermissions.has(actualCommand);
-
-            if (needsPermission) {
-                const permission = await this.askCommandPermission(actualCommand);
-
-                if (permission === 'n') {
-                    console.log(chalk.yellow('\n❌ Comando cancelado pelo usuário\n'));
-                    return null;
-                } else if (permission === 'y') {
-                    // Executa apenas uma vez este comando
-                    // Não adiciona às permissões permanentes
-                } else if (permission === 'a') {
-                    // Sempre executar ESTE comando específico nesta sessão
-                    this.sessionPermissions.add(actualCommand);
-                    console.log(chalk.green(`\n✅ O comando "${actualCommand}" será executado automaticamente nesta sessão\n`));
-                } else if (permission === 'd') {
-                    // Usuário quer digitar outro comando
-                    const customCommand = await this.askCustomCommand();
-                    if (customCommand) {
-                        actualCommand = customCommand;
-                        // Não adiciona às permissões, executa apenas uma vez
-                    } else {
-                        return null;
-                    }
-                }
-            }
-
-            console.log(chalk.cyan(`\n▶ Executando: ${actualCommand}`));
-
-            // Usa spawn para maior segurança (previne command injection)
-            return new Promise((resolve) => {
-                // Pega timeout da configuração ou usa padrão de 15 segundos
-                const commandTimeout = this.config.command_timeout || 15000;
-
-                // Para comandos com pipes, precisamos usar shell de forma segura
-                // Verifica se é um comando que precisa de shell
-                const needsShell = actualCommand.includes('|') || actualCommand.includes('>') || actualCommand.includes('<');
-
-                let child;
-                if (needsShell) {
-                    // Para comandos com pipes, usa sh -c com comando como argumento único
-                    // Isso é mais seguro que shell: true
-                    child = spawn('sh', ['-c', actualCommand], {
-                        encoding: 'utf8',
-                        timeout: commandTimeout
-                    });
-                } else {
-                    // Para comandos simples, separa comando e argumentos (mais seguro)
-                    const parts = actualCommand.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
-                    const command = parts[0];
-                    const args = parts.slice(1).map(arg => arg.replace(/^"(.*)"$/, '$1'));
-
-                    child = spawn(command, args, {
-                        encoding: 'utf8',
-                        timeout: commandTimeout
-                    });
-                }
-
-                let stdout = '';
-                let stderr = '';
-                let outputShown = false;
-                let commandCompleted = false;  // Flag para evitar timeout fantasma
-
-                child.stdout.on('data', (data) => {
-                    stdout += data.toString();
-                });
-
-                child.stderr.on('data', (data) => {
-                    stderr += data.toString();
-                });
-
-                child.on('close', (code) => {
-                    commandCompleted = true;  // Marca comando como completo
-                    if (code === 0) {
-                        console.log(chalk.green('✓ Sucesso'));
-
-                        // Mostra o output do comando com formatação melhorada
-                        if (stdout && stdout.trim() && !outputShown) {
-                            console.log();
-                            console.log(chalk.bold.cyan('📄 Resultado do comando:'));
-                            console.log(chalk.gray('─'.repeat(45)));
-                            console.log(chalk.yellow(stdout.substring(0, 500)));
-                            if (stdout.length > 500) {
-                                console.log(chalk.gray('... (output truncado para 500 caracteres)'));
-                            }
-                            console.log(chalk.gray('─'.repeat(45)));
-                            console.log();
-                        }
-
-                        resolve({
-                            command: actualCommand,
-                            output: stdout.trim(),
-                            exitCode: 0,
-                            timestamp: new Date().toISOString()
-                        });
-                    } else {
-                        // Comando falhou mas pode ter output útil
-                        if (stdout || stderr) {
-                            console.log(chalk.yellow(`⚠️ Comando retornou erro mas tem output\n`));
-
-                            if ((stdout + stderr).trim()) {
-                                console.log(chalk.bold.yellow('📄 Output do erro:'));
-                                console.log(chalk.gray('─'.repeat(45)));
-                                console.log(chalk.red((stdout + stderr).substring(0, 500)));
-                                if ((stdout + stderr).length > 500) {
-                                    console.log(chalk.gray('... (output truncado)'));
-                                }
-                                console.log(chalk.gray('─'.repeat(45)));
-                                console.log();
-                            }
-
-                            resolve({
-                                command: actualCommand,
-                                output: (stdout + stderr).trim(),
-                                exitCode: code || 1,
-                                error: `Exit code: ${code}`,
-                                timestamp: new Date().toISOString()
-                            });
-                        } else {
-                            console.log(chalk.red(`✗ Comando falhou com código ${code}\n`));
-                            resolve(null);
-                        }
-                    }
-                });
-
-                child.on('error', (err) => {
-                    commandCompleted = true;  // Marca como completo mesmo com erro
-                    console.log(chalk.red(`✗ Falha ao executar: ${err.message}\n`));
-                    resolve(null);
-                });
-
-                // Timeout manual caso o timeout do spawn não funcione
-                setTimeout(() => {
-                    if (!child.killed && !commandCompleted) {  // Só mostra timeout se comando não completou
-                        child.kill('SIGTERM');
-                        console.log(chalk.yellow(`⚠️ Comando excedeu o tempo limite de ${commandTimeout/1000}s\n`));
-                        resolve(null);  // Resolve para evitar hanging
-                    }
-                }, commandTimeout);
-            });
-
-        } catch (error) {
-            console.log(chalk.red(`✗ Erro inesperado: ${error.message}\n`));
-            return null;
-        }
-    }
-
-    // Pede permissão para executar comando
-    async askCommandPermission(command) {
-        const readline = await import('readline');
-
-        // Pausa temporariamente o REPL principal
-        if (this.replInterface && this.replInterface.rl) {
-            this.replInterface.rl.pause();
-        }
-
-        const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-            terminal: false,  // Evita duplicação de eco
-            history: [],     // Histórico vazio para não interferir
-            historySize: 0   // Não salva histórico
-        });
-
         return new Promise((resolve) => {
-            console.log();
-            console.log(chalk.bgYellow.black(' 🔐 PERMISSÃO NECESSÁRIA '));
-            console.log(chalk.yellow('━'.repeat(45)));
-            console.log(chalk.cyan('Comando solicitado:'));
-            console.log(chalk.bold.white(`  ${command}`));
-            console.log(chalk.yellow('━'.repeat(45)));
-            console.log();
-            console.log(chalk.white('Escolha uma opção:'));
-            console.log(chalk.green('  [Y]') + chalk.gray(' Executar uma vez'));
-            console.log(chalk.red('  [N]') + chalk.gray(' Cancelar'));
-            console.log(chalk.blue('  [A]') + chalk.gray(' Sempre permitir este comando'));
-            console.log(chalk.magenta('  [D]') + chalk.gray(' Digitar outro comando'));
-            console.log();
+            let output = '';
+            let error = '';
 
-            rl.question(chalk.yellow('Escolha (y/n/a/d): '), (answer) => {
-                rl.close();
-
-                // Retoma o REPL principal
-                if (this.replInterface && this.replInterface.rl) {
-                    this.replInterface.rl.resume();
-                }
-
-                resolve(answer.toLowerCase().charAt(0));  // Pega apenas o primeiro caractere
+            const child = spawn(command, [], {
+                shell: true,
+                encoding: 'utf8'
             });
+
+            child.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+
+            child.stderr.on('data', (data) => {
+                error += data.toString();
+            });
+
+            child.on('error', (err) => {
+                resolve({
+                    exitCode: -1,
+                    output: output,
+                    error: err.message
+                });
+            });
+
+            child.on('exit', (code) => {
+                resolve({
+                    exitCode: code || 0,
+                    output: output.trim(),
+                    error: error.trim()
+                });
+            });
+
+            // Timeout de segurança
+            setTimeout(() => {
+                child.kill();
+                resolve({
+                    exitCode: -1,
+                    output: output,
+                    error: 'Comando excedeu o tempo limite'
+                });
+            }, 30000); // 30 segundos
         });
     }
 
-    // Pede para o usuário digitar um comando customizado
-    async askCustomCommand() {
-        const readline = await import('readline');
-        const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-            history: [],     // Histórico vazio para não interferir
-            historySize: 0   // Não salva histórico
-        });
+    // Verifica se deve usar o orquestrador
+    shouldUseOrchestrator(question) {
+        const orchestratorKeywords = [
+            'quantos', 'quanto', 'lista', 'listar', 'mostrar', 'mostra',
+            'verificar', 'verifica', 'checar', 'status', 'informação',
+            'informações', 'diagnóstico', 'diagnostic', 'analisar',
+            'analise', 'descobrir', 'descubra', 'encontrar', 'encontre',
+            'buscar', 'busque', 'procurar', 'procure', 'qual', 'quais',
+            'onde', 'quando', 'como está', 'como estão', 'tem', 'existe',
+            'há', 'possui', 'contém', 'disponível', 'rodando', 'executando',
+            'ativo', 'inativo', 'funcionando', 'problema', 'erro', 'falha',
+            'debug', 'investigar', 'examine', 'explore', 'teste', 'monitor'
+        ];
 
-        return new Promise((resolve) => {
-            console.log(chalk.cyan('\n📝 Digite o comando que deseja executar:'));
-            rl.question(chalk.gray('> '), (command) => {
-                rl.close();
-                resolve(command.trim() || null);
-            });
-        });
+        const lowerQuestion = question.toLowerCase();
+        return orchestratorKeywords.some(keyword => lowerQuestion.includes(keyword));
     }
 
-    // Inicia animação de loading
-    startSpinner(message = '') {
-        // Não inicia se já estiver rodando
-        if (this.spinnerInterval) return;
-
+    startSpinner() {
         this.spinnerIndex = 0;
         this.spinnerInterval = setInterval(() => {
-            const frame = this.spinnerFrames[this.spinnerIndex];
-            const text = chalk.cyan(frame) + chalk.gray(message);
-            process.stdout.write(`\r${text}`);
+            process.stdout.write(`\r${chalk.cyan(this.spinnerFrames[this.spinnerIndex])} ${chalk.gray('Processando...')}`);
             this.spinnerIndex = (this.spinnerIndex + 1) % this.spinnerFrames.length;
         }, 80);
     }
 
-    // Para animação de loading
     stopSpinner() {
         if (this.spinnerInterval) {
             clearInterval(this.spinnerInterval);
             this.spinnerInterval = null;
-            process.stdout.write('\r' + ' '.repeat(50) + '\r');
+            process.stdout.write('\r' + ' '.repeat(20) + '\r'); // Limpar linha
         }
     }
 
-    // Formata e exibe resposta com cores
     displayFormattedResponse(response) {
-        console.log();  // Nova linha após limpar o spinner
-
-        // Primeiro, processa blocos de código de forma robusta
-        let processedResponse = response;
-        const codeBlocks = [];
-        let blockIndex = 0;
-
-        // Extrai e substitui blocos de código temporariamente
-        processedResponse = processedResponse.replace(/```[\s\S]*?```/g, (match) => {
-            const placeholder = `___CODEBLOCK_${blockIndex}___`;
-            codeBlocks[blockIndex] = match;
-            blockIndex++;
-            return placeholder;
-        });
-
-        // Processa linhas com formatação
-        const lines = processedResponse.split('\n');
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-
-            // Restaura blocos de código
-            if (line.includes('___CODEBLOCK_')) {
-                const match = line.match(/___CODEBLOCK_(\d+)___/);
-                if (match) {
-                    const idx = parseInt(match[1]);
-                    const codeBlock = codeBlocks[idx];
-                    // Remove os ``` e extrai o conteúdo
-                    const codeContent = codeBlock.replace(/```[\s\S]*?\n([\s\S]*?)```/, '$1').trim();
-                    console.log(chalk.gray('```'));
-                    console.log(chalk.green(codeContent));
-                    console.log(chalk.gray('```'));
-                    continue;
-                }
-            }
-
-            // Aplica cores baseado no conteúdo
-            if (line.startsWith('## ')) {
-                // Títulos principais - ANÁLISE, SIGNIFICADO, etc
-                console.log();
-                console.log(chalk.bold.cyan(line));
-                console.log(chalk.gray('─'.repeat(40)));
-            } else if (line.startsWith('### ')) {
-                // Subtítulos
-                console.log();
-                console.log(chalk.bold.yellow(line.replace('### ', '▶ ')));
-            } else if (line.startsWith('🔧') || line.includes('COMANDO')) {
-                // Comandos
-                console.log(chalk.bold.green(line));
-            } else if (line.startsWith('📝') || line.includes('EXPLICAÇÃO')) {
-                // Explicações
-                console.log(chalk.blue(line));
-            } else if (line.startsWith('💡') || line.includes('OPÇÕES')) {
-                // Opções/Dicas
-                console.log(chalk.magenta(line));
-            } else if (line.startsWith('⚠️') || line.includes('OBSERVAÇÕES')) {
-                // Avisos/Observações
-                console.log(chalk.yellow(line));
-            } else if (line.startsWith('🌐') || line.includes('FONTES')) {
-                // Fontes
-                console.log(chalk.gray(line));
-            } else if (line.startsWith('**') && line.endsWith('**')) {
-                // Texto em negrito
-                const text = line.replace(/\*\*/g, '');
-                console.log(chalk.bold.white(text));
-            } else if (line.startsWith('- ') || line.startsWith('* ')) {
-                // Listas
-                console.log(chalk.white('  •' + line.substring(1)));
-            } else if (line.includes('`') && !line.includes('```')) {
-                // Inline code
-                const formatted = line.replace(/`([^`]+)`/g, (match, code) => {
-                    return chalk.green.bold(code);
-                });
-                console.log(formatted);
-            } else if (line.trim() === '') {
-                // Linha vazia
-                console.log();
-            } else {
-                // Texto normal
-                console.log(chalk.white(line));
-            }
-        }
-
-        console.log();  // Linha extra no final
+        console.log(); // Nova linha
+        console.log(chalk.white(response));
+        console.log(); // Nova linha
     }
 
-    // Prepara a pergunta com os resultados dos comandos
     prepareQuestionWithCommandResults(question, context, systemInfo, commandResults) {
-        let enhanced = this.prepareQuestion(question, context, systemInfo);
+        let enhanced = question;
 
+        // Se houver resultados de comandos, incluí-los
         if (commandResults && commandResults.length > 0) {
-            enhanced += '\n\n### Resultados de Comandos Executados:\n';
+            enhanced += '\n\n### Resultados dos comandos executados:\n';
             for (const result of commandResults) {
                 enhanced += `\n**Comando:** \`${result.command}\`\n`;
                 enhanced += `**Exit Code:** ${result.exitCode}\n`;

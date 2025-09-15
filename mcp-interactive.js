@@ -699,9 +699,10 @@ class MCPInteractive extends EventEmitter {
         this.pasteBuffer = [];
         this.pasteTimer = null;
         this.isPasting = false;
-        this.PASTE_TIMEOUT = 50; // 50ms para detectar paste
+        this.PASTE_TIMEOUT = 100; // Aumentado para 100ms para capturar melhor pastes maiores
         this.waitingForPasteConfirmation = false;
         this.pendingPasteText = '';
+        this.lastLineTime = Date.now();
 
         // Configurar listeners
         this.replInterface.on('line', this.handleLineInput.bind(this));
@@ -941,6 +942,14 @@ class MCPInteractive extends EventEmitter {
             return;
         }
 
+        // Calcular tempo entre linhas para detectar paste
+        const now = Date.now();
+        const timeSinceLastLine = now - this.lastLineTime;
+        this.lastLineTime = now;
+
+        // Se a linha chegou muito rápido (< 10ms), é definitivamente um paste
+        const isLikelyPaste = timeSinceLastLine < 10 || this.pasteBuffer.length > 0;
+
         // Detectar paste multilinha
         if (this.pasteTimer) {
             clearTimeout(this.pasteTimer);
@@ -949,10 +958,16 @@ class MCPInteractive extends EventEmitter {
         // Adicionar linha ao buffer
         this.pasteBuffer.push(line);
 
+        // Se parece ser um paste, aguardar mais tempo
+        const timeout = isLikelyPaste ? this.PASTE_TIMEOUT : 20;
+
         // Configurar timer para detectar fim do paste
         this.pasteTimer = setTimeout(async () => {
-            // Se temos múltiplas linhas, exibir e aguardar confirmação
-            if (this.pasteBuffer.length > 1) {
+            // Se temos múltiplas linhas ou linhas vazias (que indicam quebras), exibir e aguardar confirmação
+            const hasEmptyLines = this.pasteBuffer.some(l => l.trim() === '');
+            const hasMultipleLines = this.pasteBuffer.length > 1;
+
+            if (hasMultipleLines || hasEmptyLines) {
                 // Múltiplas linhas detectadas - provavelmente um paste
                 const pastedText = this.pasteBuffer.join('\n');
 
@@ -977,7 +992,7 @@ class MCPInteractive extends EventEmitter {
             // Limpar buffer
             this.pasteBuffer = [];
             this.pasteTimer = null;
-        }, this.PASTE_TIMEOUT);
+        }, timeout);
     }
 
     async processInput(input) {

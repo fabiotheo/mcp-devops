@@ -928,7 +928,9 @@ export default class ModelFactory {
             { src: 'ipcom-chat-launcher.sh', dest: 'ipcom-chat-launcher.sh' },
             { src: 'ai_orchestrator.js', dest: 'ai_orchestrator.js' },
             { src: 'ai_orchestrator_tools.js', dest: 'ai_orchestrator_tools.js' },
-            { src: 'ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' }
+            { src: 'ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
+            { src: 'deploy-linux.sh', dest: 'deploy-linux.sh' },
+            { src: 'test-turso-integration.js', dest: 'test-turso-integration.js' }
         ];
 
         // Copiar arquivos principais
@@ -1036,6 +1038,29 @@ export default class ModelFactory {
             console.log(`  ✓ Arquivos de web_scraper copiados`);
         } catch (error) {
             console.log(`  ⚠ Erro ao copiar web_search ou web_scraper: ${error.message}`);
+        }
+
+        // Copiar documentação
+        try {
+            const docsDir = path.join(process.cwd(), 'docs');
+            const destDocsDir = path.join(this.mcpDir, 'docs');
+
+            // Criar diretório docs se não existir
+            await fs.mkdir(destDocsDir, { recursive: true });
+
+            // Copiar arquivos de documentação
+            const docFiles = await fs.readdir(docsDir);
+            for (const file of docFiles) {
+                if (file.endsWith('.md')) {
+                    const srcPath = path.join(docsDir, file);
+                    const destPath = path.join(destDocsDir, file);
+                    const content = await fs.readFile(srcPath, 'utf8');
+                    await fs.writeFile(destPath, content);
+                }
+            }
+            console.log(`  ✓ Documentação copiada`);
+        } catch (error) {
+            console.log(`  ⚠ Erro ao copiar documentação: ${error.message}`);
         }
 
         const scripts = [

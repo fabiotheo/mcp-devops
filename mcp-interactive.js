@@ -688,6 +688,7 @@ class MCPInteractive extends EventEmitter {
         this.replInterface.initialize();
 
         // Carregar histórico combinado (local + Turso) no readline
+        console.log(chalk.blue('🔄 Tentando carregar histórico...'));
         await this.loadCombinedHistory();
 
         // Configurar listeners

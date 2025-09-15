@@ -682,10 +682,14 @@ class MCPInteractive extends EventEmitter {
         await this.persistentHistory.initialize();
 
         // Inicializar Turso se configurado
+        console.log(chalk.blue('🔄 Inicializando Turso...'));
         await this.initializeTurso(modelConfig);
+        console.log(chalk.blue('✅ Turso inicializado'));
 
         // Inicializar interface REPL
+        console.log(chalk.blue('🔄 Inicializando interface REPL...'));
         this.replInterface.initialize();
+        console.log(chalk.blue('✅ Interface REPL inicializada'));
 
         // Carregar histórico combinado (local + Turso) no readline
         console.log(chalk.blue('🔄 Tentando carregar histórico...'));

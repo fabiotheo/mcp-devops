@@ -960,7 +960,10 @@ export default class ModelFactory {
             { src: 'ai_orchestrator_tools.js', dest: 'ai_orchestrator_tools.js' },
             { src: 'ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
             { src: 'deploy-linux.sh', dest: 'deploy-linux.sh' },
-            { src: 'test-turso-integration.js', dest: 'test-turso-integration.js' }
+            { src: 'test-turso-integration.js', dest: 'test-turso-integration.js' },
+            { src: 'libs/paste-detector.js', dest: 'libs/paste-detector.js' },
+            { src: 'libs/paste-attachments.js', dest: 'libs/paste-attachments.js' },
+            { src: 'libs/paste-manager.js', dest: 'libs/paste-manager.js' }
         ];
 
         // Copiar arquivos principais

@@ -8,7 +8,7 @@ import path from 'path';
 import os from 'os';
 import chalk from 'chalk';
 import ModelFactory from './ai_models/model_factory.js';
-import SystemDetector from './system_detector.js';
+import SystemDetector from './libs/system_detector.js';
 import AICommandOrchestrator from './ai_orchestrator.js';
 import AICommandOrchestratorWithTools from './ai_orchestrator_tools.js';
 import AICommandOrchestratorBash from './ai_orchestrator_bash.js';
@@ -18,6 +18,8 @@ import MultiLineInput from './libs/multiline-input.js';
 import { orchestrationAnimator } from './libs/orchestration-animator.js';
 import TursoHistoryClient from './libs/turso-client.js';
 import UserManager from './libs/user-manager.js';
+import PasteManager from './libs/paste-manager.js';
+import PasteAttachments from './libs/paste-attachments.js';
 
 class ContextManager {
     constructor(maxTokens = 100000) {
@@ -585,6 +587,10 @@ class MCPInteractive extends EventEmitter {
         // Turso integration
         this.tursoClient = null;
         this.userManager = null;
+
+        // Paste system
+        this.pasteAttachments = new PasteAttachments();
+        this.pasteManager = null;
         this.tursoEnabled = false;
         this.currentUser = null;
         this.historyMode = 'global'; // global, user, machine, hybrid
@@ -690,6 +696,11 @@ class MCPInteractive extends EventEmitter {
         console.log(chalk.blue('🔄 Inicializando interface REPL...'));
         this.replInterface.initialize();
         console.log(chalk.blue('✅ Interface REPL inicializada'));
+
+        // Inicializar sistema de paste
+        console.log(chalk.blue('🔄 Inicializando sistema de paste...'));
+        this.pasteManager = new PasteManager(this.replInterface.rl, this.pasteAttachments);
+        console.log(chalk.blue('✅ Sistema de paste inicializado'));
 
         // Carregar histórico combinado (local + Turso) no readline
         console.log(chalk.blue('🔄 Tentando carregar histórico...'));
@@ -801,6 +812,37 @@ class MCPInteractive extends EventEmitter {
         this.replInterface.rl.removeAllListeners('line');
 
         this.replInterface.rl.on('line', async (input) => {
+            // Check for paste commands first
+            if (input.startsWith('/expand ')) {
+                self.pasteManager.handleExpandCommand(input);
+                self.replInterface.rl.prompt();
+                return;
+            }
+
+            if (input.startsWith('/remove ')) {
+                self.pasteManager.handleRemoveCommand(input);
+                self.replInterface.rl.prompt();
+                return;
+            }
+
+            if (input === '/list') {
+                self.pasteManager.handleListCommand();
+                self.replInterface.rl.prompt();
+                return;
+            }
+
+            if (input.startsWith('/save ')) {
+                await self.pasteManager.handleSaveCommand(input);
+                self.replInterface.rl.prompt();
+                return;
+            }
+
+            if (input === '/clear-pastes') {
+                self.pasteManager.handleClearPastesCommand();
+                self.replInterface.rl.prompt();
+                return;
+            }
+
             // Check if we're waiting for paste confirmation
             if (self.waitingForPasteConfirmation) {
                 if (input === '') {
@@ -822,7 +864,6 @@ class MCPInteractive extends EventEmitter {
                 }
                 return;
             }
-
 
             // Normal single-line processing
             await self.processInput(input);
@@ -1709,6 +1750,11 @@ class MCPInteractive extends EventEmitter {
 
         // Parar auto-save
         this.sessionPersistence.stopAutoSave();
+
+        // Cleanup paste system
+        if (this.pasteManager) {
+            this.pasteManager.cleanup();
+        }
 
         // Fechar interface
         this.replInterface.close();

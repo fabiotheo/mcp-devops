@@ -802,75 +802,7 @@ class MCPInteractive extends EventEmitter {
         }
     }
 
-    setupBracketedPasteMode() {
-        // Paste detection for multiline content
-        const self = this;
-        this.waitingForPasteConfirmation = false;
-        this.pendingPasteText = '';
-
-        // Override the line event handler
-        const originalLineHandler = this.replInterface.rl._events.line;
-
-        this.replInterface.rl.removeAllListeners('line');
-
-        this.replInterface.rl.on('line', async (input) => {
-            // PASTE COMMANDS TEMPORARILY DISABLED
-            // if (input.startsWith('/expand ')) {
-            //     self.pasteManager.handleExpandCommand(input);
-            //     self.replInterface.rl.prompt();
-            //     return;
-            // }
-
-            // if (input.startsWith('/remove ')) {
-            //     self.pasteManager.handleRemoveCommand(input);
-            //     self.replInterface.rl.prompt();
-            //     return;
-            // }
-
-            // if (input === '/list') {
-            //     self.pasteManager.handleListCommand();
-            //     self.replInterface.rl.prompt();
-            //     return;
-            // }
-
-            // if (input.startsWith('/save ')) {
-            //     await self.pasteManager.handleSaveCommand(input);
-            //     self.replInterface.rl.prompt();
-            //     return;
-            // }
-
-            // if (input === '/clear-pastes') {
-            //     self.pasteManager.handleClearPastesCommand();
-            //     self.replInterface.rl.prompt();
-            //     return;
-            // }
-
-            // Check if we're waiting for paste confirmation
-            if (self.waitingForPasteConfirmation) {
-                if (input === '') {
-                    // User pressed Enter - send the multiline content
-                    self.waitingForPasteConfirmation = false;
-                    const content = self.pendingPasteText;
-                    self.pendingPasteText = '';
-
-                    // Process the multiline content as a single input
-                    await self.processInput(content);
-                } else {
-                    // User typed something else - cancel
-                    self.waitingForPasteConfirmation = false;
-                    self.pendingPasteText = '';
-                    console.log(chalk.yellow('Entrada multilinha cancelada'));
-
-                    // Process the new input normally
-                    await self.processInput(input);
-                }
-                return;
-            }
-
-            // Normal single-line processing
-            await self.processInput(input);
-        });
-    }
+    // setupBracketedPasteMode() COMPLETELY REMOVED - was causing input issues
 
     handlePastedContent(content) {
         // Remover espaços em branco do final

@@ -699,7 +699,7 @@ class MCPInteractive extends EventEmitter {
         this.setupBracketedPasteMode();
 
         // Configurar listeners
-        this.replInterface.on('line', this.handleLineInput.bind(this));
+        // Line handling is now done in setupBracketedPasteMode
         this.replInterface.on('interrupt', this.handleInterrupt.bind(this));
 
         // Configurar auto-save
@@ -790,74 +790,83 @@ class MCPInteractive extends EventEmitter {
     }
 
     setupBracketedPasteMode() {
-        // Variáveis para controle do bracketed paste
-        this.pasteBuffer = '';
-        this.inPasteMode = false;
+        // Simpler multiline detection without relying on bracketed paste mode
+        const self = this;
+        this.multilineMode = false;
+        this.multilineBuffer = [];
         this.waitingForPasteConfirmation = false;
         this.pendingPasteText = '';
 
-        // Habilitar bracketed paste mode no terminal
-        process.stdout.write('\x1b[?2004h');
+        // Override the line event handler
+        const originalLineHandler = this.replInterface.rl._events.line;
 
-        // Desabilitar ao sair
-        process.on('exit', () => {
-            process.stdout.write('\x1b[?2004l\n');
-        });
+        this.replInterface.rl.removeAllListeners('line');
 
-        // Interceptar input raw para detectar paste
-        const originalEmit = this.replInterface.rl._onLine;
-        const self = this;
+        this.replInterface.rl.on('line', async (input) => {
+            // Check if we're waiting for paste confirmation
+            if (self.waitingForPasteConfirmation) {
+                if (input === '') {
+                    // User pressed Enter - send the multiline content
+                    self.waitingForPasteConfirmation = false;
+                    const content = self.pendingPasteText;
+                    self.pendingPasteText = '';
 
-        // Override do processamento de linha do readline
-        this.replInterface.rl._onLine = function(line) {
-            // Se estamos em modo paste, adicionar ao buffer
-            if (self.inPasteMode) {
-                self.pasteBuffer += line + '\n';
-                return;
-            }
-
-            // Verificar se a linha contém marcadores de paste
-            if (line.includes('\x1b[200~')) {
-                // Início de paste detectado
-                self.inPasteMode = true;
-                self.pasteBuffer = '';
-
-                // Extrair conteúdo após o marcador de início
-                const startIdx = line.indexOf('\x1b[200~') + 6;
-                const remaining = line.substring(startIdx);
-
-                // Verificar se o fim do paste está na mesma linha
-                if (remaining.includes('\x1b[201~')) {
-                    const endIdx = remaining.indexOf('\x1b[201~');
-                    const pastedContent = remaining.substring(0, endIdx);
-                    self.inPasteMode = false;
-
-                    // Processar o conteúdo colado
-                    self.handlePastedContent(pastedContent);
-                    return;
+                    // Process the multiline content as a single input
+                    await self.processInput(content);
                 } else {
-                    // Paste continua em próximas linhas
-                    self.pasteBuffer = remaining + '\n';
-                    return;
+                    // User typed something else - cancel
+                    self.waitingForPasteConfirmation = false;
+                    self.pendingPasteText = '';
+                    console.log(chalk.yellow('Entrada multilinha cancelada'));
+
+                    // Process the new input normally
+                    await self.processInput(input);
                 }
-            }
-
-            // Verificar marcador de fim de paste
-            if (line.includes('\x1b[201~')) {
-                const endIdx = line.indexOf('\x1b[201~');
-                const lastPart = line.substring(0, endIdx);
-                self.pasteBuffer += lastPart;
-                self.inPasteMode = false;
-
-                // Processar o conteúdo colado completo
-                self.handlePastedContent(self.pasteBuffer);
-                self.pasteBuffer = '';
                 return;
             }
 
-            // Linha normal - chamar processamento original
-            originalEmit.call(this, line);
-        }.bind(this.replInterface.rl);
+            // Check if we're in multiline mode (user typed /multiline)
+            if (self.multilineMode) {
+                if (input === '/end' || input === '') {
+                    // End multiline mode
+                    self.multilineMode = false;
+                    const content = self.multilineBuffer.join('\n');
+                    self.multilineBuffer = [];
+
+                    if (content.trim()) {
+                        console.log(chalk.cyan('\n📋 Texto multilinha capturado:'));
+                        console.log(chalk.gray('─'.repeat(80)));
+                        console.log(content);
+                        console.log(chalk.gray('─'.repeat(80)));
+                        console.log(chalk.yellow('Pressione Enter para enviar ou digite algo para cancelar\n'));
+
+                        self.pendingPasteText = content;
+                        self.waitingForPasteConfirmation = true;
+                    } else {
+                        console.log(chalk.yellow('Modo multilinha cancelado (vazio)'));
+                    }
+                } else {
+                    // Add to buffer
+                    self.multilineBuffer.push(input);
+                    console.log(chalk.gray(`Linha ${self.multilineBuffer.length} adicionada. Digite /end ou Enter vazio para finalizar.`));
+                }
+                self.replInterface.prompt();
+                return;
+            }
+
+            // Check for /multiline command
+            if (input === '/multiline' || input === '/ml') {
+                self.multilineMode = true;
+                self.multilineBuffer = [];
+                console.log(chalk.cyan('\n📝 Modo multilinha ativado'));
+                console.log(chalk.gray('Digite ou cole seu texto. Finalize com /end ou Enter vazio.\n'));
+                self.replInterface.prompt();
+                return;
+            }
+
+            // Normal single-line processing
+            await self.processInput(input);
+        });
     }
 
     handlePastedContent(content) {
@@ -1020,30 +1029,16 @@ class MCPInteractive extends EventEmitter {
         console.log(chalk.cyan('─'.repeat(80)));
         console.log(chalk.gray('💡 Digite'), chalk.cyan('/help'), chalk.gray('para comandos |'),
                     chalk.cyan('/shortcuts'), chalk.gray('para atalhos |'),
-                    chalk.cyan('/exit'), chalk.gray('para sair'));
+                    chalk.cyan('/multiline'), chalk.gray('para modo multilinha'));
+        console.log(chalk.gray('   '), chalk.cyan('/exit'), chalk.gray('para sair |'),
+                    chalk.gray('Use'), chalk.cyan('/ml'), chalk.gray('como atalho para /multiline'));
         console.log(chalk.cyan('─'.repeat(80)));
         console.log();
     }
 
     handleLineInput(line) {
-        // Se estamos esperando confirmação de paste, processar Enter
-        if (this.waitingForPasteConfirmation) {
-            if (line === '') {  // Enter pressionado
-                this.waitingForPasteConfirmation = false;
-                // Processar o texto colado que estava aguardando
-                this.processInput(this.pendingPasteText);
-                this.pendingPasteText = '';
-            } else {
-                // Cancelar com qualquer outro input
-                console.log(chalk.yellow('Operação cancelada'));
-                this.waitingForPasteConfirmation = false;
-                this.pendingPasteText = '';
-                this.replInterface.prompt();
-            }
-            return;
-        }
-
-        // Processar linha normal
+        // This is now handled in setupBracketedPasteMode
+        // Keeping for compatibility
         this.processInput(line);
     }
 

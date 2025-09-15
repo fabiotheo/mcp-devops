@@ -343,21 +343,52 @@ class MCPSetup {
 
         const packageJsonPath = path.join(this.mcpDir, 'package.json');
 
+        // Dependências obrigatórias
+        const requiredDeps = {
+            "@anthropic-ai/sdk": "^0.21.1",
+            "openai": "^4.29.0",
+            "@google/generative-ai": "^0.2.1",
+            "@libsql/client": "^0.15.15",
+            "minimist": "^1.2.8",
+            "chalk": "^5.3.0",
+            "commander": "^14.0.1"
+        };
+
+        let needsUpdate = false;
+        let packageJson;
+
         try {
-            await fs.access(packageJsonPath);
+            // Verificar se existe e ler conteúdo
+            const content = await fs.readFile(packageJsonPath, 'utf8');
+            packageJson = JSON.parse(content);
             console.log('  ✓ package.json já existe');
+
+            // Verificar se tem todas as dependências necessárias
+            if (!packageJson.dependencies) {
+                packageJson.dependencies = {};
+                needsUpdate = true;
+            }
+
+            for (const [dep, version] of Object.entries(requiredDeps)) {
+                if (!packageJson.dependencies[dep]) {
+                    console.log(`  ⚠ Adicionando dependência faltante: ${dep}`);
+                    packageJson.dependencies[dep] = version;
+                    needsUpdate = true;
+                }
+            }
+
+            if (needsUpdate) {
+                await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+                console.log('  ✓ package.json atualizado com dependências faltantes');
+            }
+
         } catch {
-            const packageJson = {
+            // Criar novo package.json
+            packageJson = {
                 "name": "mcp-terminal",
                 "version": "1.0.0",
                 "type": "module",
-                "dependencies": {
-                    "@anthropic-ai/sdk": "^0.21.1",
-                    "openai": "^4.29.0",
-                    "@google/generative-ai": "^0.2.1",
-                    "minimist": "^1.2.8",
-                    "chalk": "^5.3.0"
-                }
+                "dependencies": requiredDeps
             };
 
             await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));

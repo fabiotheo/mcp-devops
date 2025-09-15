@@ -949,7 +949,6 @@ export default class ModelFactory {
         const filesToCopy = [
             { src: 'mcp-client.js', dest: 'mcp-client.js' },
             { src: 'mcp-assistant.js', dest: 'mcp-assistant.js' },
-            { src: 'system_detector.js', dest: 'system_detector.js' },
             { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' },
             { src: 'configure-ai.js', dest: 'configure-ai.js' },
             { src: 'mcp-configure', dest: 'mcp-configure' },

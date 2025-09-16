@@ -963,7 +963,8 @@ export default class ModelFactory {
             { src: 'test-turso-integration.js', dest: 'test-turso-integration.js' },
             { src: 'libs/paste-detector.js', dest: 'libs/paste-detector.js' },
             { src: 'libs/paste-attachments.js', dest: 'libs/paste-attachments.js' },
-            { src: 'libs/paste-manager.js', dest: 'libs/paste-manager.js' }
+            { src: 'libs/paste-manager.js', dest: 'libs/paste-manager.js' },
+            { src: 'libs/enhanced-paste-manager.js', dest: 'libs/enhanced-paste-manager.js' }
         ];
 
         // Copiar arquivos principais

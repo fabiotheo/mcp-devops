@@ -19,7 +19,7 @@ import MultiLineInput from './libs/multiline-input.js';
 import { orchestrationAnimator } from './libs/orchestration-animator.js';
 import TursoHistoryClient from './libs/turso-client.js';
 import UserManager from './libs/user-manager.js';
-import PasteManager from './libs/paste-manager.js';
+import EnhancedPasteManager from './libs/enhanced-paste-manager.js';
 import PasteAttachments from './libs/paste-attachments.js';
 
 class ContextManager {
@@ -115,6 +115,7 @@ class CommandProcessor {
             '/exec': this.executeCommand.bind(this),
             '/history': this.showHistory.bind(this),
             '/version': this.showVersion.bind(this),
+            '/paste': this.enterPasteMode.bind(this),
             '/exit': this.exit.bind(this),
             '/quit': this.exit.bind(this)
         };
@@ -144,12 +145,13 @@ ${chalk.yellow('/load')} [nome] - Carrega uma sessão salva
 ${chalk.yellow('/model')}     - Mostra/altera o modelo de IA
 ${chalk.yellow('/exec')}      - Executa o último comando sugerido
 ${chalk.yellow('/history')}   - Mostra histórico da sessão
+${chalk.yellow('/paste')}     - Entra em modo paste multi-linha
 ${chalk.yellow('/version')}   - Mostra informações da versão
 ${chalk.yellow('/exit')}      - Sai do modo interativo
 
 ${chalk.cyan('═══ Dicas ═══')}
 
-• Digite ${chalk.green('"""')} para entrada multi-linha
+• Digite ${chalk.green('/paste')} para modo multi-linha
 • Use ${chalk.green('Tab')} para auto-completar comandos
 • Sessões são salvas automaticamente a cada 5 minutos
 • AI Orchestration está ${chalk.green('ativado')} para perguntas complexas
@@ -178,8 +180,9 @@ ${chalk.yellow('Ctrl+E')}     - Move para fim da linha
 ${chalk.yellow('Tab')}        - Auto-completa comandos
 
 ${chalk.blue('Multi-linha:')}
-${chalk.yellow('"""')}        - Inicia/termina bloco multi-linha
-${chalk.yellow('\\')} no fim   - Continua na próxima linha
+${chalk.yellow('/paste')}      - Modo paste manual
+${chalk.yellow('Cole')}        - Detecção automática de paste
+${chalk.yellow('Enter x2')}    - Finaliza modo paste
 
 ${chalk.gray('Use /help para mais comandos')}
 `;
@@ -263,6 +266,14 @@ ${chalk.blue('▶ Node.js:')} ${process.version}
 ${chalk.gray('© 2024 IPCOM - AI Tool for Linux')}
 `;
         return versionInfo;
+    }
+
+    async enterPasteMode() {
+        if (this.mcp.pasteManager) {
+            this.mcp.pasteManager.handlePasteCommand();
+            return ''; // Retorna vazio para não mostrar mensagem extra
+        }
+        return chalk.red('Sistema de paste não disponível');
     }
 
     async exit() {
@@ -411,13 +422,14 @@ class REPLInterface extends EventEmitter {
         });
         // --- FIM DA LÓGICA ---
 
-        // Inicializa MultiLineInput
-        this.multilineInput = new MultiLineInput({
-            blockDelimiter: '"""',
-            continuationChar: '\\',
-            continuationPrompt: chalk.gray('... '),
-            normalPrompt: chalk.cyan('mcp> ')
-        });
+        // DISABLED - MultiLineInput replaced by EnhancedPasteManager
+        // this.multilineInput = new MultiLineInput({
+        //     blockDelimiter: '"""',
+        //     continuationChar: '\\',
+        //     continuationPrompt: chalk.gray('... '),
+        //     normalPrompt: chalk.cyan('mcp> ')
+        // });
+        this.multilineInput = null;
 
         // Inicializa KeybindingManager
         this.keybindingManager = new KeybindingManager(this.rl, {
@@ -431,10 +443,13 @@ class REPLInterface extends EventEmitter {
 
         // Handler para cancelamento com ESC
         this.keybindingManager.on('cancel', () => {
-            if (this.multilineInput.cancel()) {
-                this.rl.setPrompt(chalk.cyan('mcp> '));
-                this.rl.prompt();
-            }
+            // DISABLED - using EnhancedPasteManager instead
+            // if (this.multilineInput.cancel()) {
+            //     this.rl.setPrompt(chalk.cyan('mcp> '));
+            //     this.rl.prompt();
+            // }
+            this.rl.setPrompt(chalk.cyan('mcp> '));
+            this.rl.prompt();
         });
 
         // Detecta quando o usuário digita "/" para mostrar comandos
@@ -530,31 +545,34 @@ class REPLInterface extends EventEmitter {
 
 
         this.rl.on('line', (line) => {
-            const result = this.multilineInput.processInput(line);
+            // DISABLED - using EnhancedPasteManager instead
+            // const result = this.multilineInput.processInput(line);
+            // if (!result.complete) {
+            //     this.rl.setPrompt(result.prompt);
+            //     if (result.message) {
+            //         process.stdout.write(result.message + '\n');
+            //     }
+            //     this.rl.prompt();
+            // } else {
+            //     this.multilineInput.reset();
+            //     this.rl.setPrompt(chalk.cyan('mcp> '));
+            //     this.emit('line', result.text);
+            // }
 
-            if (!result.complete) {
-                // Continua capturando input
-                this.rl.setPrompt(result.prompt);
-                if (result.message) {
-                    process.stdout.write(result.message + '\n');
-                }
-                this.rl.prompt();
-            } else {
-                // Input completo, processa
-                this.multilineInput.reset();
-                this.rl.setPrompt(chalk.cyan('mcp> '));
-                this.emit('line', result.text);
-            }
+            // Direct line emission - no multiline processing
+            this.emit('line', line);
         });
 
         this.rl.on('SIGINT', () => {
-            if (this.multilineInput.isMultiline()) {
-                this.multilineInput.cancel();
-                this.rl.setPrompt(chalk.cyan('mcp> '));
-                this.rl.prompt();
-            } else {
-                this.emit('interrupt');
-            }
+            // DISABLED - using EnhancedPasteManager instead
+            // if (this.multilineInput.isMultiline()) {
+            //     this.multilineInput.cancel();
+            //     this.rl.setPrompt(chalk.cyan('mcp> '));
+            //     this.rl.prompt();
+            // } else {
+            //     this.emit('interrupt');
+            // }
+            this.emit('interrupt');
         });
     }
 
@@ -765,17 +783,16 @@ class MCPInteractive extends EventEmitter {
         this.replInterface.initialize();
         console.log(chalk.blue('✅ Interface REPL inicializada'));
 
-        // Inicializar sistema de paste - TEMPORARILY DISABLED
-        // console.log(chalk.blue('🔄 Inicializando sistema de paste...'));
-        // this.pasteManager = new PasteManager(this.replInterface.rl, this.pasteAttachments);
-        // console.log(chalk.blue('✅ Sistema de paste inicializado'));
+        // Inicializar sistema de paste melhorado
+        console.log(chalk.blue('🔄 Inicializando sistema de paste...'));
+        this.pasteManager = new EnhancedPasteManager(this.replInterface.rl, this.pasteAttachments);
+        console.log(chalk.blue('✅ Sistema de paste inicializado'));
 
         // Carregar histórico combinado (local + Turso) no readline
         console.log(chalk.blue('🔄 Tentando carregar histórico...'));
         await this.loadCombinedHistory();
 
-        // Configurar Bracketed Paste Mode - DISABLED (was causing input issues)
-        // this.setupBracketedPasteMode();
+        // Bracketed Paste Mode agora é gerenciado pelo EnhancedPasteManager
 
         // Configurar listeners
         this.replInterface.rl.on('line', async (input) => {
@@ -1044,6 +1061,11 @@ class MCPInteractive extends EventEmitter {
     }
 
     async processInput(input) {
+        // Verificar se está em modo paste
+        if (this.pasteManager && this.pasteManager.handleLineInput(input)) {
+            return; // Input foi processado pelo paste manager
+        }
+
         if (!input || input.trim() === '') {
             this.replInterface.prompt();
             return;

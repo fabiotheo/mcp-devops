@@ -40,7 +40,9 @@
       "Bash(sed:*)",
       "Read(//Users/fabiotheodoro/.local/bin/**)",
       "Bash(npm install:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(dpkg:*)",
+      "Bash(brew list:*)"
     ],
     "deny": [],
     "ask": []

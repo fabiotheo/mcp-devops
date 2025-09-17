@@ -110,6 +110,10 @@ Forneça uma solução concisa.`;
         return 'Claude (Tools)';
     }
 
+    getModelName() {
+        return this.modelName;
+    }
+
     getProviderInfo() {
         return {
             provider: 'Claude (Native Tools)',

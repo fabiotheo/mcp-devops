@@ -942,29 +942,59 @@ export default class ModelFactory {
         return this.setupShellIntegration();
     }
 
+    adjustImportsForInstallation(content, sourceFile) {
+        // Ajusta os imports relativos para funcionarem na estrutura instalada
+        let adjustedContent = content;
+
+        // Se o arquivo vem de src/core/, precisa ajustar os imports relativos
+        if (sourceFile.includes('src/core/')) {
+            // ../libs/ -> ./libs/
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
+            // ../ai-models/ -> ./ai_models/
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai-models\//g, "from './ai_models/");
+            // ../patterns/ -> ./patterns/
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/patterns\//g, "from './patterns/");
+            // ../web/search/ -> ./web_search/
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/web\/search\//g, "from './web_search/");
+            // ../web/scraper/ -> ./web_scraper/
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/web\/scraper\//g, "from './web_scraper/");
+            // ./ai_orchestrator -> ./ai_orchestrator (já está correto)
+        }
+
+        // Se o arquivo vem de src/web/search/, precisa ajustar import do scraper
+        if (sourceFile.includes('src/web/search/')) {
+            // ../scraper/ -> ../web_scraper/
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/scraper\//g, "from '../web_scraper/");
+        }
+
+        // Se o arquivo vem de src/web/scraper/, precisa ajustar import do search
+        if (sourceFile.includes('src/web/scraper/')) {
+            // ../search/ -> ../web_search/
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/search\//g, "from '../web_search/");
+        }
+
+        return adjustedContent;
+    }
+
     async makeExecutable() {
         console.log('\n🔧 Copiando e configurando scripts...');
 
         // Lista de arquivos a serem copiados
         const filesToCopy = [
-            { src: 'mcp-client.js', dest: 'mcp-client.js' },
-            { src: 'mcp-assistant.js', dest: 'mcp-assistant.js' },
+            { src: 'src/core/mcp-client.js', dest: 'mcp-client.js' },
+            { src: 'src/core/mcp-assistant.js', dest: 'mcp-assistant.js' },
             { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' },
             { src: 'configure-ai.js', dest: 'configure-ai.js' },
             { src: 'mcp-configure', dest: 'mcp-configure' },
-            { src: 'mcp-interactive.js', dest: 'mcp-interactive.js' },
+            { src: 'src/core/mcp-interactive.js', dest: 'mcp-interactive.js' },
             { src: 'ipcom-chat', dest: 'ipcom-chat' },
             { src: 'ipcom-chat-cli.js', dest: 'ipcom-chat-cli.js' },
             { src: 'ipcom-chat-launcher.sh', dest: 'ipcom-chat-launcher.sh' },
-            { src: 'ai_orchestrator.js', dest: 'ai_orchestrator.js' },
-            { src: 'ai_orchestrator_tools.js', dest: 'ai_orchestrator_tools.js' },
+            { src: 'src/core/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
+            { src: 'src/core/ai_orchestrator_tools.js', dest: 'ai_orchestrator_tools.js' },
             { src: 'ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
             { src: 'deploy-linux.sh', dest: 'deploy-linux.sh' },
-            { src: 'test-turso-integration.js', dest: 'test-turso-integration.js' },
-            { src: 'libs/paste-detector.js', dest: 'libs/paste-detector.js' },
-            { src: 'libs/paste-attachments.js', dest: 'libs/paste-attachments.js' },
-            { src: 'libs/paste-manager.js', dest: 'libs/paste-manager.js' },
-            { src: 'libs/enhanced-paste-manager.js', dest: 'libs/enhanced-paste-manager.js' }
+            { src: 'test-turso-integration.js', dest: 'test-turso-integration.js' }
         ];
 
         // Copiar arquivos principais
@@ -974,7 +1004,9 @@ export default class ModelFactory {
                 const destPath = path.join(this.mcpDir, file.dest);
 
                 try {
-                    const content = await fs.readFile(srcPath, 'utf8');
+                    let content = await fs.readFile(srcPath, 'utf8');
+                    // Ajusta os imports para a estrutura instalada
+                    content = this.adjustImportsForInstallation(content, file.src);
                     await fs.writeFile(destPath, content);
                     console.log(`  ✓ Arquivo ${file.dest} copiado`);
                 } catch (err) {
@@ -987,7 +1019,7 @@ export default class ModelFactory {
 
         // Copiar padrões
         try {
-            const patternsDir = path.join(process.cwd(), 'patterns');
+            const patternsDir = path.join(process.cwd(), 'src/patterns');
             const destPatternsDir = path.join(this.mcpDir, 'patterns');
 
             const patternFiles = await fs.readdir(patternsDir);
@@ -1006,7 +1038,7 @@ export default class ModelFactory {
 
         // Copiar libs
         try {
-            const libsDir = path.join(process.cwd(), 'libs');
+            const libsDir = path.join(process.cwd(), 'src/libs');
             const destLibsDir = path.join(this.mcpDir, 'libs');
 
             // Criar diretório libs se não existir
@@ -1031,10 +1063,36 @@ export default class ModelFactory {
             // console.log(`  ⚠ Diretório libs não encontrado (normal em versões antigas)`);
         }
 
+        // Copiar ai_models
+        try {
+            const aiModelsDir = path.join(process.cwd(), 'src/ai-models');
+            const destAiModelsDir = path.join(this.mcpDir, 'ai_models');
+
+            // Criar diretório ai_models se não existir
+            try {
+                await fs.access(destAiModelsDir);
+            } catch {
+                await fs.mkdir(destAiModelsDir, { recursive: true });
+            }
+
+            const aiModelFiles = await fs.readdir(aiModelsDir);
+            for (const file of aiModelFiles) {
+                if (file.endsWith('.js')) {
+                    const srcPath = path.join(aiModelsDir, file);
+                    const destPath = path.join(destAiModelsDir, file);
+                    const content = await fs.readFile(srcPath, 'utf8');
+                    await fs.writeFile(destPath, content);
+                }
+            }
+            console.log(`  ✓ Arquivos de ai_models copiados`);
+        } catch (error) {
+            console.log(`  ⚠ Erro ao copiar ai_models: ${error.message}`);
+        }
+
         // Copiar web_search e web_scraper
         try {
             // Copiar web_search
-            const webSearchDir = path.join(process.cwd(), 'web_search');
+            const webSearchDir = path.join(process.cwd(), 'src/web/search');
             const destWebSearchDir = path.join(this.mcpDir, 'web_search');
 
             // Criar diretório web_search se não existir
@@ -1046,14 +1104,16 @@ export default class ModelFactory {
                 if (file.endsWith('.js')) {
                     const srcPath = path.join(webSearchDir, file);
                     const destPath = path.join(destWebSearchDir, file);
-                    const content = await fs.readFile(srcPath, 'utf8');
+                    let content = await fs.readFile(srcPath, 'utf8');
+                    // Ajusta os imports para a estrutura instalada
+                    content = this.adjustImportsForInstallation(content, 'src/web/search/' + file);
                     await fs.writeFile(destPath, content);
                 }
             }
             console.log(`  ✓ Arquivos de web_search copiados`);
 
             // Copiar web_scraper
-            const webScraperDir = path.join(process.cwd(), 'web_scraper');
+            const webScraperDir = path.join(process.cwd(), 'src/web/scraper');
             const destWebScraperDir = path.join(this.mcpDir, 'web_scraper');
 
             // Criar diretório web_scraper se não existir
@@ -1065,7 +1125,9 @@ export default class ModelFactory {
                 if (file.endsWith('.js')) {
                     const srcPath = path.join(webScraperDir, file);
                     const destPath = path.join(destWebScraperDir, file);
-                    const content = await fs.readFile(srcPath, 'utf8');
+                    let content = await fs.readFile(srcPath, 'utf8');
+                    // Ajusta os imports para a estrutura instalada
+                    content = this.adjustImportsForInstallation(content, 'src/web/scraper/' + file);
                     await fs.writeFile(destPath, content);
                 }
             }

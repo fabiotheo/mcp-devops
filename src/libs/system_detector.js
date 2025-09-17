@@ -1439,6 +1439,37 @@ class SystemDetector {
             enableAcceleration: 'aws s3 cp --endpoint-url=https://s3-accelerate.amazonaws.com'
         };
     }
+
+    // Dicas específicas por sistema
+    getSystemSpecificTips() {
+        const tips = [];
+        const distro = this.getDistribution();
+
+        switch (distro) {
+            case 'macos':
+                tips.push('Use brew para instalar pacotes');
+                tips.push('Comandos de sistema usam launchctl em vez de systemctl');
+                break;
+            case 'ubuntu':
+            case 'debian':
+                tips.push('Use apt para gerenciar pacotes');
+                tips.push('Use systemctl para gerenciar serviços');
+                break;
+            case 'arch':
+                tips.push('Use pacman para gerenciar pacotes');
+                tips.push('Consulte o Arch Wiki para documentação');
+                break;
+            case 'centos':
+            case 'rhel':
+                tips.push('Use yum ou dnf para gerenciar pacotes');
+                tips.push('Use firewalld para configurar firewall');
+                break;
+            default:
+                tips.push('Consulte a documentação específica da sua distribuição');
+        }
+
+        return tips;
+    }
 }
 
 export default SystemDetector;

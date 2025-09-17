@@ -6,7 +6,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import https from 'https';
-import FirecrawlWrapper from '../web_scraper/index.js';
+import FirecrawlWrapper from '../scraper/index.js';
 
 class WebSearcher {
   constructor(config = {}) {

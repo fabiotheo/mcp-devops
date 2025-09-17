@@ -1,33 +1,28 @@
 #!/usr/bin/env node
 
 import readline from 'readline';
-import { EventEmitter } from 'events';
-import { PassThrough } from 'stream';
+import {EventEmitter} from 'events';
 import fs from 'fs/promises';
-import { existsSync } from 'fs';
+import {existsSync} from 'fs';
 import path from 'path';
 import os from 'os';
 import chalk from 'chalk';
-import ModelFactory from './ai_models/model_factory.js';
-import SystemDetector from './libs/system_detector.js';
+import ModelFactory from '../ai-models/model_factory.js';
+import SystemDetector from '../libs/system_detector.js';
 import AICommandOrchestrator from './ai_orchestrator.js';
 import AICommandOrchestratorWithTools from './ai_orchestrator_tools.js';
 import AICommandOrchestratorBash from './ai_orchestrator_bash.js';
-import PersistentHistory from './libs/persistent-history.js';
-import KeybindingManager from './libs/keybinding-manager.js';
-import MultiLineInput from './libs/multiline-input.js';
-import { orchestrationAnimator } from './libs/orchestration-animator.js';
-import TursoHistoryClient from './libs/turso-client.js';
-import UserManager from './libs/user-manager.js';
-import EnhancedPasteManager from './libs/enhanced-paste-manager.js';
-import PasteAttachments from './libs/paste-attachments.js';
+import PersistentHistory from '../libs/persistent-history.js';
+import KeybindingManager from '../libs/keybinding-manager.js';
+import {orchestrationAnimator} from '../libs/orchestration-animator.js';
+import TursoHistoryClient from '../libs/turso-client.js';
+import UserManager from '../libs/user-manager.js';
 
 class ContextManager {
     constructor(maxTokens = 100000) {
         this.messages = [];
         this.maxTokens = maxTokens;
         this.summary = null;
-        this.tokenEstimate = 0;
     }
 
     addMessage(role, content) {
@@ -39,7 +34,7 @@ class ContextManager {
         this.optimizeIfNeeded();
     }
 
-    getContext(format = 'array') {
+    getContext() {
         if (this.summary) {
             return [
                 { role: 'system', content: this.summary },
@@ -88,7 +83,6 @@ class ContextManager {
     reset() {
         this.messages = [];
         this.summary = null;
-        this.tokenEstimate = 0;
     }
 
     getHistory(limit = 10) {
@@ -115,7 +109,7 @@ class CommandProcessor {
             '/exec': this.executeCommand.bind(this),
             '/history': this.showHistory.bind(this),
             '/version': this.showVersion.bind(this),
-            '/paste': this.enterPasteMode.bind(this),
+            // Removido: comando /paste
             '/exit': this.exit.bind(this),
             '/quit': this.exit.bind(this)
         };
@@ -133,7 +127,7 @@ class CommandProcessor {
     }
 
     async showHelp() {
-        const help = `
+        return `
 ${chalk.cyan('═══ Comandos Disponíveis ═══')}
 
 ${chalk.yellow('/help')}      - Mostra esta ajuda
@@ -145,23 +139,22 @@ ${chalk.yellow('/load')} [nome] - Carrega uma sessão salva
 ${chalk.yellow('/model')}     - Mostra/altera o modelo de IA
 ${chalk.yellow('/exec')}      - Executa o último comando sugerido
 ${chalk.yellow('/history')}   - Mostra histórico da sessão
-${chalk.yellow('/paste')}     - Entra em modo paste multi-linha
+// Removido: comando /paste
 ${chalk.yellow('/version')}   - Mostra informações da versão
 ${chalk.yellow('/exit')}      - Sai do modo interativo
 
 ${chalk.cyan('═══ Dicas ═══')}
 
-• Digite ${chalk.green('/paste')} para modo multi-linha
+• Cole texto normalmente com Ctrl+V
 • Use ${chalk.green('Tab')} para auto-completar comandos
 • Sessões são salvas automaticamente a cada 5 minutos
 • AI Orchestration está ${chalk.green('ativado')} para perguntas complexas
 • Digite ${chalk.cyan('/shortcuts')} para ver atalhos de teclado
 `;
-        return help;
     }
 
     async showShortcuts() {
-        const shortcuts = `
+        return `
 ${chalk.cyan('═══ Atalhos de Teclado ═══')}
 
 ${chalk.blue('Comandos Básicos:')}
@@ -180,13 +173,11 @@ ${chalk.yellow('Ctrl+E')}     - Move para fim da linha
 ${chalk.yellow('Tab')}        - Auto-completa comandos
 
 ${chalk.blue('Multi-linha:')}
-${chalk.yellow('/paste')}      - Modo paste manual
-${chalk.yellow('Cole')}        - Detecção automática de paste
-${chalk.yellow('Enter x2')}    - Finaliza modo paste
+${chalk.yellow('Ctrl+V')}     - Cole texto normalmente
+${chalk.yellow('Enter')}      - Envia para IA
 
 ${chalk.gray('Use /help para mais comandos')}
 `;
-        return shortcuts;
     }
 
     async clearScreen() {
@@ -213,8 +204,7 @@ ${chalk.gray('Use /help para mais comandos')}
             return chalk.red('Por favor, especifique o nome da sessão');
         }
         try {
-            const context = await this.mcp.sessionPersistence.load(name);
-            this.mcp.contextManager.messages = context;
+            this.mcp.contextManager.messages = await this.mcp.sessionPersistence.load(name);
             return chalk.green(`✓ Sessão '${name}' carregada`);
         } catch (error) {
             return chalk.red(`Erro ao carregar sessão: ${error.message}`);
@@ -254,7 +244,7 @@ ${chalk.gray('Use /help para mais comandos')}
         const systemInfo = this.mcp.systemDetector?.getSystemInfo() || {};
         const providerInfo = this.mcp.aiModel?.getProviderInfo() || {};
 
-        const versionInfo = `
+        return `
 ${chalk.cyan('═══ Informações da Versão ═══')}
 
 ${chalk.blue('▶ MCP Terminal:')} v${version}
@@ -265,16 +255,9 @@ ${chalk.blue('▶ Node.js:')} ${process.version}
 
 ${chalk.gray('© 2024 IPCOM - AI Tool for Linux')}
 `;
-        return versionInfo;
     }
 
-    async enterPasteMode() {
-        if (this.mcp.pasteManager) {
-            this.mcp.pasteManager.handlePasteCommand();
-            return ''; // Retorna vazio para não mostrar mensagem extra
-        }
-        return chalk.red('Sistema de paste não disponível');
-    }
+    // Removido: enterPasteMode - não mais necessário
 
     async exit() {
         await this.mcp.shutdown();
@@ -314,13 +297,6 @@ class SessionPersistence {
         return data.context;
     }
 
-    async listSessions() {
-        const files = await fs.readdir(this.sessionDir);
-        return files
-            .filter(f => f.endsWith('.json'))
-            .map(f => f.replace('.json', ''));
-    }
-
     enableAutoSave(sessionName, contextManager, interval = 300000) {
         if (this.autoSaveTimer) {
             clearInterval(this.autoSaveTimer);
@@ -347,13 +323,9 @@ class REPLInterface extends EventEmitter {
     constructor() {
         super();
         this.rl = null;
-        this.multilineInput = null;
         this.keybindingManager = null;
 
-        // Propriedades para o modo de colagem
-        this.isPasting = false;
-        this.pasteBuffer = '';
-        this.inputBuffer = ''; // Buffer para lidar com chunks de dados
+        // Removido: propriedades de paste buffer
     }
 
     initialize() {
@@ -362,74 +334,44 @@ class REPLInterface extends EventEmitter {
             process.stdout.write('\x1b[?2004h');
         }
 
-        const myInputStream = new PassThrough();
+        // Interface readline simples e direta com bracketed paste support
         this.rl = readline.createInterface({
-            input: myInputStream,
+            input: process.stdin,
             output: process.stdout,
             prompt: chalk.cyan('mcp> '),
             completer: this.autoComplete.bind(this),
             terminal: true
         });
 
-        // --- LÓGICA DE CAPTURA DE INPUT (STREAM INTERMEDIÁRIO) ---
-        const PASTE_START = '\x1b[200~';
-        const PASTE_END = '\x1b[201~';
+        // Configurar bracketed paste para colar texto sem enviar automaticamente
+        let pastedText = '';
+        let isPasting = false;
 
-        if (process.stdin.isTTY) {
-            process.stdin.setRawMode(true);
-        }
+        this.rl.input.on('keypress', (str) => {
+            // Detectar início do bracketed paste (ESC[200~)
+            if (str === '\u001b[200~') {
+                isPasting = true;
+                pastedText = '';
+                return;
+            }
 
-        process.stdin.on('data', (chunk) => {
-            this.inputBuffer += chunk.toString('utf8');
-
-            while (this.inputBuffer.length > 0) {
-                if (this.isPasting) {
-                    const end_index = this.inputBuffer.indexOf(PASTE_END);
-                    if (end_index !== -1) {
-                        this.pasteBuffer += this.inputBuffer.substring(0, end_index);
-                        this.inputBuffer = this.inputBuffer.substring(end_index + PASTE_END.length);
-
-                        this.isPasting = false;
-                        const sanitizedPaste = this.pasteBuffer.trim().replace(/\r/g, '\n');
-                        this.pasteBuffer = '';
-
-                        // **A CORREÇÃO:** Se for multi-linha, envolve com """ para usar o modo de bloco.
-                        if (sanitizedPaste.includes('\n')) {
-                            myInputStream.write(`"""\n${sanitizedPaste}\n"""\n`);
-                        } else {
-                            myInputStream.write(sanitizedPaste);
-                        }
-
-                    } else {
-                        this.pasteBuffer += this.inputBuffer;
-                        this.inputBuffer = '';
-                        break;
-                    }
-                } else {
-                    const start_index = this.inputBuffer.indexOf(PASTE_START);
-                    if (start_index !== -1) {
-                        const before = this.inputBuffer.substring(0, start_index);
-                        myInputStream.write(before);
-                        this.inputBuffer = this.inputBuffer.substring(start_index + PASTE_START.length);
-                        this.isPasting = true;
-                    } else {
-                        myInputStream.write(this.inputBuffer);
-                        this.inputBuffer = '';
-                        break;
-                    }
+            // Detectar fim do bracketed paste (ESC[201~)
+            if (str === '\u001b[201~') {
+                isPasting = false;
+                if (pastedText) {
+                    // Inserir o texto colado na linha atual sem enviar
+                    this.rl.write(pastedText);
+                    pastedText = '';
                 }
+                return;
+            }
+
+            // Acumular texto durante paste
+            if (isPasting && str) {
+                pastedText += str;
+
             }
         });
-        // --- FIM DA LÓGICA ---
-
-        // DISABLED - MultiLineInput replaced by EnhancedPasteManager
-        // this.multilineInput = new MultiLineInput({
-        //     blockDelimiter: '"""',
-        //     continuationChar: '\\',
-        //     continuationPrompt: chalk.gray('... '),
-        //     normalPrompt: chalk.cyan('mcp> ')
-        // });
-        this.multilineInput = null;
 
         // Inicializa KeybindingManager
         this.keybindingManager = new KeybindingManager(this.rl, {
@@ -443,11 +385,6 @@ class REPLInterface extends EventEmitter {
 
         // Handler para cancelamento com ESC
         this.keybindingManager.on('cancel', () => {
-            // DISABLED - using EnhancedPasteManager instead
-            // if (this.multilineInput.cancel()) {
-            //     this.rl.setPrompt(chalk.cyan('mcp> '));
-            //     this.rl.prompt();
-            // }
             this.rl.setPrompt(chalk.cyan('mcp> '));
             this.rl.prompt();
         });
@@ -456,7 +393,7 @@ class REPLInterface extends EventEmitter {
         let commandMenuShown = false;
         let lastLineLength = 0;
 
-        this.rl.on('keypress', (char, key) => {
+        this.rl.on('keypress', (char) => {
             const currentLine = this.rl.line;
 
             // Quando digitar "/" no início da linha
@@ -672,13 +609,9 @@ class MCPInteractive extends EventEmitter {
 
         // Turso integration
         this.tursoClient = null;
-        this.userManager = null;
 
         // Paste system
-        this.pasteAttachments = new PasteAttachments();
-        this.pasteManager = null;
         this.tursoEnabled = false;
-        this.currentUser = null;
         this.historyMode = 'global'; // global, user, machine, hybrid
     }
 
@@ -783,18 +716,21 @@ class MCPInteractive extends EventEmitter {
         this.replInterface.initialize();
         console.log(chalk.blue('✅ Interface REPL inicializada'));
 
-        // Inicializar sistema de paste melhorado
-        console.log(chalk.blue('🔄 Inicializando sistema de paste...'));
-        this.pasteManager = new EnhancedPasteManager(this.replInterface.rl, this.pasteAttachments);
-        console.log(chalk.blue('✅ Sistema de paste inicializado'));
+        // Habilitar bracketed paste mode nativo para suporte a paste
+        console.log(chalk.blue('🔄 Habilitando bracketed paste nativo...'));
+        if (this.replInterface.rl.input.isTTY) {
+            // Habilitar bracketed paste mode
+            this.replInterface.rl.input.write('\x1b[?2004h');
+        }
+        console.log(chalk.blue('✅ Bracketed paste habilitado'));
 
         // Carregar histórico combinado (local + Turso) no readline
         console.log(chalk.blue('🔄 Tentando carregar histórico...'));
         await this.loadCombinedHistory();
 
-        // Bracketed Paste Mode agora é gerenciado pelo EnhancedPasteManager
+        // Input simples sem detecção de paste
 
-        // Configurar listeners
+        // Configurar listener simples para entrada de linha
         this.replInterface.rl.on('line', async (input) => {
             await this.processInput(input);
         });
@@ -812,8 +748,7 @@ class MCPInteractive extends EventEmitter {
         // Carregar sessão se especificada
         if (this.config.resume) {
             try {
-                const context = await this.sessionPersistence.load(this.config.resume);
-                this.contextManager.messages = context;
+                this.contextManager.messages = await this.sessionPersistence.load(this.config.resume);
                 console.log(chalk.green(`✓ Sessão '${this.config.resume}' retomada`));
             } catch (error) {
                 console.log(chalk.yellow(`Não foi possível retomar sessão '${this.config.resume}'`));
@@ -821,7 +756,7 @@ class MCPInteractive extends EventEmitter {
         }
     }
 
-    async initializeTurso(modelConfig) {
+    async initializeTurso() {
         try {
             // Verificar se existe configuração do Turso
             const tursoConfigPath = path.join(os.homedir(), '.mcp-terminal', 'turso-config.json');
@@ -843,7 +778,6 @@ class MCPInteractive extends EventEmitter {
             // Determinar modo de histórico
             if (username) {
                 this.historyMode = 'user';
-                this.currentUser = username;
             } else if (localMode) {
                 this.historyMode = 'machine';
             } else if (hybridMode) {
@@ -864,7 +798,7 @@ class MCPInteractive extends EventEmitter {
             // Se modo usuário, configurar usuário
             if (username) {
                 try {
-                    const user = await this.tursoClient.setUser(username);
+                    await this.tursoClient.setUser(username);
                     console.log(chalk.green(`✓ Logado como: ${username}`));
                 } catch (error) {
                     console.log(chalk.red(`❌ ${error.message}`));
@@ -873,9 +807,6 @@ class MCPInteractive extends EventEmitter {
                     process.exit(1);
                 }
             }
-
-            // Inicializar UserManager
-            this.userManager = new UserManager(this.tursoClient.client);
 
             this.tursoEnabled = true;
             console.log(chalk.green(`✓ Turso conectado (modo: ${this.historyMode})`));
@@ -887,41 +818,6 @@ class MCPInteractive extends EventEmitter {
         }
     }
 
-    // setupBracketedPasteMode() COMPLETELY REMOVED - was causing input issues
-
-    handlePastedContent(content) {
-        // Remover espaços em branco do final
-        content = content.trimEnd();
-
-        // Se não tem conteúdo, ignorar
-        if (!content) {
-            this.replInterface.prompt();
-            return;
-        }
-
-        // Verificar se tem múltiplas linhas
-        const lines = content.split('\n');
-
-        if (lines.length > 1) {
-            // Mostrar o conteúdo colado formatado
-            console.log(chalk.gray('\n📋 Texto com múltiplas linhas detectado:'));
-            console.log(chalk.cyan('─'.repeat(80)));
-            console.log(content);
-            console.log(chalk.cyan('─'.repeat(80)));
-            console.log(chalk.yellow('Pressione Enter para enviar ou Ctrl+C para cancelar\n'));
-
-            // Armazenar para processamento após confirmação
-            this.pendingPasteText = content;
-            this.waitingForPasteConfirmation = true;
-        } else {
-            // Linha única - processar diretamente
-            this.processInput(content);
-        }
-
-        // Mostrar prompt
-        this.replInterface.prompt();
-    }
-
     async loadCombinedHistory() {
         console.log(chalk.gray('🔍 Iniciando carregamento do histórico...'));
 
@@ -930,59 +826,55 @@ class MCPInteractive extends EventEmitter {
             return;
         }
 
-        const combinedHistory = [];
-
         try {
-            // 1. Carregar histórico local (PersistentHistory)
-            console.log(chalk.gray(`📂 Histórico local: ${this.persistentHistory.history.length} comandos`));
-            if (this.persistentHistory.history.length > 0) {
-                combinedHistory.push(...this.persistentHistory.history);
-            }
+            // PRIORIDADE: Histórico local é mais confiável para a sessão atual
+            // Turso é usado apenas para complementar com comandos de outras sessões
 
-            // 2. Carregar histórico do Turso se disponível
-            if (this.tursoClient) {
-                console.log(chalk.gray('🔗 Carregando histórico do Turso...'));
+            // 1. Carregar histórico local como base primária
+            const localHistory = [...this.persistentHistory.history];
+            console.log(chalk.gray(`📂 Histórico local: ${localHistory.length} comandos`));
+
+            // 2. Se o Turso estiver disponível, buscar comandos de outras sessões
+            let tursoSupplementCommands = [];
+            if (this.tursoClient && localHistory.length < 20) { // Só buscar do Turso se o local tiver poucos comandos
+                console.log(chalk.gray('🔗 Complementando com histórico do Turso...'));
                 try {
-                    const tursoHistory = await this.tursoClient.getHistory(50); // Últimos 50 comandos
+                    const tursoHistory = await this.tursoClient.getHistory(10); // Buscar apenas 10 comandos recentes
                     console.log(chalk.gray(`📊 Turso retornou: ${tursoHistory.length} entradas`));
 
-                    // Extrair apenas os comandos (sem as respostas)
-                    const tursoCommands = tursoHistory.map(h => h.command).filter(cmd => cmd);
-                    console.log(chalk.gray(`💬 Comandos válidos do Turso: ${tursoCommands.length}`));
+                    // Extrair comandos e filtrar apenas os que não estão no histórico local
+                    const localSet = new Set(localHistory);
+                    tursoSupplementCommands = tursoHistory
+                        .map(h => h.command)
+                        .filter(cmd => cmd && !localSet.has(cmd))
+                        .slice(0, 5); // Máximo 5 comandos suplementares do Turso
 
-                    // Adicionar comandos do Turso que não estão no histórico local
-                    tursoCommands.forEach(cmd => {
-                        if (!combinedHistory.includes(cmd)) {
-                            combinedHistory.push(cmd);
-                        }
-                    });
+                    if (tursoSupplementCommands.length > 0) {
+                        console.log(chalk.gray(`💬 Adicionando ${tursoSupplementCommands.length} comandos únicos do Turso`));
+                    }
                 } catch (error) {
                     console.log(chalk.yellow(`⚠️  Erro ao carregar do Turso: ${error.message}`));
                 }
-            } else {
-                console.log(chalk.yellow('⚠️  Turso client não disponível'));
             }
 
-            // 3. Remover duplicatas mantendo a ordem original (mais antigo primeiro)
-            const uniqueHistory = [...new Set(combinedHistory)];
-            console.log(chalk.gray(`🔄 Histórico único: ${uniqueHistory.length} comandos`));
+            // 3. Combinar: comandos do Turso primeiro (mais antigos), depois os locais (mais recentes)
+            const finalHistory = [...tursoSupplementCommands, ...localHistory];
 
-            // 4. Carregar no readline - o readline espera ordem do mais NOVO para o mais ANTIGO
-            // O primeiro item do array history é o mais recente
+            // 4. Carregar no readline na ordem correta
+            // readline.history[0] = comando mais recente
             this.replInterface.rl.history = [];
 
-            // Percorrer do final para o início (do mais novo para o mais antigo)
-            for (let i = uniqueHistory.length - 1; i >= 0; i--) {
-                this.replInterface.rl.history.push(uniqueHistory[i]);
+            // Adicionar do mais recente para o mais antigo
+            for (let i = finalHistory.length - 1; i >= 0; i--) {
+                this.replInterface.rl.history.push(finalHistory[i]);
             }
 
-            // Resetar o índice do histórico para apontar para -1 (nenhum item selecionado)
-            // Isso garante que a primeira seta para cima pegue o último comando
+            // Resetar o índice do histórico
             this.replInterface.rl.historyIndex = -1;
 
-            if (uniqueHistory.length > 0) {
-                console.log(chalk.green(`📚 Carregados ${uniqueHistory.length} comandos do histórico`));
-                console.log(chalk.gray(`   Último comando: ${uniqueHistory[uniqueHistory.length - 1]}`));
+            if (finalHistory.length > 0) {
+                console.log(chalk.green(`📚 Carregados ${finalHistory.length} comandos do histórico`));
+                console.log(chalk.gray(`   Último comando: ${finalHistory[finalHistory.length - 1]}`));
             } else {
                 console.log(chalk.yellow('📚 Nenhum comando encontrado no histórico'));
             }
@@ -1061,10 +953,6 @@ class MCPInteractive extends EventEmitter {
     }
 
     async processInput(input) {
-        // Verificar se está em modo paste
-        if (this.pasteManager && this.pasteManager.handleLineInput(input)) {
-            return; // Input foi processado pelo paste manager
-        }
 
         if (!input || input.trim() === '') {
             this.replInterface.prompt();
@@ -1212,9 +1100,9 @@ class MCPInteractive extends EventEmitter {
             /quant[oa]s?\s+/i,  // quantos, quantas
 
             // Análise de recursos do sistema
-            /(?:memória|memoria|ram|cpu|disco|processos?|apps?|aplicações?|aplicativos?)/i,
-            /(?:consumo|uso|utilização|ocupação)/i,
-            /(?:espaço|tamanho|portas?|serviços?)/i,
+            /memória|memoria|ram|cpu|disco|processos?|apps?|aplicações?|aplicativos?/i,
+            /consumo|uso|utilização|ocupação/i,
+            /espaço|tamanho|portas?|serviços?/i,
 
             // Comandos específicos
             /top\s+\d+/i,  // top 5, top 10
@@ -1292,7 +1180,7 @@ class MCPInteractive extends EventEmitter {
                     session_id: this.sessionName
                 });
             } catch (error) {
-                // Silenciosamente continua
+                console.error('Error saving command:', error);
             }
         }
 
@@ -1326,7 +1214,7 @@ class MCPInteractive extends EventEmitter {
             if (question.toLowerCase().includes(service)) {
                 for (const cmd of commands) {
                     // Executa apenas se o usuário está pedindo informações atuais
-                    if (question.match(/(?:status|estado|ativas?|rodando|executando|quais|quant|liste|mostrar?|habilitad|regras?|bloqueado)/i)) {
+                    if (question.match(/status|estado|ativas?|rodando|executando|quais|quant|liste|mostrar?|habilitad|regras?|bloqueado/i)) {
                         const result = await this.executeCommand(cmd);
                         if (result) {
                             commandResults.push(result);
@@ -1775,9 +1663,9 @@ class MCPInteractive extends EventEmitter {
         // Parar auto-save
         this.sessionPersistence.stopAutoSave();
 
-        // Cleanup paste system
-        if (this.pasteManager) {
-            this.pasteManager.cleanup();
+        // Desabilitar bracketed paste mode
+        if (this.replInterface.rl.input.isTTY) {
+            this.replInterface.rl.input.write('\x1b[?2004l');
         }
 
         // Fechar interface
@@ -1788,10 +1676,129 @@ class MCPInteractive extends EventEmitter {
     }
 }
 
+// Função para gerenciar comandos de usuário
+async function handleUserCommand(args) {
+    const command = args[0];
+
+    try {
+        // Carregar configuração do Turso
+        const tursoConfigPath = path.join(os.homedir(), '.mcp-terminal', 'turso-config.json');
+        if (!existsSync(tursoConfigPath)) {
+            console.error(chalk.red('❌ Turso não configurado. Execute: node src/libs/turso-client-setup.js'));
+            process.exit(1);
+        }
+
+        const tursoConfig = JSON.parse(await fs.readFile(tursoConfigPath, 'utf8'));
+
+        // Inicializar cliente Turso
+        const tursoClient = new TursoHistoryClient({
+            ...tursoConfig,
+            debug: false
+        });
+        await tursoClient.initialize();
+
+        // Criar UserManager
+        const userManager = new UserManager(tursoClient.client);
+
+        switch (command) {
+            case 'create': {
+                let username, name, email;
+
+                // Processar argumentos
+                for (let i = 1; i < args.length; i++) {
+                    if (args[i] === '--username' && i + 1 < args.length) {
+                        username = args[++i];
+                    } else if (args[i] === '--name' && i + 1 < args.length) {
+                        name = args[++i];
+                    } else if (args[i] === '--email' && i + 1 < args.length) {
+                        email = args[++i];
+                    }
+                }
+
+                if (!username || !name || !email) {
+                    console.error(chalk.red('❌ Uso: ipcom-chat user create --username <user> --name "<nome>" --email <email>'));
+                    process.exit(1);
+                }
+
+                await userManager.createUser(username, name, email);
+                console.log(chalk.green(`✅ Usuário ${username} criado com sucesso!`));
+                break;
+            }
+
+            case 'list': {
+                const users = await userManager.listUsers(false); // Show all users
+                if (users.length === 0) {
+                    console.log(chalk.yellow('Nenhum usuário cadastrado.'));
+                } else {
+                    console.log(chalk.cyan('\nUsuários cadastrados:'));
+                    console.log(chalk.gray('─'.repeat(60)));
+                    users.forEach(user => {
+                        const status = user.is_active ? chalk.green('✓') : chalk.red('✗');
+                        console.log(`${status} ${user.username} - ${user.name} (${user.email})`);
+                    });
+                }
+                break;
+            }
+
+            case 'activate': {
+                let username;
+                for (let i = 1; i < args.length; i++) {
+                    if (args[i] === '--username' && i + 1 < args.length) {
+                        username = args[++i];
+                    }
+                }
+
+                if (!username) {
+                    console.error(chalk.red('❌ Uso: ipcom-chat user activate --username <user>'));
+                    process.exit(1);
+                }
+
+                await userManager.reactivateUser(username);
+                console.log(chalk.green(`✅ Usuário ${username} ativado!`));
+                break;
+            }
+
+            case 'deactivate': {
+                let username;
+                for (let i = 1; i < args.length; i++) {
+                    if (args[i] === '--username' && i + 1 < args.length) {
+                        username = args[++i];
+                    }
+                }
+
+                if (!username) {
+                    console.error(chalk.red('❌ Uso: ipcom-chat user deactivate --username <user>'));
+                    process.exit(1);
+                }
+
+                await userManager.deleteUser(username);
+                console.log(chalk.yellow(`⚠️  Usuário ${username} desativado!`));
+                break;
+            }
+
+            default:
+                console.error(chalk.red(`❌ Comando desconhecido: ${command}`));
+                console.log(chalk.gray('Use: ipcom-chat --help para ver os comandos disponíveis'));
+                process.exit(1);
+        }
+
+        process.exit(0);
+    } catch (error) {
+        console.error(chalk.red(`❌ Erro: ${error.message}`));
+        process.exit(1);
+    }
+}
+
 // Função principal
 async function main() {
     const args = process.argv.slice(2);
     const config = {};
+
+    // Verificar se é comando de usuário
+    if (args[0] === 'user' && args[1]) {
+        await handleUserCommand(args.slice(1));
+        return;
+    }
 
     // Processar argumentos
     for (let i = 0; i < args.length; i++) {
@@ -1815,6 +1822,12 @@ Opções:
   --model <modelo>    Especificar modelo de IA
   --no-auto-save      Desabilitar auto-save
   --help              Mostrar esta ajuda
+
+Comandos de usuário:
+  user create --username <user> --name "<nome>" --email <email>  Criar novo usuário
+  user list                                                       Listar usuários
+  user activate --username <user>                                 Ativar usuário
+  user deactivate --username <user>                               Desativar usuário
 `);
             process.exit(0);
         }

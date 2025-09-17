@@ -6,7 +6,7 @@ import SystemDetector from './system_detector.js';
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import ModelFactory from './ai_models/model_factory.js';
+import ModelFactory from '../ai-models/model_factory.js';
 import { createRequire } from 'module';
 
 class MCPClient {

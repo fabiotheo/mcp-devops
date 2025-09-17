@@ -11,13 +11,13 @@
 // - Histórico de comandos
 
 import { Anthropic } from '@anthropic-ai/sdk';
-import SystemDetector from './system_detector.js';
+import SystemDetector from '../libs/system_detector.js';
 import fs from 'fs/promises';
 import { existsSync, readFileSync, writeFileSync } from 'fs'; // Keep for sync ops if any, or specific needs
 import path from 'path';
 import { execSync, spawn } from 'child_process';
-import ModelFactory from './ai_models/model_factory.js';
-import WebSearcher from './web_search/index.js';
+import ModelFactory from '../ai-models/model_factory.js';
+import WebSearcher from '../web/search/index.js';
 import readline from 'readline';
 import os from 'os'; // For tmpdir and EOL
 

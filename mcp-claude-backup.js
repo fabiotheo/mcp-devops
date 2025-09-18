@@ -14,8 +14,6 @@ import { existsSync } from 'fs';
 import ModelFactory from './ai_models/model_factory.js';
 import SystemDetector from './libs/system_detector.js';
 import AICommandOrchestrator from './ai_orchestrator.js';
-import TursoHistoryClient from './libs/turso-client.js';
-import { v4 as uuidv4 } from 'uuid';
 
 class ProcessingIndicator {
     constructor() {
@@ -106,14 +104,6 @@ class MCPClaudeFixedFinal {
         this.isProcessing = false;
         this.commandHistory = [];
 
-        // Turso integration
-        this.tursoClient = null;
-        this.tursoEnabled = false;
-        this.currentUser = null;
-        this.currentQuery = null; // Track the currently processing query
-        this.sessionId = uuidv4(); // Unique session identifier
-        this.pendingSaves = new Set(); // Track async saves
-
         // State management
         this.rawBuffer = '';  // Raw input buffer
         this.pastedContent = null;  // Stores pasted multi-line content
@@ -122,20 +112,12 @@ class MCPClaudeFixedFinal {
         this.isPasted = false;  // Flag if current content is pasted
         this.lineCount = 0;  // Number of lines in pasted content
         this.wasInterrupted = false;  // Flag if processing was interrupted
-
-        // History navigation
-        this.historyIndex = -1;  // Current position in command history
-        this.tempBuffer = '';  // Temporary buffer to store current input when navigating
     }
 
     async initialize() {
         console.log(chalk.gray('Initializing...'));
         await this.loadConfig();
         await this.initializeAI();
-
-        // Initialize Turso after basic setup
-        await this.initializeTurso();
-
         await this.loadHistory();
         console.clear();
     }
@@ -178,31 +160,6 @@ class MCPClaudeFixedFinal {
         }
     }
 
-    async initializeTurso() {
-        try {
-            const configPath = path.join(os.homedir(), '.mcp-terminal', 'turso-config.json');
-            if (!existsSync(configPath)) {
-                console.log(chalk.gray('ℹ️  Turso não configurado (modo offline)'));
-                return;
-            }
-
-            const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
-            this.tursoClient = new TursoHistoryClient(config);
-            await this.tursoClient.initialize();
-            this.tursoEnabled = true;
-
-            // TODO: Replace with dynamic user loading from UserManager when available
-            // This hardcoded default is a blocker for multi-user support
-            // Consider using environment variable as interim solution: process.env.USER || 'default'
-            this.currentUser = { username: 'default', id: 1 };
-
-            console.log(chalk.green('✓ Turso conectado'));
-        } catch (error) {
-            console.log(chalk.yellow(`⚠️  Turso indisponível: ${error.message}`));
-            this.tursoEnabled = false;
-        }
-    }
-
     setupInput() {
         process.stdin.setRawMode(true);
         process.stdin.setEncoding('utf8');
@@ -241,22 +198,6 @@ class MCPClaudeFixedFinal {
             return;
         }
 
-        // Handle arrow keys (escape sequences)
-        if (key.startsWith('\x1b[')) {
-            // Up arrow: \x1b[A
-            if (key === '\x1b[A') {
-                this.navigateHistoryUp();
-                return;
-            }
-            // Down arrow: \x1b[B
-            if (key === '\x1b[B') {
-                this.navigateHistoryDown();
-                return;
-            }
-            // Ignore other escape sequences (left/right arrows, etc.)
-            return;
-        }
-
         // ESC - Cancel input or interrupt processing
         if (key === '\x1b') {
             // If we're processing with AI, interrupt it
@@ -265,21 +206,6 @@ class MCPClaudeFixedFinal {
                 this.isProcessing = false;
                 this.spinner.stop();
                 this.streamer.abort();
-
-                // TURSO INTEGRATION: Save cancelled question
-                if (this.currentQuery) {
-                    const queryToCancel = this.currentQuery;
-                    setImmediate(() =>
-                        this.saveTursoConversation(queryToCancel, null, 'cancelled')
-                            .catch(err => {
-                                if (this.config.debug) {
-                                    console.log(`[DEBUG] Background Turso save failed (cancelled): ${err.message}`);
-                                }
-                            })
-                    );
-                    this.currentQuery = null; // Clear after handling
-                }
-
                 console.log(chalk.yellow('\n⚠ Interrupted'));
                 this.showPrompt();
                 return;
@@ -548,8 +474,6 @@ class MCPClaudeFixedFinal {
         this.multilineBuffer = [];
         this.isPasted = false;
         this.lineCount = 0;
-        this.historyIndex = -1;  // Reset history navigation
-        this.tempBuffer = '';
     }
 
     async processInput(input) {
@@ -631,7 +555,6 @@ Shows as: [X lines, Y chars]
 
     async processQuery(query) {
         this.isProcessing = true;
-        this.currentQuery = query; // Store the current query for ESC handler
 
         // Add user message to history immediately
         this.conversationHistory.push({ role: 'user', content: query });
@@ -713,16 +636,6 @@ Shows as: [X lines, Y chars]
                 }
                 console.log();
                 this.conversationHistory.push({ role: 'assistant', content: response });
-
-                // TURSO INTEGRATION: Save completed conversation
-                setImmediate(() =>
-                    this.saveTursoConversation(query, response, 'completed')
-                        .catch(err => {
-                            if (this.config.debug) {
-                                console.log(`[DEBUG] Background Turso save failed (completed): ${err.message}`);
-                            }
-                        })
-                );
             } else if (this.isProcessing) {
                 console.log(chalk.yellow('No response received from AI'));
                 console.log();
@@ -736,23 +649,11 @@ Shows as: [X lines, Y chars]
             }
         } finally {
             this.isProcessing = false;
-            this.currentQuery = null; // Clear after processing is complete
         }
     }
 
     async loadHistory() {
         try {
-            // If we have a Turso connection with user, load from there
-            if (this.tursoEnabled && this.tursoClient && this.tursoClient.userId) {
-                const userHistory = await this.tursoClient.getHistoryFromTable('user', 100);
-                this.commandHistory = userHistory
-                    .map(h => h.command)
-                    .filter(cmd => cmd && cmd.trim())
-                    .reverse(); // Most recent last for easier navigation
-                return;
-            }
-
-            // Fall back to local file
             const historyPath = path.join(os.homedir(), '.mcp-terminal/history.json');
             if (existsSync(historyPath)) {
                 const data = await fs.readFile(historyPath, 'utf8');
@@ -781,96 +682,12 @@ Shows as: [X lines, Y chars]
         }
     }
 
-    navigateHistoryUp() {
-        if (this.commandHistory.length === 0) return;
-
-        // Save current input if we're starting navigation
-        if (this.historyIndex === -1) {
-            this.tempBuffer = this.rawBuffer;
-        }
-
-        // Move up in history
-        if (this.historyIndex < this.commandHistory.length - 1) {
-            this.historyIndex++;
-            const historicCommand = this.commandHistory[this.commandHistory.length - 1 - this.historyIndex];
-
-            // Clear current line and show historic command
-            this.clearLine();
-            this.rawBuffer = historicCommand;
-            this.isPasted = false;
-            this.pastedContent = null;
-            this.additionalText = '';
-
-            process.stdout.write(chalk.green('❯ ') + historicCommand);
-        }
-    }
-
-    navigateHistoryDown() {
-        if (this.historyIndex === -1) return;
-
-        // Move down in history
-        this.historyIndex--;
-
-        let commandToShow;
-        if (this.historyIndex === -1) {
-            // Restore original input
-            commandToShow = this.tempBuffer;
-        } else {
-            // Show historic command
-            commandToShow = this.commandHistory[this.commandHistory.length - 1 - this.historyIndex];
-        }
-
-        // Clear current line and show command
-        this.clearLine();
-        this.rawBuffer = commandToShow;
-        this.isPasted = false;
-        this.pastedContent = null;
-        this.additionalText = '';
-
-        process.stdout.write(chalk.green('❯ ') + commandToShow);
-    }
-
     showHeader() {
         console.log();
         console.log(chalk.cyan.bold('MCP Terminal Assistant'));
         console.log(chalk.gray('FIXED FINAL • \\ + Enter for multi-line'));
         console.log(chalk.green('✨ Works with all line endings'));
         console.log();
-    }
-
-    async saveTursoConversation(question, response, status) {
-        if (!this.tursoEnabled) return;
-
-        // Generate unique key for this save operation
-        const saveKey = `${this.sessionId}:${question.substring(0, 50)}:${status}`;
-
-        // Check if this save is already in progress
-        if (this.pendingSaves.has(saveKey)) {
-            if (this.config.debug) {
-                console.log('[DEBUG] Duplicate save prevented for:', saveKey);
-            }
-            return;
-        }
-
-        try {
-            // Mark this save as in progress
-            this.pendingSaves.add(saveKey);
-
-            await this.tursoClient.saveCommand(question, response, {
-                status: status,
-                user: this.currentUser,
-                timestamp: new Date().toISOString(),
-                session_id: this.sessionId
-            });
-        } catch (error) {
-            // Use debug logging instead of console.error
-            if (this.config.debug) {
-                console.log(`[DEBUG] Turso save failed: ${error.message}`);
-            }
-        } finally {
-            // Remove from pending saves when complete
-            this.pendingSaves.delete(saveKey);
-        }
     }
 
     async start() {
@@ -897,13 +714,8 @@ process.on('unhandledRejection', (error) => {
     process.exit(1);
 });
 
-// Start only if this is the main module
-if (import.meta.url === `file://${process.argv[1]}`) {
-    main().catch(error => {
-        console.error(chalk.red('Failed to start:'), error.message);
-        process.exit(1);
-    });
-}
-
-// Export the class for reuse
-export default MCPClaudeFixedFinal;
+// Start
+main().catch(error => {
+    console.error(chalk.red('Failed to start:'), error.message);
+    process.exit(1);
+});

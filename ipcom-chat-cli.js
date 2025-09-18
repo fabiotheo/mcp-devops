@@ -182,17 +182,48 @@ const historyCmd = program.command('history');
 historyCmd
     .description('Mostrar histórico de comandos')
     .option('--limit <number>', 'Número de comandos a mostrar', '20')
-    .option('--user <username>', 'Filtrar por usuário')
+    .option('-u, --user <username>', 'Filtrar por usuário')
     .option('--format <format>', 'Formato de saída (table, json)', 'table')
+    .option('--global', 'Mostrar apenas histórico global')
+    .option('--machine', 'Mostrar apenas histórico desta máquina')
+    .option('--all', 'Mostrar histórico de todas as tabelas (modo hybrid)')
     .action(async (options) => {
         const client = await initTursoClient();
 
         if (options.user) {
-            await client.setUser(options.user);
+            try {
+                await client.setUser(options.user);
+                if (process.env.DEBUG) {
+                    console.log(`DEBUG: User set to ${options.user}, userId: ${client.userId}`);
+                }
+            } catch (error) {
+                console.error(chalk.red(`❌ Usuário '${options.user}' não encontrado`));
+                console.log(chalk.yellow(`Dica: Crie o usuário com: ./test-user-turso-simple.sh`));
+                process.exit(1);
+            }
         }
 
         try {
-            const history = await client.getHistory(parseInt(options.limit));
+            // Determine which history to fetch based on flags
+            let history;
+
+            // Check if user option is specified (has a username value)
+            const fetchUserHistory = options.user && typeof options.user === 'string';
+
+
+            if (options.global) {
+                history = await client.getHistoryFromTable('global', parseInt(options.limit));
+            } else if (options.machine) {
+                history = await client.getHistoryFromTable('machine', parseInt(options.limit));
+            } else if (fetchUserHistory) {
+                // When --user <username> is specified, fetch from user table
+                history = await client.getHistoryFromTable('user', parseInt(options.limit));
+            } else if (options.all) {
+                history = await client.getHistory(parseInt(options.limit)); // Keep existing hybrid behavior
+            } else {
+                // Default: use machine history (local to this machine only)
+                history = await client.getHistoryFromTable('machine', parseInt(options.limit));
+            }
 
             if (history.length === 0) {
                 console.log(chalk.yellow('Nenhum comando encontrado no histórico.'));

@@ -34,7 +34,12 @@
       "Bash(cat:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(./ipcom-chat history:*)",
+      "Bash(DEBUG=1 ./ipcom-chat history --user testuser --limit 2)",
+      "Bash(DEBUG=1 ./ipcom-chat history --user testuser --limit 1)",
+      "Bash(env:*)",
+      "Bash(MCP_USER=testuser node mcp-claude-with-user.js)"
     ],
     "deny": [],
     "ask": []

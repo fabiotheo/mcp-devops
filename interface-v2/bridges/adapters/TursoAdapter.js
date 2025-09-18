@@ -1,0 +1,194 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+import os from 'os';
+import fs from 'fs/promises';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/**
+ * TursoAdapter
+ * Integrates Turso distributed history with the new interface
+ */
+class TursoAdapter {
+    constructor(options = {}) {
+        this.debug = options.debug || false;
+        this.tursoClientPath = options.tursoClientPath ||
+            path.join(__dirname, '..', '..', '..', 'libs', 'turso-client.js');
+        this.configPath = path.join(os.homedir(), '.mcp-terminal', 'turso-config.json');
+        this.tursoClient = null;
+        this.initialized = false;
+        this.enabled = false;
+    }
+
+    async initialize() {
+        if (this.initialized) return;
+
+        try {
+            // Check if Turso is configured
+            const configExists = await this.checkConfig();
+            if (!configExists) {
+                if (this.debug) {
+                    console.log('[TursoAdapter] Turso not configured, running in offline mode');
+                }
+                this.initialized = true;
+                return;
+            }
+
+            // Load Turso client
+            const module = await import(this.tursoClientPath);
+            const TursoHistoryClient = module.default || module.TursoHistoryClient;
+
+            // Load configuration
+            const config = JSON.parse(await fs.readFile(this.configPath, 'utf8'));
+
+            // Initialize client
+            this.tursoClient = new TursoHistoryClient({
+                ...config,
+                debug: this.debug
+            });
+
+            await this.tursoClient.initialize();
+            this.enabled = true;
+
+            if (this.debug) {
+                console.log('[TursoAdapter] Turso client initialized successfully');
+            }
+
+            this.initialized = true;
+        } catch (error) {
+            console.error('[TursoAdapter] Failed to initialize:', error);
+            // Turso is optional, don't throw
+            this.initialized = true;
+        }
+    }
+
+    async checkConfig() {
+        try {
+            await fs.access(this.configPath);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Save command to distributed history
+     * @param {string} command - Command to save
+     * @param {object} metadata - Additional metadata
+     * @returns {Promise<boolean>} - Success status
+     */
+    async saveCommand(command, metadata = {}) {
+        if (!this.enabled || !this.tursoClient) {
+            return false;
+        }
+
+        try {
+            await this.tursoClient.addEntry({
+                command,
+                timestamp: new Date().toISOString(),
+                source: 'ink-interface',
+                ...metadata
+            });
+
+            return true;
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error saving command:', error);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Get command history from Turso
+     * @param {number} limit - Number of entries to retrieve
+     * @returns {Promise<string[]>} - Array of commands
+     */
+    async getHistory(limit = 100) {
+        if (!this.enabled || !this.tursoClient) {
+            return [];
+        }
+
+        try {
+            const entries = await this.tursoClient.getHistory({
+                limit,
+                source: 'ink-interface'
+            });
+
+            return entries.map(entry => entry.command);
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error getting history:', error);
+            }
+            return [];
+        }
+    }
+
+    /**
+     * Search history with a query
+     * @param {string} query - Search query
+     * @param {number} limit - Number of results
+     * @returns {Promise<string[]>} - Matching commands
+     */
+    async searchHistory(query, limit = 10) {
+        if (!this.enabled || !this.tursoClient) {
+            return [];
+        }
+
+        try {
+            const results = await this.tursoClient.searchHistory(query, {
+                limit,
+                source: 'ink-interface'
+            });
+
+            return results.map(result => result.command);
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error searching history:', error);
+            }
+            return [];
+        }
+    }
+
+    /**
+     * Sync local history with Turso
+     * @param {string[]} localHistory - Local command history
+     * @returns {Promise<void>}
+     */
+    async syncHistory(localHistory) {
+        if (!this.enabled || !this.tursoClient) {
+            return;
+        }
+
+        try {
+            for (const command of localHistory) {
+                await this.saveCommand(command, {
+                    synced: true,
+                    syncTime: new Date().toISOString()
+                });
+            }
+
+            if (this.debug) {
+                console.log(`[TursoAdapter] Synced ${localHistory.length} commands`);
+            }
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error syncing history:', error);
+            }
+        }
+    }
+
+    /**
+     * Clean up resources
+     */
+    async cleanup() {
+        if (this.tursoClient && typeof this.tursoClient.close === 'function') {
+            await this.tursoClient.close();
+        }
+        this.tursoClient = null;
+        this.enabled = false;
+    }
+}
+
+export default TursoAdapter;

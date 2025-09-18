@@ -15,6 +15,7 @@ import ModelFactory from './ai_models/model_factory.js';
 import SystemDetector from './libs/system_detector.js';
 import AICommandOrchestrator from './ai_orchestrator.js';
 import TursoHistoryClient from './libs/turso-client.js';
+import SyncManager from './libs/sync-manager.js';
 import { v4 as uuidv4 } from 'uuid';
 
 class ProcessingIndicator {
@@ -114,6 +115,10 @@ class MCPClaudeFixedFinal {
         this.sessionId = uuidv4(); // Unique session identifier
         this.pendingSaves = new Set(); // Track async saves
 
+        // Sync Manager for Phase 2
+        this.syncManager = null;
+        this.syncEnabled = false;
+
         // State management
         this.rawBuffer = '';  // Raw input buffer
         this.pastedContent = null;  // Stores pasted multi-line content
@@ -183,6 +188,9 @@ class MCPClaudeFixedFinal {
             const configPath = path.join(os.homedir(), '.mcp-terminal', 'turso-config.json');
             if (!existsSync(configPath)) {
                 console.log(chalk.gray('ℹ️  Turso não configurado (modo offline)'));
+
+                // Initialize SyncManager with local cache only
+                await this.initializeSyncManager(null);
                 return;
             }
 
@@ -196,10 +204,47 @@ class MCPClaudeFixedFinal {
             // Consider using environment variable as interim solution: process.env.USER || 'default'
             this.currentUser = { username: 'default', id: 1 };
 
+            // Initialize SyncManager for Phase 2
+            await this.initializeSyncManager(this.tursoClient);
+
             console.log(chalk.green('✓ Turso conectado'));
         } catch (error) {
             console.log(chalk.yellow(`⚠️  Turso indisponível: ${error.message}`));
             this.tursoEnabled = false;
+
+            // Try to initialize SyncManager with local cache only
+            await this.initializeSyncManager(null);
+        }
+    }
+
+    async initializeSyncManager(tursoClient) {
+        try {
+            this.syncManager = new SyncManager({
+                syncInterval: this.config.sync?.interval || 30000,
+                debug: this.config.debug || false,
+                conflictStrategy: 'last-write-wins'
+            });
+
+            await this.syncManager.initialize(tursoClient);
+            this.syncEnabled = true;
+
+            if (tursoClient) {
+                console.log(chalk.green('✓ Sync habilitado') + chalk.gray(' (30s interval)'));
+
+                // Initial sync
+                setImmediate(() => {
+                    this.syncManager.sync().catch(err => {
+                        if (this.config.debug) {
+                            console.log(chalk.gray('[Sync] Initial sync failed:', err.message));
+                        }
+                    });
+                });
+            } else {
+                console.log(chalk.yellow('⚠️  Modo offline (cache local)'));
+            }
+        } catch (error) {
+            console.log(chalk.yellow(`⚠️  SyncManager indisponível: ${error.message}`));
+            this.syncEnabled = false;
         }
     }
 
@@ -229,6 +274,7 @@ class MCPClaudeFixedFinal {
 
         // Ctrl+C - Always exit
         if (key === '\x03') {
+            await this.cleanup();
             console.log(chalk.cyan('\n\nGoodbye! 👋'));
             process.exit(0);
             return;
@@ -236,6 +282,7 @@ class MCPClaudeFixedFinal {
 
         // Ctrl+D
         if (key === '\x04') {
+            await this.cleanup();
             console.log(chalk.cyan('\n\nGoodbye! 👋'));
             process.exit(0);
             return;
@@ -585,6 +632,7 @@ class MCPClaudeFixedFinal {
                 break;
             case 'exit':
             case 'quit':
+                await this.cleanup();
                 console.log(chalk.cyan('Goodbye! 👋'));
                 process.exit(0);
                 break;
@@ -742,7 +790,20 @@ Shows as: [X lines, Y chars]
 
     async loadHistory() {
         try {
-            // If we have a Turso connection with user, load from there
+            // Phase 2: Use SyncManager if available
+            if (this.syncEnabled && this.syncManager) {
+                const history = await this.syncManager.getHistory({
+                    user_id: this.tursoClient?.userId || null,
+                    limit: 100
+                });
+                this.commandHistory = history
+                    .map(h => h.command)
+                    .filter(cmd => cmd && cmd.trim())
+                    .reverse(); // Most recent last for easier navigation
+                return;
+            }
+
+            // Phase 1: Direct Turso connection
             if (this.tursoEnabled && this.tursoClient && this.tursoClient.userId) {
                 const userHistory = await this.tursoClient.getHistoryFromTable('user', 100);
                 this.commandHistory = userHistory
@@ -838,7 +899,61 @@ Shows as: [X lines, Y chars]
         console.log();
     }
 
+    async cleanup() {
+        try {
+            // Close SyncManager if enabled
+            if (this.syncManager) {
+                this.syncManager.close();
+                if (this.config.debug) {
+                    console.log(chalk.gray('[Cleanup] SyncManager closed'));
+                }
+            }
+
+            // Close Turso client if enabled
+            if (this.tursoClient) {
+                await this.tursoClient.close();
+                if (this.config.debug) {
+                    console.log(chalk.gray('[Cleanup] Turso client closed'));
+                }
+            }
+
+            // Save any pending data to local file
+            if (this.pendingSaves.size > 0) {
+                await this.saveTursoConversation('[System]', 'Session ended with pending saves', 'cancelled');
+            }
+        } catch (error) {
+            console.error(chalk.red('[Cleanup] Error during cleanup:', error.message));
+        }
+    }
+
     async saveTursoConversation(question, response, status) {
+        // Phase 2: Use SyncManager when available
+        if (this.syncEnabled && this.syncManager) {
+            try {
+                const metadata = {
+                    status,
+                    user_id: this.tursoClient?.userId || null,
+                    machine_id: this.tursoClient?.machineId || null,
+                    session_id: this.sessionId,
+                    timestamp: Date.now()
+                };
+
+                // Save to local cache and queue for sync
+                await this.syncManager.saveCommand(question, response, metadata);
+
+                if (this.config.debug) {
+                    console.log(chalk.gray('[Sync] Command saved to cache and queued'));
+                }
+                return;
+            } catch (error) {
+                if (this.config.debug) {
+                    console.log(chalk.yellow(`[Sync] Cache save failed: ${error.message}`));
+                }
+                // Fall through to direct save
+            }
+        }
+
+        // Fall back to direct Turso save (Phase 1)
         if (!this.tursoEnabled) return;
 
         // Generate unique key for this save operation
@@ -883,6 +998,17 @@ Shows as: [X lines, Y chars]
 // Main
 const main = async () => {
     const app = new MCPClaudeFixedFinal();
+
+    // Handle process signals for cleanup
+    const handleExit = async (signal) => {
+        console.log(chalk.gray(`\nReceived ${signal}, cleaning up...`));
+        await app.cleanup();
+        process.exit(0);
+    };
+
+    process.on('SIGINT', () => handleExit('SIGINT'));
+    process.on('SIGTERM', () => handleExit('SIGTERM'));
+
     await app.start();
 };
 

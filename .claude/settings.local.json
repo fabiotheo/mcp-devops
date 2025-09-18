@@ -30,7 +30,8 @@
       "mcp__zen__analyze",
       "Bash(./test-paste-detection.sh:*)",
       "mcp__octocode__githubViewRepoStructure",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

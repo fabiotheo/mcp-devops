@@ -111,6 +111,7 @@ class MCPClaudeFixedFinal {
         this.multilineBuffer = [];  // For backslash continuation
         this.isPasted = false;  // Flag if current content is pasted
         this.lineCount = 0;  // Number of lines in pasted content
+        this.wasInterrupted = false;  // Flag if processing was interrupted
     }
 
     async initialize() {
@@ -183,18 +184,10 @@ class MCPClaudeFixedFinal {
             console.log(`\n[INPUT] Length: ${key.length}, Raw: ${JSON.stringify(key.substring(0, 50))}`);
         }
 
-        // Ctrl+C
+        // Ctrl+C - Always exit
         if (key === '\x03') {
-            if (this.isProcessing) {
-                this.spinner.stop();
-                this.streamer.abort();
-                console.log(chalk.yellow('\n⚠ Interrupted'));
-                this.isProcessing = false;
-                this.showPrompt();
-            } else {
-                console.log(chalk.cyan('\n\nGoodbye! 👋'));
-                process.exit(0);
-            }
+            console.log(chalk.cyan('\n\nGoodbye! 👋'));
+            process.exit(0);
             return;
         }
 
@@ -205,11 +198,27 @@ class MCPClaudeFixedFinal {
             return;
         }
 
-        // ESC - Cancel
+        // ESC - Cancel input or interrupt processing
         if (key === '\x1b') {
+            // If we're processing with AI, interrupt it
+            if (this.isProcessing) {
+                this.wasInterrupted = true;  // Set flag to prevent double prompt
+                this.isProcessing = false;
+                this.spinner.stop();
+                this.streamer.abort();
+                console.log(chalk.yellow('\n⚠ Interrupted'));
+                this.showPrompt();
+                return;
+            }
+
+            // Otherwise, cancel current input
             this.clearLine();
             console.log(chalk.yellow('Cancelled'));
+
+            // Reset all state
             this.reset();
+
+            // Show fresh prompt
             this.showPrompt();
             return;
         }
@@ -423,7 +432,13 @@ class MCPClaudeFixedFinal {
         // Process if not empty
         if (finalInput.trim()) {
             this.processInput(finalInput).then(() => {
-                this.showPrompt();
+                // Only show prompt if not interrupted
+                if (!this.wasInterrupted) {
+                    this.showPrompt();
+                } else {
+                    // Reset the flag for next time
+                    this.wasInterrupted = false;
+                }
             });
         } else {
             this.showPrompt();
@@ -515,7 +530,12 @@ ${chalk.yellow('/exit')}     Exit
 ${chalk.cyan('Multi-line:')}
 
 Type ${chalk.green('\\')} at end of line + Enter for next line
-Press ${chalk.yellow('ESC')} to cancel current input
+
+${chalk.cyan('Keyboard Shortcuts:')}
+
+${chalk.yellow('ESC')}       Cancel input / Interrupt AI processing
+${chalk.yellow('Ctrl+C')}    Exit program
+${chalk.yellow('Ctrl+D')}    Exit program
 
 ${chalk.cyan('Paste Detection:')}
 
@@ -535,18 +555,47 @@ Shows as: [X lines, Y chars]
 
     async processQuery(query) {
         this.isProcessing = true;
+
+        // Add user message to history immediately
         this.conversationHistory.push({ role: 'user', content: query });
+
         this.spinner.start('Thinking');
 
         try {
-            setTimeout(() => this.spinner.update('Analyzing context'), 200);
+            // Check if interrupted
+            if (!this.isProcessing) {
+                // Add interrupted marker to history
+                this.conversationHistory.push({
+                    role: 'assistant',
+                    content: '[Interrompido]'
+                });
+                return;
+            }
+
+            setTimeout(() => {
+                if (this.isProcessing) this.spinner.update('Analyzing context');
+            }, 200);
+
             const systemInfo = this.systemDetector.getSystemInfo();
             const context = {
                 ...systemInfo,
                 history: this.conversationHistory.slice(-5)
             };
 
-            setTimeout(() => this.spinner.update('Processing with AI'), 500);
+            // Check if interrupted
+            if (!this.isProcessing) {
+                // Add interrupted marker to history
+                this.conversationHistory.push({
+                    role: 'assistant',
+                    content: '[Interrompido durante processamento]'
+                });
+                return;
+            }
+
+            setTimeout(() => {
+                if (this.isProcessing) this.spinner.update('Processing with AI');
+            }, 500);
+
             let response;
             if (this.orchestrator && this.orchestrator.askCommand) {
                 response = await this.orchestrator.askCommand(query, context);
@@ -554,30 +603,53 @@ Shows as: [X lines, Y chars]
                 response = await this.aiModel.askCommand(query, context);
             }
 
+            // Check if interrupted before showing response
+            if (!this.isProcessing) {
+                // Interrupted before getting response
+                this.conversationHistory.push({
+                    role: 'assistant',
+                    content: '[Processamento interrompido antes da resposta]'
+                });
+                return;
+            }
+
             this.spinner.stop();
             console.log();
 
-            if (response) {
+            if (response && this.isProcessing) {
                 if (this.config.streaming?.enabled !== false) {
                     await new Promise(resolve => setTimeout(resolve, 200));
+
+                    // Check again before streaming
+                    if (!this.isProcessing) {
+                        // Was interrupted during streaming - add a note
+                        this.conversationHistory.push({
+                            role: 'assistant',
+                            content: '[Resposta interrompida]'
+                        });
+                        return;
+                    }
+
                     await this.streamer.stream(response);
                 } else {
                     console.log(response);
                 }
                 console.log();
                 this.conversationHistory.push({ role: 'assistant', content: response });
-            } else {
+            } else if (this.isProcessing) {
                 console.log(chalk.yellow('No response received from AI'));
                 console.log();
             }
 
         } catch (error) {
-            this.spinner.stop();
-            console.log(chalk.red(`\n❌ Error: ${error.message}`));
-            console.log();
+            if (this.isProcessing) {
+                this.spinner.stop();
+                console.log(chalk.red(`\n❌ Error: ${error.message}`));
+                console.log();
+            }
+        } finally {
+            this.isProcessing = false;
         }
-
-        this.isProcessing = false;
     }
 
     async loadHistory() {

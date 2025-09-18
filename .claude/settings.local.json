@@ -43,7 +43,8 @@
       "Bash(pnpm approve-builds:*)",
       "Bash(pnpm rebuild:*)",
       "Bash(npm rebuild:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

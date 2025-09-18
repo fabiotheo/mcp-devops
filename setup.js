@@ -351,7 +351,10 @@ class MCPSetup {
             "@libsql/client": "^0.15.15",
             "minimist": "^1.2.8",
             "chalk": "^5.3.0",
-            "commander": "^14.0.1"
+            "commander": "^14.0.1",
+            "react": "^18.2.0",
+            "ink": "^4.4.1",
+            "ink-spinner": "^5.0.0"
         };
 
         let needsUpdate = false;
@@ -988,6 +991,7 @@ export default class ModelFactory {
             { src: 'mcp-configure', dest: 'mcp-configure' },
             { src: 'src/core/mcp-interactive.js', dest: 'mcp-interactive.js' },
             { src: 'ipcom-chat', dest: 'ipcom-chat' },
+            { src: 'ipcom-chat-new', dest: 'ipcom-chat-new' },  // Nova interface
             { src: 'ipcom-chat-cli.js', dest: 'ipcom-chat-cli.js' },
             { src: 'ipcom-chat-launcher.sh', dest: 'ipcom-chat-launcher.sh' },
             { src: 'src/core/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
@@ -1061,6 +1065,42 @@ export default class ModelFactory {
         } catch (error) {
             // Silenciosamente ignora se não existir libs
             // console.log(`  ⚠ Diretório libs não encontrado (normal em versões antigas)`);
+        }
+
+        // Copiar interface-v2 (Nova interface Ink)
+        try {
+            const interfaceV2Dir = path.join(process.cwd(), 'interface-v2');
+            const destInterfaceV2Dir = path.join(this.mcpDir, 'interface-v2');
+
+            // Criar diretório interface-v2 se não existir
+            try {
+                await fs.access(destInterfaceV2Dir);
+            } catch {
+                await fs.mkdir(destInterfaceV2Dir, { recursive: true });
+            }
+
+            // Copiar todos os arquivos da interface-v2
+            const copyRecursive = async (src, dest) => {
+                const stats = await fs.stat(src);
+                if (stats.isDirectory()) {
+                    await fs.mkdir(dest, { recursive: true });
+                    const files = await fs.readdir(src);
+                    for (const file of files) {
+                        await copyRecursive(
+                            path.join(src, file),
+                            path.join(dest, file)
+                        );
+                    }
+                } else {
+                    const content = await fs.readFile(src);
+                    await fs.writeFile(dest, content);
+                }
+            };
+
+            await copyRecursive(interfaceV2Dir, destInterfaceV2Dir);
+            console.log(`  ✓ Nova interface Ink (interface-v2) copiada`);
+        } catch (error) {
+            console.log(`  ⚠ Interface-v2 não encontrada (${error.message})`);
         }
 
         // Copiar ai_models

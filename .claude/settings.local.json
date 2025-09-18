@@ -31,7 +31,10 @@
       "Bash(./test-paste-detection.sh:*)",
       "mcp__octocode__githubViewRepoStructure",
       "Bash(echo:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(xargs:*)"
     ],
     "deny": [],
     "ask": []

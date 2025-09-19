@@ -13,7 +13,7 @@
 
 import React from 'react';
 import { render, Text, Box, useInput, useApp, useStdout } from 'ink';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Spinner from 'ink-spinner';
 import MultilineInput from './components/MultilineInput.js';
 import path from 'path';
@@ -29,6 +29,10 @@ import TursoAdapter from './bridges/adapters/TursoAdapter.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Module-level variables
+const isDebug = process.argv.includes('--debug');
+const user = process.env.MCP_USER || 'default';
+
 // Main MCP Ink Application Component
 const MCPInkApp = () => {
     const [input, setInput] = useState('');
@@ -41,6 +45,11 @@ const MCPInkApp = () => {
     const [error, setError] = useState(null);
     const [config, setConfig] = useState(null);
 
+    // New state for enhanced controls
+    const [lastCtrlC, setLastCtrlC] = useState(0);
+    const [lastEsc, setLastEsc] = useState(0);
+    const [cancelToken, setCancelToken] = useState(null);
+
     const { exit } = useApp();
     const { stdout } = useStdout();
     const orchestrator = useRef(null);
@@ -48,8 +57,7 @@ const MCPInkApp = () => {
     const tursoAdapter = useRef(null);
 
     const isTTY = process.stdin.isTTY;
-    const isDebug = process.argv.includes('--debug');
-    const user = process.env.MCP_USER || 'default';
+
 
     // Initialize backend services
     useEffect(() => {
@@ -429,12 +437,25 @@ Config: ${config ? 'Loaded' : 'Default'}`);
 
             return () => {
                 process.stdout.write('\x1b[?2004l');
-                if (isDebug) {
+                // Don't use isDebug in cleanup as it might not be available
+                if (process.argv.includes('--debug')) {
                     console.log('[Debug] Bracketed paste mode disabled');
                 }
             };
         }
     }, [status, isTTY, isDebug]);
+
+    // Clear Ctrl+C message after timeout
+    useEffect(() => {
+        if (response === 'Press Ctrl+C again to exit') {
+            const timer = setTimeout(() => {
+                setResponse('');
+                setLastCtrlC(0);
+            }, 2000);
+
+            return () => clearTimeout(timer);
+        }
+    }, [response]);
 
     // Input handling for TTY mode
     if (isTTY) {
@@ -471,10 +492,9 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                 // Convert \r to \n for multi-line
                 const processedContent = pastedContent.replace(/\r/g, '\n');
 
-                // Update input with pasted content
+                // Update input with pasted content and add a space at the end
                 setInput(prev => {
-                    const newContent = prev + processedContent;
-                    // Move cursor to the end of the pasted content
+                    const newContent = prev + processedContent + ' ';
                     return newContent;
                 });
 
@@ -492,8 +512,43 @@ Config: ${config ? 'Loaded' : 'Default'}`);
             //     return;
             // }
 
+            // Handle ESC key
+            if (key.escape) {
+                const now = Date.now();
+                const timeSinceLastEsc = now - lastEsc;
+
+                if (timeSinceLastEsc < 500) {
+                    // Double ESC - clear input
+                    setInput('');
+                    setLastEsc(0);
+                    if (isDebug) {
+                        console.log('[Debug] Double ESC - Input cleared');
+                    }
+                } else {
+                    // Single ESC
+                    if (isProcessing) {
+                        // Cancel current operation
+                        setIsProcessing(false);
+                        setResponse('Operation cancelled by user');
+                        setError(null);
+                        if (isDebug) {
+                            console.log('[Debug] ESC - Operation cancelled');
+                        }
+                    }
+                    setLastEsc(now);
+                }
+                return;
+            }
+
             // Normal input handling
             if (key.return) {
+                // Check if input ends with backslash (for multi-line)
+                if (input.endsWith('\\')) {
+                    // Remove backslash and add newline
+                    setInput(prev => prev.slice(0, -1) + '\n');
+                    return;
+                }
+
                 const command = input.trim();
 
                 if (command.startsWith('/')) {
@@ -527,10 +582,32 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                     setHistoryIndex(-1);
                     setInput('');
                 }
+            } else if (key.ctrl && char === 'c') {
+                // Handle Ctrl+C (double tap to exit)
+                const now = Date.now();
+
+                if (lastCtrlC > 0 && (now - lastCtrlC) < 2000) {
+                    // Second Ctrl+C within 2 seconds - exit
+                    if (!isDebug) {
+                        console.clear();
+                    }
+                    console.log('\n\x1b[33mGoodbye!\x1b[0m\n');
+                    exit();
+                } else {
+                    // First Ctrl+C - show message
+                    setLastCtrlC(now);
+                    setResponse('Press Ctrl+C again to exit');
+                    setError(false);
+
+                    // Clear message after 2 seconds
+                    setTimeout(() => {
+                        setResponse('');
+                        setLastCtrlC(0);
+                    }, 2000);
+                }
+                return;
             } else if (key.backspace || key.delete) {
                 setInput(prev => prev.slice(0, -1));
-            } else if (key.ctrl && key.c) {
-                exit();
             } else if (key.ctrl && key.l) {
                 // Clear screen
                 setHistory([]);
@@ -652,15 +729,23 @@ Config: ${config ? 'Loaded' : 'Default'}`);
 const main = async () => {
     console.clear();
 
-    const { waitUntilExit } = render(React.createElement(MCPInkApp));
+    const { waitUntilExit } = render(React.createElement(MCPInkApp), {
+        exitOnCtrlC: false  // Disable default Ctrl+C exit to use our custom handler
+    });
 
     try {
         await waitUntilExit();
+        if (isDebug) {
+            console.log('[DEBUG] Application exiting normally');
+        }
         if (!isDebug) {
             console.log('\nThank you for using MCP Terminal Assistant! 👋');
         }
         process.exit(0);
     } catch (error) {
+        if (isDebug) {
+            console.log('[DEBUG] Application exiting with error:', error);
+        }
         console.error('\nError:', error.message);
         process.exit(1);
     }

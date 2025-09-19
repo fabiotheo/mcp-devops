@@ -47,7 +47,12 @@
       "Bash(npm install:*)",
       "Bash(MCP_USER=fabio timeout 2 node interface-v2/mcp-ink-cli.mjs)",
       "Bash(export MCP_USER=fabio)",
-      "Bash(pbcopy)"
+      "Bash(pbcopy)",
+      "Bash(./test-ctrl-c.sh:*)",
+      "Bash(MCP_USER=fabio node interface-v2/mcp-ink-cli.mjs)",
+      "Bash(MCP_USER=fabio node interface-v2/mcp-ink-cli.mjs --debug)",
+      "Bash(killall:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []

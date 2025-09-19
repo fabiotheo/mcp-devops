@@ -13,6 +13,7 @@ const __dirname = path.dirname(__filename);
 class TursoAdapter {
     constructor(options = {}) {
         this.debug = options.debug || false;
+        this.userId = options.userId || 'default';
         this.tursoClientPath = options.tursoClientPath ||
             path.join(__dirname, '..', '..', '..', 'libs', 'turso-client.js');
         this.configPath = path.join(os.homedir(), '.mcp-terminal', 'turso-config.json');
@@ -49,6 +50,26 @@ class TursoAdapter {
             });
 
             await this.tursoClient.initialize();
+
+            // Set the user using the proper method that maps username to ID
+            if (this.userId && this.userId !== 'default') {
+                try {
+                    const userInfo = await this.tursoClient.setUser(this.userId);
+                    if (userInfo) {
+                        if (this.debug) {
+                            console.log(`[TursoAdapter] User set successfully:`, userInfo);
+                        }
+                    } else {
+                        if (this.debug) {
+                            console.log(`[TursoAdapter] User "${this.userId}" not found in database`);
+                        }
+                    }
+                } catch (err) {
+                    if (this.debug) {
+                        console.error(`[TursoAdapter] Error setting user:`, err);
+                    }
+                }
+            }
             this.enabled = true;
 
             if (this.debug) {
@@ -73,6 +94,24 @@ class TursoAdapter {
     }
 
     /**
+     * Check if Turso is connected and ready
+     * @returns {boolean} - Connection status
+     */
+    isConnected() {
+        return this.enabled && this.tursoClient !== null;
+    }
+
+    /**
+     * Add command to history (alias for saveCommand)
+     * @param {string} command - Command to save
+     * @param {string} response - Command response
+     * @returns {Promise<boolean>} - Success status
+     */
+    async addToHistory(command, response = null) {
+        return this.saveCommand(command, { response });
+    }
+
+    /**
      * Save command to distributed history
      * @param {string} command - Command to save
      * @param {object} metadata - Additional metadata
@@ -84,12 +123,18 @@ class TursoAdapter {
         }
 
         try {
-            await this.tursoClient.addEntry({
+            // Extract response from metadata if present
+            const { response, ...otherMetadata } = metadata;
+
+            // Use the TursoHistoryClient's saveCommand method
+            await this.tursoClient.saveCommand(
                 command,
-                timestamp: new Date().toISOString(),
-                source: 'ink-interface',
-                ...metadata
-            });
+                response || null,
+                {
+                    source: 'ink-interface',
+                    ...otherMetadata
+                }
+            );
 
             return true;
         } catch (error) {
@@ -103,7 +148,7 @@ class TursoAdapter {
     /**
      * Get command history from Turso
      * @param {number} limit - Number of entries to retrieve
-     * @returns {Promise<string[]>} - Array of commands
+     * @returns {Promise<Array>} - Array of history entries
      */
     async getHistory(limit = 100) {
         if (!this.enabled || !this.tursoClient) {
@@ -111,12 +156,11 @@ class TursoAdapter {
         }
 
         try {
-            const entries = await this.tursoClient.getHistory({
-                limit,
-                source: 'ink-interface'
-            });
+            // The TursoHistoryClient.getHistory accepts limit as a simple parameter
+            const entries = await this.tursoClient.getHistory(limit);
 
-            return entries.map(entry => entry.command);
+            // Return the entries as is - they already have command and timestamp fields
+            return entries || [];
         } catch (error) {
             if (this.debug) {
                 console.error('[TursoAdapter] Error getting history:', error);

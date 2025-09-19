@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Terminal Assistant - Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>🚀 MCP Terminal Assistant</h1>
+                <p>Phase 3 - Real-time Dashboard</p>
+                <div class="status-indicator">
+                    <span id="connection-status" class="status offline">⚫ Offline</span>
+                    <span id="sync-status" class="status">📊 Loading...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Grid -->
+        <main class="main-grid">
+            <!-- Stats Cards -->
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">📜</div>
+                    <div class="stat-content">
+                        <span class="stat-label">Total Commands</span>
+                        <span class="stat-value" id="total-commands">-</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-content">
+                        <span class="stat-label">Synced</span>
+                        <span class="stat-value" id="synced-commands">-</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">⏳</div>
+                    <div class="stat-content">
+                        <span class="stat-label">Pending</span>
+                        <span class="stat-value" id="pending-commands">-</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">🖥️</div>
+                    <div class="stat-content">
+                        <span class="stat-label">Machines</span>
+                        <span class="stat-value" id="active-machines">-</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Activity Chart -->
+            <section class="chart-section">
+                <h2>📈 24-Hour Activity</h2>
+                <div class="chart-container">
+                    <canvas id="activity-chart"></canvas>
+                </div>
+            </section>
+
+            <!-- Top Commands -->
+            <section class="top-commands">
+                <h2>🔥 Top Commands (Last 7 Days)</h2>
+                <div id="top-commands-list" class="commands-list">
+                    <div class="loading">Loading...</div>
+                </div>
+            </section>
+
+            <!-- Recent Activity -->
+            <section class="recent-activity">
+                <h2>🕒 Recent Commands</h2>
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Search commands..." />
+                    <button id="search-btn">🔍</button>
+                </div>
+                <div id="recent-commands" class="commands-table">
+                    <div class="loading">Loading...</div>
+                </div>
+            </section>
+
+            <!-- System Status -->
+            <section class="system-status">
+                <h2>⚙️ System Status</h2>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <span class="status-label">Cache Status:</span>
+                        <span id="cache-status" class="status-value">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Turso Status:</span>
+                        <span id="turso-status" class="status-value">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Last Sync:</span>
+                        <span id="last-sync" class="status-value">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Connected Clients:</span>
+                        <span id="connected-clients" class="status-value">-</span>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button id="force-sync-btn" class="action-btn">🔄 Force Sync</button>
+                    <button id="refresh-btn" class="action-btn">🔄 Refresh</button>
+                    <button id="export-btn" class="action-btn">📊 Export Data</button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>🚀 MCP Terminal Assistant - Phase 3 Dashboard | Real-time updates every 5 seconds</p>
+        </footer>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notifications" class="notifications"></div>
+
+    <!-- Scripts -->
+    <script src="app.js"></script>
+</body>
+</html>

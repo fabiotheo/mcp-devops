@@ -14,10 +14,9 @@ import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 
 // Import backend modules
-import AICommandOrchestratorBash from '../ai_orchestrator_bash.js';
+import AICommandOrchestratorBash from '../../ai_orchestrator_bash.js';
 import PatternMatcher from '../libs/pattern_matcher.js';
-import ModelFactory from '../ai_models/model_factory.js';
-import TursoAdapter from './bridges/adapters/TursoAdapter.js';
+import ModelFactory from '../ai-models/model_factory.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,11 +39,9 @@ const MCPInkApp = () => {
     const { stdout } = useStdout();
     const orchestrator = useRef(null);
     const patternMatcher = useRef(null);
-    const tursoAdapter = useRef(null);
 
     const isTTY = process.stdin.isTTY;
     const isDebug = process.argv.includes('--debug');
-    const user = process.env.MCP_USER || 'default';
 
     // Initialize backend services
     useEffect(() => {
@@ -59,13 +56,9 @@ const MCPInkApp = () => {
                     const configData = await fs.readFile(configPath, 'utf8');
                     loadedConfig = JSON.parse(configData);
                     setConfig(loadedConfig);
-                    if (isDebug) {
-                        console.log('  ✓ Configuration loaded');
-                    }
+                    console.log('  ✓ Configuration loaded');
                 } catch (err) {
-                    if (isDebug) {
-                        console.log('  ⚠ Using default configuration');
-                    }
+                    console.log('  ⚠ Using default configuration');
                     // Use default config if not found
                     loadedConfig = {
                         ai_provider: 'claude',
@@ -87,9 +80,7 @@ const MCPInkApp = () => {
                     const modelConfig = loadedConfig;
 
                     aiModel = await ModelFactory.createModel(modelConfig);
-                    if (isDebug) {
-                        console.log('  ✓ AI Model initialized');
-                    }
+                    console.log('  ✓ AI Model initialized');
                 } catch (error) {
                     console.error('Failed to initialize AI model:', error);
                     // Fall back to a simple wrapper
@@ -153,27 +144,6 @@ const MCPInkApp = () => {
                 patternMatcher.current = new PatternMatcher();
                 await patternMatcher.current.loadPatterns();
 
-                // Initialize Turso Adapter
-                try {
-                    tursoAdapter.current = new TursoAdapter({
-                        debug: isDebug,
-                        userId: user
-                    });
-                    await tursoAdapter.current.initialize();
-                    if (isDebug) {
-                        if (tursoAdapter.current.isConnected()) {
-                            console.log(`  ✓ Turso connected for user: ${user}`);
-                        } else {
-                            console.log('  ⚠ Turso offline mode (local history only)');
-                        }
-                    }
-                } catch (err) {
-                    if (isDebug) {
-                        console.log('  ⚠ Turso initialization failed, using local history');
-                        console.error('Turso error:', err);
-                    }
-                }
-
                 setStatus('ready');
 
                 // Load command history
@@ -200,14 +170,11 @@ const MCPInkApp = () => {
     const loadCommandHistory = async () => {
         try {
             // Check if we have a Turso adapter with user
-            if (tursoAdapter.current && tursoAdapter.current.isConnected() && user !== 'default') {
+            if (tursoAdapter && tursoAdapter.isConnected() && tursoAdapter.userId) {
                 // Load from Turso for the user
-                const userHistory = await tursoAdapter.current.getHistory(100); // Get last 100 commands
+                const userHistory = await tursoAdapter.getHistory(100); // Get last 100 commands
                 const commands = userHistory.map(h => h.command).filter(cmd => cmd && cmd.trim());
                 setCommandHistory(commands);
-                if (isDebug) {
-                    console.log(`[Debug] Loaded ${commands.length} commands from Turso for user ${user}`);
-                }
                 return;
             }
 
@@ -216,45 +183,23 @@ const MCPInkApp = () => {
             const data = await fs.readFile(historyPath, 'utf8');
             const loadedHistory = data.split('\n').filter(line => line.trim());
             setCommandHistory(loadedHistory.slice(-100)); // Keep last 100 commands
-            if (isDebug) {
-                console.log(`[Debug] Loaded ${loadedHistory.length} commands from local file`);
-            }
         } catch (err) {
             // History file doesn't exist yet or Turso failed
             setCommandHistory([]);
-            if (isDebug) {
-                console.log('[Debug] No history found, starting fresh');
-            }
         }
     };
 
     // Save command to history
-    const saveToHistory = async (command, response = null) => {
+    const saveToHistory = async (command) => {
         const newHistory = [...commandHistory, command].slice(-100);
         setCommandHistory(newHistory);
         setHistoryIndex(-1);
 
-        if (isDebug) {
-            console.log(`[Debug] Saved command to history. Total commands: ${newHistory.length}`);
-        }
-
         try {
-            // Save to Turso if connected
-            if (tursoAdapter.current && tursoAdapter.current.isConnected() && user !== 'default') {
-                await tursoAdapter.current.addToHistory(command, response);
-                if (isDebug) {
-                    console.log(`[Turso] Saved command for user ${user}`);
-                }
-            }
-
-            // Also save to local file as backup
             const historyPath = path.join(process.env.HOME, '.mcp_terminal_history');
             await fs.appendFile(historyPath, command + '\n');
         } catch (err) {
             // Ignore save errors
-            if (isDebug) {
-                console.error('History save error:', err);
-            }
         }
     };
 
@@ -269,9 +214,10 @@ const MCPInkApp = () => {
         // Add to display history
         setHistory(prev => [...prev.slice(-50), `❯ ${command}`]);
 
-        try {
-            let output = '';
+        // Save to command history
+        await saveToHistory(command);
 
+        try {
             // First, check if pattern matcher can handle it
             const patternResult = patternMatcher.current.match(command);
 
@@ -286,6 +232,7 @@ const MCPInkApp = () => {
                 });
 
                 // Extract text from result
+                let output = '';
                 if (typeof result === 'string') {
                     output = result;
                 } else if (result && typeof result === 'object') {
@@ -305,9 +252,6 @@ const MCPInkApp = () => {
 
                 setResponse(output);
                 setHistory(prev => [...prev, formatResponse(output)]);
-
-                // Save to history with response
-                await saveToHistory(command, output);
             } else {
                 // Process through AI orchestrator
                 setStatus('processing');
@@ -317,6 +261,7 @@ const MCPInkApp = () => {
                 });
 
                 // Extract text from result
+                let output = '';
                 if (typeof result === 'string') {
                     output = result;
                 } else if (result && typeof result === 'object') {
@@ -336,9 +281,6 @@ const MCPInkApp = () => {
 
                 setResponse(output);
                 setHistory(prev => [...prev, formatResponse(output)]);
-
-                // Save to history with response
-                await saveToHistory(command, output);
             }
 
             setStatus('ready');
@@ -420,11 +362,6 @@ Config: ${config ? 'Loaded' : 'Default'}`);
     // Input handling for TTY mode
     if (isTTY) {
         useInput((char, key) => {
-            // Only accept input when ready
-            if (status !== 'ready' && status !== 'processing') {
-                return;
-            }
-
             // Handle paste mode
             if (char === '\x1b[200~') {
                 handlePasteStart();
@@ -455,9 +392,6 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                 setInput('');
             } else if (key.upArrow) {
                 // Navigate history up
-                if (isDebug) {
-                    console.log(`[Debug] History navigation UP - Current index: ${historyIndex}, History length: ${commandHistory.length}`);
-                }
                 if (commandHistory.length > 0) {
                     const newIndex = historyIndex < commandHistory.length - 1
                         ? historyIndex + 1
@@ -489,31 +423,7 @@ Config: ${config ? 'Loaded' : 'Default'}`);
         });
     }
 
-    // Show loading screen during initialization
-    if (status !== 'ready' && status !== 'error' && status !== 'processing') {
-        return React.createElement(Box, {
-            flexDirection: 'column',
-            padding: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 20
-        },
-            React.createElement(Box, { marginBottom: 2 },
-                React.createElement(Text, { color: 'green', bold: true }, '✨ MCP Terminal Assistant')
-            ),
-            React.createElement(Box, { marginBottom: 1 },
-                React.createElement(Spinner, { type: 'dots' }),
-                React.createElement(Text, { color: 'cyan' }, ' Initializing...')
-            ),
-            React.createElement(Box, { flexDirection: 'column', alignItems: 'center' },
-                status === 'loading-config' && React.createElement(Text, { color: 'gray' }, 'Loading configuration...'),
-                status === 'initializing-ai' && React.createElement(Text, { color: 'gray' }, 'Connecting to AI...'),
-                status === 'initializing' && React.createElement(Text, { color: 'gray' }, 'Setting up environment...')
-            )
-        );
-    }
-
-    // Render main UI
+    // Render UI
     return React.createElement(Box, { flexDirection: 'column', padding: 1 },
         // Header
         React.createElement(Box, { marginBottom: 1 },
@@ -595,6 +505,7 @@ Config: ${config ? 'Loaded' : 'Default'}`);
 // Main execution
 const main = async () => {
     console.clear();
+    console.log('Initializing MCP Terminal Assistant...\n');
 
     const { waitUntilExit } = render(React.createElement(MCPInkApp));
 

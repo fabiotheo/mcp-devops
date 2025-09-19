@@ -3,12 +3,19 @@
 /**
  * MCP Terminal Assistant - Ink Interface with Real Backend
  * This is the production-ready interface that connects to the actual AI backend
+ *
+ * Features:
+ * - Multi-line input support with elegant rendering
+ * - Turso distributed history with user mapping
+ * - Clean loading screen during initialization
+ * - Bracketed paste mode support
  */
 
 import React from 'react';
 import { render, Text, Box, useInput, useApp, useStdout } from 'ink';
 import { useState, useEffect, useRef } from 'react';
 import Spinner from 'ink-spinner';
+import MultilineInput from './components/MultilineInput.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
@@ -32,8 +39,6 @@ const MCPInkApp = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [response, setResponse] = useState('');
     const [error, setError] = useState(null);
-    const [pasteMode, setPasteMode] = useState(false);
-    const [pasteBuffer, setPasteBuffer] = useState('');
     const [config, setConfig] = useState(null);
 
     const { exit } = useApp();
@@ -162,9 +167,13 @@ const MCPInkApp = () => {
                     await tursoAdapter.current.initialize();
                     if (isDebug) {
                         if (tursoAdapter.current.isConnected()) {
-                            console.log(`  ✓ Turso connected for user: ${user}`);
+                            if (isDebug) {
+                                console.log(`  ✓ Turso connected for user: ${user}`);
+                            }
                         } else {
-                            console.log('  ⚠ Turso offline mode (local history only)');
+                            if (isDebug) {
+                                console.log('  ⚠ Turso offline mode (local history only)');
+                            }
                         }
                     }
                 } catch (err) {
@@ -266,8 +275,11 @@ const MCPInkApp = () => {
         setResponse('');
         setError(null);
 
-        // Add to display history
-        setHistory(prev => [...prev.slice(-50), `❯ ${command}`]);
+        // Add to display history (show only first line if multi-line)
+        const displayCommand = command.includes('\n')
+            ? `❯ ${command.split('\n')[0]}... (${command.split('\n').length} lines)`
+            : `❯ ${command}`;
+        setHistory(prev => [...prev.slice(-50), displayCommand]);
 
         try {
             let output = '';
@@ -405,17 +417,24 @@ Config: ${config ? 'Loaded' : 'Default'}`);
         }
     };
 
-    // Handle paste detection
-    const handlePasteStart = () => {
-        setPasteMode(true);
-        setPasteBuffer('');
-    };
+    // Enable bracketed paste mode
+    useEffect(() => {
+        if (isTTY && status === 'ready') {
+            // Enable bracketed paste mode
+            process.stdout.write('\x1b[?2004h');
 
-    const handlePasteEnd = () => {
-        setPasteMode(false);
-        setInput(pasteBuffer);
-        setPasteBuffer('');
-    };
+            if (isDebug) {
+                console.log('[Debug] Bracketed paste mode enabled');
+            }
+
+            return () => {
+                process.stdout.write('\x1b[?2004l');
+                if (isDebug) {
+                    console.log('[Debug] Bracketed paste mode disabled');
+                }
+            };
+        }
+    }, [status, isTTY, isDebug]);
 
     // Input handling for TTY mode
     if (isTTY) {
@@ -425,20 +444,53 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                 return;
             }
 
-            // Handle paste mode
-            if (char === '\x1b[200~') {
-                handlePasteStart();
-                return;
+            // Debug all input
+            if (isDebug && char) {
+                console.log('[Debug] Raw input received:', JSON.stringify(char));
+                console.log('[Debug] Char codes:', Array.from(char).map(c => c.charCodeAt(0)));
             }
-            if (char === '\x1b[201~') {
-                handlePasteEnd();
+
+            // Handle complete bracketed paste (comes in one chunk)
+            // Note: Ink seems to strip the \x1b from the beginning
+            if (char && (
+                (char.includes('\x1b[200~') && char.includes('\x1b[201~')) ||
+                (char.includes('[200~') && char.includes('\x1b[201~'))
+            )) {
+                let start, end;
+
+                // Check which format we have
+                if (char.includes('\x1b[200~')) {
+                    start = char.indexOf('\x1b[200~') + 6;
+                } else if (char.includes('[200~')) {
+                    start = char.indexOf('[200~') + 5;
+                }
+
+                end = char.indexOf('\x1b[201~');
+
+                const pastedContent = char.substring(start, end);
+                // Convert \r to \n for multi-line
+                const processedContent = pastedContent.replace(/\r/g, '\n');
+
+                // Update input with pasted content
+                setInput(prev => {
+                    const newContent = prev + processedContent;
+                    // Move cursor to the end of the pasted content
+                    return newContent;
+                });
+
+                if (isDebug) {
+                    console.log('[Debug] Bracketed paste detected!');
+                    console.log('[Debug] Paste content:', processedContent);
+                    console.log('[Debug] Lines:', processedContent.split('\n').length);
+                }
                 return;
             }
 
-            if (pasteMode) {
-                setPasteBuffer(prev => prev + char);
-                return;
-            }
+            // Skip partial bracketed paste sequences
+            // Commented out to test if this is blocking paste
+            // if (char && (char.includes('\x1b[200~') || char.includes('\x1b[201~'))) {
+            //     return;
+            // }
 
             // Normal input handling
             if (key.return) {
@@ -484,7 +536,11 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                 setHistory([]);
                 setResponse('');
             } else if (char && !key.ctrl && !key.meta) {
-                setInput(prev => prev + char);
+                // Don't add the char if it contains paste sequences
+                if (!char.includes('[200~') && !char.includes('\x1b[201~') &&
+                    !char.includes('\x1b[200~')) {
+                    setInput(prev => prev + char);
+                }
             }
         });
     }
@@ -575,13 +631,13 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                     React.createElement(Text, { color: 'yellow' }, 'Processing '),
                     React.createElement(Spinner, { type: 'dots' })
                 ) :
-                React.createElement(Box, null,
-                    React.createElement(Text, { color: 'green', bold: true }, '❯ '),
-                    React.createElement(Text, { color: 'white' }, input),
-                    pasteMode ?
-                        React.createElement(Text, { color: 'yellow' }, ' [PASTING...]') :
-                        React.createElement(Text, { color: 'gray' }, '█')
-                )
+                React.createElement(MultilineInput, {
+                    value: input,
+                    onChange: setInput,
+                    placeholder: 'Type your question...',
+                    showCursor: true,
+                    isActive: status === 'ready'
+                })
         ),
 
         // Footer
@@ -600,7 +656,9 @@ const main = async () => {
 
     try {
         await waitUntilExit();
-        console.log('\nThank you for using MCP Terminal Assistant! 👋');
+        if (!isDebug) {
+            console.log('\nThank you for using MCP Terminal Assistant! 👋');
+        }
         process.exit(0);
     } catch (error) {
         console.error('\nError:', error.message);

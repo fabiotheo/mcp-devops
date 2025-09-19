@@ -44,7 +44,10 @@
       "Bash(pnpm rebuild:*)",
       "Bash(npm rebuild:*)",
       "Bash(sqlite3:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(MCP_USER=fabio timeout 2 node interface-v2/mcp-ink-cli.mjs)",
+      "Bash(export MCP_USER=fabio)",
+      "Bash(pbcopy)"
     ],
     "deny": [],
     "ask": []

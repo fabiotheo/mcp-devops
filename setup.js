@@ -998,7 +998,9 @@ export default class ModelFactory {
             { src: 'src/core/ai_orchestrator_tools.js', dest: 'ai_orchestrator_tools.js' },
             { src: 'ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
             { src: 'deploy-linux.sh', dest: 'deploy-linux.sh' },
-            { src: 'test-turso-integration.js', dest: 'test-turso-integration.js' }
+            { src: 'test-turso-integration.js', dest: 'test-turso-integration.js' },
+            { src: 'migrate-to-ink.js', dest: 'migrate-to-ink.js' },
+            { src: 'ipcom-ink', dest: 'ipcom-ink' }
         ];
 
         // Copiar arquivos principais

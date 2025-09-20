@@ -97,8 +97,8 @@ export default class TursoHistoryClient {
                 username TEXT UNIQUE NOT NULL,
                 name TEXT NOT NULL,
                 email TEXT NOT NULL,
-                created_at INTEGER DEFAULT (unixepoch()),
-                updated_at INTEGER DEFAULT (unixepoch()),
+                created_at INTEGER DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER DEFAULT (strftime('%s', 'now')),
                 is_active BOOLEAN DEFAULT 1
             );
 
@@ -108,8 +108,8 @@ export default class TursoHistoryClient {
                 hostname TEXT NOT NULL,
                 ip_address TEXT,
                 os_info TEXT,
-                first_seen INTEGER DEFAULT (unixepoch()),
-                last_seen INTEGER DEFAULT (unixepoch()),
+                first_seen INTEGER DEFAULT (strftime('%s', 'now')),
+                last_seen INTEGER DEFAULT (strftime('%s', 'now')),
                 total_commands INTEGER DEFAULT 0
             );
 
@@ -120,11 +120,13 @@ export default class TursoHistoryClient {
                 response TEXT,
                 machine_id TEXT,
                 user_id TEXT,
-                timestamp INTEGER DEFAULT (unixepoch()),
+                timestamp INTEGER DEFAULT (strftime('%s', 'now')),
                 tokens_used INTEGER,
                 execution_time_ms INTEGER,
                 tags TEXT,
                 session_id TEXT,
+                status TEXT DEFAULT 'pending',
+                request_id TEXT,
                 FOREIGN KEY (machine_id) REFERENCES machines(machine_id),
                 FOREIGN KEY (user_id) REFERENCES users(id)
             );
@@ -136,11 +138,15 @@ export default class TursoHistoryClient {
                 command TEXT NOT NULL,
                 response TEXT,
                 machine_id TEXT,
-                timestamp INTEGER DEFAULT (unixepoch()),
+                timestamp INTEGER DEFAULT (strftime('%s', 'now')),
                 session_id TEXT,
                 context TEXT,
                 tokens_used INTEGER,
                 execution_time_ms INTEGER,
+                status TEXT DEFAULT 'pending',
+                request_id TEXT,
+                updated_at INTEGER,
+                completed_at INTEGER,
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 FOREIGN KEY (machine_id) REFERENCES machines(machine_id)
             );
@@ -152,9 +158,11 @@ export default class TursoHistoryClient {
                 command TEXT NOT NULL,
                 response TEXT,
                 user_id TEXT,
-                timestamp INTEGER DEFAULT (unixepoch()),
+                timestamp INTEGER DEFAULT (strftime('%s', 'now')),
                 error_code INTEGER,
                 session_id TEXT,
+                status TEXT DEFAULT 'pending',
+                request_id TEXT,
                 FOREIGN KEY (machine_id) REFERENCES machines(machine_id),
                 FOREIGN KEY (user_id) REFERENCES users(id)
             );
@@ -168,6 +176,20 @@ export default class TursoHistoryClient {
                 ON history_user(user_id, timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_history_machine_lookup
                 ON history_machine(machine_id, timestamp DESC);
+
+            -- Novos índices para status e request_id
+            CREATE INDEX IF NOT EXISTS idx_history_user_status
+                ON history_user(status, timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_history_user_request
+                ON history_user(request_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_history_user_request_unique
+                ON history_user(request_id);
+            CREATE INDEX IF NOT EXISTS idx_history_global_status
+                ON history_global(status, timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_history_global_request
+                ON history_global(request_id);
+            CREATE INDEX IF NOT EXISTS idx_history_machine_status
+                ON history_machine(status, timestamp DESC);
 
             -- Cache de comandos frequentes
             CREATE TABLE IF NOT EXISTS command_cache (
@@ -185,7 +207,7 @@ export default class TursoHistoryClient {
                 id TEXT PRIMARY KEY,
                 machine_id TEXT NOT NULL,
                 user_id TEXT,
-                started_at INTEGER DEFAULT (unixepoch()),
+                started_at INTEGER DEFAULT (strftime('%s', 'now')),
                 ended_at INTEGER,
                 command_count INTEGER DEFAULT 0,
                 FOREIGN KEY (machine_id) REFERENCES machines(machine_id),
@@ -203,10 +225,63 @@ export default class TursoHistoryClient {
     }
 
     /**
+     * Migra dados existentes para adicionar status onde não existe
+     */
+    async migrateExistingData() {
+        try {
+            // Timestamp de quando esta migração foi implementada (agora)
+            const migrationTimestamp = Math.floor(Date.now() / 1000);
+
+            // Migrar history_user - apenas registros antigos
+            await this.client.execute(`
+                UPDATE history_user
+                SET status = CASE
+                    WHEN response IS NULL THEN 'cancelled'
+                    WHEN response = '[Cancelled by user]' THEN 'cancelled'
+                    ELSE 'completed'
+                END
+                WHERE status IS NULL AND timestamp < ${migrationTimestamp}
+            `);
+
+            // Migrar history_global - apenas registros antigos
+            await this.client.execute(`
+                UPDATE history_global
+                SET status = CASE
+                    WHEN response IS NULL THEN 'cancelled'
+                    ELSE 'completed'
+                END
+                WHERE status IS NULL AND timestamp < ${migrationTimestamp}
+            `);
+
+            // Migrar history_machine - apenas registros antigos
+            await this.client.execute(`
+                UPDATE history_machine
+                SET status = CASE
+                    WHEN response IS NULL THEN 'cancelled'
+                    WHEN error_code IS NOT NULL THEN 'error'
+                    ELSE 'completed'
+                END
+                WHERE status IS NULL AND timestamp < ${migrationTimestamp}
+            `);
+
+            if (this.config.debug) {
+                console.log('[Turso] Existing data migrated successfully');
+            }
+        } catch (error) {
+            // Ignorar erro se colunas já existem
+            if (this.config.debug) {
+                console.log('[Turso] Migration skipped or already done:', error.message);
+            }
+        }
+    }
+
+    /**
      * Registra a máquina no banco de dados
      */
     async registerMachine() {
         await this.machineManager.registerMachine(this.client);
+        // Executar migração após registrar máquina
+        await this.migrateExistingData();
     }
 
     /**
@@ -397,9 +472,17 @@ export default class TursoHistoryClient {
                 updateArgs.push(updates.response);
             }
             if (updates.status !== undefined) {
-                // User table has context field - update status in JSON
-                updateFields.push('context = json_set(context, "$.status", ?)');
+                // Update the dedicated status column
+                updateFields.push('status = ?');
                 updateArgs.push(updates.status);
+            }
+            if (updates.updated_at !== undefined) {
+                updateFields.push('updated_at = ?');
+                updateArgs.push(updates.updated_at);
+            }
+            if (updates.completed_at !== undefined) {
+                updateFields.push('completed_at = ?');
+                updateArgs.push(updates.completed_at);
             }
 
             if (updateFields.length === 0) return true;
@@ -464,8 +547,8 @@ export default class TursoHistoryClient {
     async saveToGlobal(command, response, metadata) {
         const result = await this.client.execute({
             sql: `INSERT INTO history_global
-                  (command, response, machine_id, user_id, timestamp, tokens_used, execution_time_ms, tags, session_id)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  (command, response, machine_id, user_id, timestamp, tokens_used, execution_time_ms, tags, session_id, status, request_id)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                   RETURNING id`,
             args: [
                 command,
@@ -476,7 +559,9 @@ export default class TursoHistoryClient {
                 metadata.tokens_used || null,
                 metadata.execution_time_ms || null,
                 JSON.stringify(metadata.tags || []),
-                metadata.session_id || this.sessionId
+                metadata.session_id || this.sessionId,
+                metadata.status || 'pending',
+                metadata.request_id || null
             ]
         });
 
@@ -492,8 +577,8 @@ export default class TursoHistoryClient {
 
         const result = await this.client.execute({
             sql: `INSERT INTO history_user
-                  (user_id, command, response, machine_id, timestamp, session_id, context, tokens_used, execution_time_ms)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  (user_id, command, response, machine_id, timestamp, session_id, context, tokens_used, execution_time_ms, status, request_id)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                   RETURNING id`,
             args: [
                 this.userId,
@@ -504,7 +589,9 @@ export default class TursoHistoryClient {
                 metadata.session_id || this.sessionId,
                 JSON.stringify(metadata.context || {}),
                 metadata.tokens_used || null,
-                metadata.execution_time_ms || null
+                metadata.execution_time_ms || null,
+                metadata.status || 'pending',
+                metadata.request_id || null
             ]
         });
 
@@ -518,8 +605,8 @@ export default class TursoHistoryClient {
     async saveToMachine(command, response, metadata) {
         const result = await this.client.execute({
             sql: `INSERT INTO history_machine
-                  (machine_id, command, response, user_id, timestamp, error_code, session_id)
-                  VALUES (?, ?, ?, ?, ?, ?, ?)
+                  (machine_id, command, response, user_id, timestamp, error_code, session_id, status, request_id)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                   RETURNING id`,
             args: [
                 this.machineId,
@@ -528,7 +615,9 @@ export default class TursoHistoryClient {
                 this.userId,
                 Math.floor(Date.now() / 1000),
                 metadata.error_code || null,
-                metadata.session_id || this.sessionId
+                metadata.session_id || this.sessionId,
+                metadata.status || 'pending',
+                metadata.request_id || null
             ]
         });
 

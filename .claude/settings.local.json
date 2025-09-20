@@ -56,7 +56,9 @@
       "Bash(MCP_USER=fabio timeout 30 node interface-v2/mcp-ink-cli.mjs --debug)",
       "Bash(./test-history-fix.sh:*)",
       "Bash(./test-context-preservation.sh:*)",
-      "Bash(./testar-agora.sh:*)"
+      "Bash(./testar-agora.sh:*)",
+      "Bash(python3:*)",
+      "Bash(./test-cancel-flow.sh:*)"
     ],
     "deny": [],
     "ask": []

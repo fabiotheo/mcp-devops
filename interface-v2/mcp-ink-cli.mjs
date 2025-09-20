@@ -31,7 +31,21 @@ const __dirname = path.dirname(__filename);
 
 // Module-level variables
 const isDebug = process.argv.includes('--debug');
-const user = process.env.MCP_USER || 'default';
+
+// Process --user argument or use environment variable
+const getUserFromArgs = () => {
+    const userArgIndex = process.argv.indexOf('--user');
+    if (userArgIndex !== -1 && process.argv[userArgIndex + 1]) {
+        return process.argv[userArgIndex + 1];
+    }
+    return process.env.MCP_USER || 'default';
+};
+
+const user = getUserFromArgs();
+
+if (isDebug) {
+    console.log(`[Debug] User: ${user}`);
+}
 
 // Main MCP Ink Application Component
 const MCPInkApp = () => {
@@ -52,6 +66,7 @@ const MCPInkApp = () => {
     const [isCancelled, setIsCancelled] = useState(false);
     const currentRequestId = useRef(null);
     const currentTursoEntryId = useRef(null);  // Track current Turso entry ID
+    const activeRequests = useRef(new Map());  // Track active requests
 
     const { exit } = useApp();
     const { stdout } = useStdout();
@@ -298,10 +313,13 @@ const MCPInkApp = () => {
 
     // Process command through backend
     const processCommand = async (command) => {
+        if (isDebug) {
+            console.log(`[Debug] processCommand called with: "${command}"`);
+        }
         if (!command.trim()) return;
 
-        // Generate unique ID for this request
-        const requestId = Date.now() + Math.random();
+        // Generate unique request_id (timestamp + random for uniqueness)
+        const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         currentRequestId.current = requestId;
 
         // Cancel any previous request
@@ -314,15 +332,53 @@ const MCPInkApp = () => {
         setError(null);
         setIsCancelled(false);
 
-        // Create new AbortController for this request
-        abortControllerRef.current = new AbortController();
+        // Create new AbortController and register request
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        activeRequests.current.set(requestId, {
+            status: 'pending',
+            controller: controller,
+            command: command,
+            tursoId: null
+        });
 
-        // Save question to Turso immediately (without response)
+        // Save question to Turso immediately with status 'pending' and request_id
         currentTursoEntryId.current = null;
+        if (isDebug) {
+            console.log(`[Debug] Checking Turso save conditions:`);
+            console.log(`  - tursoAdapter.current: ${tursoAdapter.current ? 'exists' : 'null'}`);
+            console.log(`  - isConnected: ${tursoAdapter.current?.isConnected() || false}`);
+            console.log(`  - user: ${user}`);
+            console.log(`  - user !== 'default': ${user !== 'default'}`);
+        }
+
         if (tursoAdapter.current && tursoAdapter.current.isConnected() && user !== 'default') {
-            currentTursoEntryId.current = await tursoAdapter.current.saveQuestion(command);
+            currentTursoEntryId.current = await tursoAdapter.current.saveQuestionWithStatusAndRequestId(
+                command,
+                'pending',
+                requestId
+            );
+
+            // Update Map with Turso ID
+            const request = activeRequests.current.get(requestId);
+            if (request) {
+                request.tursoId = currentTursoEntryId.current;
+            }
+
             if (isDebug) {
-                console.log(`[Turso] Question saved immediately with ID: ${currentTursoEntryId.current}`);
+                console.log(`[Turso] Question saved with ID: ${currentTursoEntryId.current}, request_id: ${requestId}, status: pending`);
+            }
+
+            // CRITICAL: Check if cancelled AFTER save completes
+            if (isCancelled || currentRequestId.current !== requestId) {
+                if (isDebug) {
+                    console.log(`[Debug] Request ${requestId} was cancelled during save. Updating status to cancelled.`);
+                }
+                // Update to cancelled status immediately
+                await tursoAdapter.current.updateStatusByRequestId(requestId, 'cancelled');
+                activeRequests.current.delete(requestId);
+                setIsProcessing(false);
+                return;
             }
         }
 
@@ -407,11 +463,11 @@ const MCPInkApp = () => {
                 setResponse(output);
                 setHistory(prev => [...prev, formatResponse(output)]);
 
-                // Update Turso with response if we have an entry ID
+                // Update Turso with response and status 'completed'
                 if (currentTursoEntryId.current && tursoAdapter.current && tursoAdapter.current.isConnected()) {
-                    await tursoAdapter.current.updateWithResponse(currentTursoEntryId.current, output);
+                    await tursoAdapter.current.updateWithResponseAndStatus(currentTursoEntryId.current, output, 'completed');
                     if (isDebug) {
-                        console.log(`[Turso] Updated entry ${currentTursoEntryId.current} with response`);
+                        console.log(`[Turso] Updated entry ${currentTursoEntryId.current} with response and status: completed`);
                     }
                 } else {
                     // Fallback to old method if no entry ID
@@ -422,13 +478,32 @@ const MCPInkApp = () => {
                 setStatus('processing');
 
                 // Check if request was cancelled before starting
-                if (isCancelled || currentRequestId.current !== requestId) {
+                const request = activeRequests.current.get(requestId);
+                if (!request || request.status === 'cancelled' || isCancelled || currentRequestId.current !== requestId) {
                     if (isDebug) {
                         console.log(`[Debug] Request ${requestId} cancelled before AI call`);
                     }
+                    activeRequests.current.delete(requestId);
                     setStatus('ready');
                     setIsProcessing(false);
                     return;
+                }
+
+                // Check again if cancelled before updating status
+                if (isCancelled || currentRequestId.current !== requestId) {
+                    if (isDebug) {
+                        console.log(`[Debug] Request ${requestId} cancelled before updating status`);
+                    }
+                    activeRequests.current.delete(requestId);
+                    setStatus('ready');
+                    setIsProcessing(false);
+                    return;
+                }
+
+                // Update status to 'processing' in Turso
+                if (currentTursoEntryId.current && tursoAdapter.current) {
+                    await tursoAdapter.current.updateStatus(currentTursoEntryId.current, 'processing');
+                    request.status = 'processing';
                 }
 
                 try {
@@ -475,11 +550,20 @@ const MCPInkApp = () => {
                         console.log(`[Debug] AI responded for request ${requestId}, current: ${currentRequestId.current}`);
                     }
 
-                    // Check if this request is still valid
-                    if (currentRequestId.current !== requestId) {
+                    // CRITICAL: Check status BEFORE processing response
+                    const currentRequest = activeRequests.current.get(requestId);
+
+                    // Get status from database (source of truth)
+                    let dbStatus = 'processing';
+                    if (tursoAdapter.current) {
+                        dbStatus = await tursoAdapter.current.getStatusByRequestId(requestId);
+                    }
+
+                    if (dbStatus === 'cancelled' || currentRequest?.status === 'cancelled' || currentRequestId.current !== requestId) {
                         if (isDebug) {
-                            console.log(`[Debug] Request ${requestId} is outdated, ignoring response`);
+                            console.log(`[Debug] Response received for cancelled request ${requestId} (db status: ${dbStatus}). Ignoring.`);
                         }
+                        activeRequests.current.delete(requestId);
                         return;
                     }
 
@@ -528,11 +612,11 @@ const MCPInkApp = () => {
                 setResponse(output);
                 setHistory(prev => [...prev, formatResponse(output)]);
 
-                // Update Turso with response if we have an entry ID
+                // Update Turso with response and status 'completed'
                 if (currentTursoEntryId.current && tursoAdapter.current && tursoAdapter.current.isConnected()) {
-                    await tursoAdapter.current.updateWithResponse(currentTursoEntryId.current, output);
+                    await tursoAdapter.current.updateWithResponseAndStatus(currentTursoEntryId.current, output, 'completed');
                     if (isDebug) {
-                        console.log(`[Turso] Updated entry ${currentTursoEntryId.current} with response`);
+                        console.log(`[Turso] Updated entry ${currentTursoEntryId.current} with response and status: completed`);
                     }
                 } else {
                     // Fallback to old method if no entry ID
@@ -554,8 +638,24 @@ const MCPInkApp = () => {
             setError(`Error: ${err.message}`);
             setHistory(prev => [...prev, `✗ Error: ${err.message}`]);
             setStatus('ready');
+
+            // Mark request as error in database
+            if (tursoAdapter.current && tursoAdapter.current.isConnected() && currentRequestId.current) {
+                await tursoAdapter.current.updateStatusByRequestId(currentRequestId.current, 'error');
+                if (isDebug) {
+                    console.log(`[Turso] Marked request ${currentRequestId.current} as error`);
+                }
+            }
         } finally {
             setIsProcessing(false);
+
+            // Clean up the request from activeRequests Map to prevent memory leak
+            if (currentRequestId.current && activeRequests.current.has(currentRequestId.current)) {
+                activeRequests.current.delete(currentRequestId.current);
+                if (isDebug) {
+                    console.log(`[Debug] Cleaned up request ${currentRequestId.current} from activeRequests`);
+                }
+            }
         }
     };
 
@@ -720,7 +820,10 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                             console.log(`[Debug] ESC pressed - cancelling request ${currentRequestId.current}`);
                         }
                         setIsCancelled(true);
-                        currentRequestId.current = null; // Invalidate current request
+
+                        // Save the request ID before clearing it
+                        const requestIdToCancel = currentRequestId.current;
+
                         if (abortControllerRef.current) {
                             abortControllerRef.current.abort();
                             abortControllerRef.current = null;
@@ -740,14 +843,33 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                             return newHistory;
                         });
 
-                        // Mark as cancelled in Turso
-                        if (currentTursoEntryId.current && tursoAdapter.current && tursoAdapter.current.isConnected()) {
-                            await tursoAdapter.current.markAsCancelled(currentTursoEntryId.current);
-                            if (isDebug) {
-                                console.log(`[Turso] Marked entry ${currentTursoEntryId.current} as cancelled`);
+                        // Mark as cancelled in Turso using request_id
+                        if (requestIdToCancel && tursoAdapter.current && tursoAdapter.current.isConnected()) {
+                            // Try to update status immediately
+                            const updated = await tursoAdapter.current.updateStatusByRequestId(requestIdToCancel, 'cancelled');
+
+                            if (!updated && currentTursoEntryId.current) {
+                                // If failed (record might not exist yet), try with entry ID
+                                if (isDebug) {
+                                    console.log(`[Debug] Retry cancel with entry ID: ${currentTursoEntryId.current}`);
+                                }
+                                await tursoAdapter.current.updateStatus(currentTursoEntryId.current, 'cancelled');
                             }
-                            currentTursoEntryId.current = null;  // Clear the entry ID
+
+                            if (isDebug) {
+                                console.log(`[Turso] Marked request ${requestIdToCancel} as cancelled`);
+                            }
+
+                            // Also update the activeRequests Map
+                            const request = activeRequests.current.get(requestIdToCancel);
+                            if (request) {
+                                request.status = 'cancelled';
+                            }
                         }
+
+                        // Now clear the IDs
+                        currentRequestId.current = null;
+                        currentTursoEntryId.current = null;
 
                         // Reset cancellation flag after a short delay to allow cleanup
                         setTimeout(() => {

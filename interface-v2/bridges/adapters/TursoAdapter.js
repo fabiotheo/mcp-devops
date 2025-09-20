@@ -291,6 +291,148 @@ class TursoAdapter {
     }
 
     /**
+     * Save question with status and request_id
+     * @param {string} command - Command to save
+     * @param {string} status - Status (default 'pending')
+     * @param {string} requestId - Unique request ID
+     * @returns {Promise<string>} - Entry ID
+     */
+    async saveQuestionWithStatusAndRequestId(command, status = 'pending', requestId) {
+        if (!this.enabled || !this.tursoClient) {
+            return null;
+        }
+
+        try {
+            const entryId = await this.tursoClient.saveToUser(command, null, {
+                status,
+                request_id: requestId,
+                session_id: this.tursoClient.sessionId,
+                source: 'ink-interface'
+            });
+
+            if (this.debug) {
+                console.log(`[TursoAdapter] Question saved with ID: ${entryId}, request_id: ${requestId}, status: ${status}`);
+            }
+
+            return entryId;
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error saving question with status:', error);
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Update only the status
+     * @param {string} entryId - Entry ID
+     * @param {string} status - New status
+     * @returns {Promise<boolean>} - Success
+     */
+    async updateStatus(entryId, status) {
+        if (!this.enabled || !this.tursoClient) {
+            return false;
+        }
+
+        try {
+            await this.tursoClient.updateUserEntry(entryId, {
+                status,
+                updated_at: Math.floor(Date.now() / 1000)
+            });
+            return true;
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error updating status:', error);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Get status by request_id
+     * @param {string} requestId - Request ID
+     * @returns {Promise<string>} - Status or 'unknown'
+     */
+    async getStatusByRequestId(requestId) {
+        if (!this.enabled || !this.tursoClient || !this.tursoClient.client) {
+            return 'unknown';
+        }
+
+        try {
+            const result = await this.tursoClient.client.execute({
+                sql: 'SELECT status FROM history_user WHERE request_id = ? ORDER BY timestamp DESC LIMIT 1',
+                args: [requestId]
+            });
+            return result.rows[0]?.status || 'unknown';
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error getting status by request_id:', error);
+            }
+            return 'unknown';
+        }
+    }
+
+    /**
+     * Update status by request_id
+     * @param {string} requestId - Request ID
+     * @param {string} status - New status
+     * @returns {Promise<boolean>} - Success
+     */
+    async updateStatusByRequestId(requestId, status) {
+        if (!this.enabled || !this.tursoClient || !this.tursoClient.client) {
+            return false;
+        }
+
+        try {
+            const result = await this.tursoClient.client.execute({
+                sql: 'UPDATE history_user SET status = ?, updated_at = ? WHERE request_id = ?',
+                args: [status, Math.floor(Date.now() / 1000), requestId]
+            });
+
+            // Return true only if at least one row was updated
+            const success = result.rowsAffected > 0;
+
+            if (this.debug && !success) {
+                console.log(`[TursoAdapter] No rows updated for request_id: ${requestId}`);
+            }
+
+            return success;
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error updating status by request_id:', error);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Update response and status together
+     * @param {string} entryId - Entry ID
+     * @param {string} response - Response text
+     * @param {string} status - Status
+     * @returns {Promise<boolean>} - Success
+     */
+    async updateWithResponseAndStatus(entryId, response, status) {
+        if (!this.enabled || !this.tursoClient) {
+            return false;
+        }
+
+        try {
+            await this.tursoClient.updateUserEntry(entryId, {
+                response,
+                status,
+                completed_at: Math.floor(Date.now() / 1000)
+            });
+            return true;
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error updating response and status:', error);
+            }
+            return false;
+        }
+    }
+
+    /**
      * Sync local history with Turso
      * @param {string[]} localHistory - Local command history
      * @returns {Promise<void>}

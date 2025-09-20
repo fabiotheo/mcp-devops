@@ -2,23 +2,19 @@
 // Factory para criar a instância do modelo de IA adequado
 
 import ClaudeModel from './claude_model.js';
-import ClaudeModelWithTools from './claude_model_tools.js';
 
 export default class ModelFactory {
     // Cria e inicializa uma instância do modelo de IA apropriado com base na configuração
     static async createModel(config) {
         const provider = config.ai_provider || 'claude';
-        // Deve usar tools se use_native_tools OU enable_bash_tool estiver habilitado
-        const useTools = config.use_native_tools || config.enable_bash_tool || false;
 
         let model;
 
-        // Se deve usar tools nativas do Claude (incluindo bash tool)
-        if (provider === 'claude' && useTools) {
-            model = new ClaudeModelWithTools(config);
-        } else {
-            // Modelo tradicional
+        // Usar sempre o modelo unificado com suporte a tools
+        if (provider === 'claude') {
             model = new ClaudeModel(config);
+        } else {
+            throw new Error(`Provider '${provider}' não é suportado. Use 'claude'.`);
         }
 
         try {

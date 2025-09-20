@@ -222,6 +222,8 @@ export default class AICommandOrchestratorBash {
     }
 
     async orchestrateExecution(question, context, options = {}) {
+        // Garantir que options sempre existe para evitar erros
+        options = options || {};
         this.startTime = Date.now();
 
         // Iniciar sessão bash se habilitada
@@ -269,7 +271,8 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
                     systemPrompt,
                     question,
                     allTools,
-                    options.tool_choice
+                    options.tool_choice,
+                    options
                 );
             } else {
                 return {
@@ -293,7 +296,7 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
         }
     }
 
-    async executeWithTools(context, systemPrompt, question, tools, toolChoice = null) {
+    async executeWithTools(context, systemPrompt, question, tools, toolChoice = null, options = {}) {
         const messages = [
             {
                 role: 'user',
@@ -317,7 +320,8 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
                 system: systemPrompt,
                 messages: messages,
                 tools: tools,
-                tool_choice: toolChoice || { type: 'auto' }
+                tool_choice: toolChoice || { type: 'auto' },
+                signal: options ? options.signal : undefined
             });
 
             if (this.config.verboseLogging) {

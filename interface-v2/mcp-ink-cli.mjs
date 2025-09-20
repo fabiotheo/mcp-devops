@@ -70,7 +70,9 @@ const MCPInkApp = () => {
     const orchestrator = useRef(null);
     const patternMatcher = useRef(null);
     const tursoAdapter = useRef(null);
-    const abortControllerRef = useRef(null);
+    // Separate abort controllers for different operations
+    const aiAbortControllerRef = useRef(null);  // For AI API calls (cancellable)
+    const dbAbortControllerRef = useRef(null);  // For database operations (protected)
 
     const isTTY = process.stdin.isTTY;
 
@@ -148,7 +150,8 @@ const MCPInkApp = () => {
                             ...options,  // Include all options (history, signal, etc)
                             patternInfo: options.patternInfo
                         };
-                        return await this.orchestrateExecution(command, contextWithHistory);
+                        // IMPORTANTE: passar options como terceiro parâmetro para propagar o signal
+                        return await this.orchestrateExecution(command, contextWithHistory, options);
                     };
                 } else {
                     // Use simple direct AI model without tools
@@ -305,6 +308,95 @@ const MCPInkApp = () => {
         }
     };
 
+    // Helper function to ensure consistent cleanup of requests
+    // IMPORTANT: This function is the single source of truth for request cleanup.
+    // It handles both UI state and request lifecycle management.
+    // Trade-offs:
+    // - We use a Map (activeRequests) as primary source of truth for cancellation state
+    // - Database updates are secondary and may lag behind local state
+    // - This ensures immediate UI responsiveness at the cost of potential DB inconsistency
+    // - The Map-first approach prevents race conditions between cancellation and API responses
+    const cleanupRequest = async (requestId, reason, clearInput = false) => {
+        if (isDebug) {
+            console.log(`[Debug] Cleaning up request ${requestId}: ${reason}`);
+        }
+
+        // Get request data before any modifications
+        const request = activeRequests.current.get(requestId);
+
+        // 1. Mark as cancelled in Map (but don't delete yet)
+        if (request) {
+            request.status = 'cancelled';
+        }
+
+        // 2. Abort ONLY the AI controller (DB operations should continue)
+        if (aiAbortControllerRef.current) {
+            aiAbortControllerRef.current.abort();
+            aiAbortControllerRef.current = null;
+        }
+        // Note: We intentionally don't abort dbAbortControllerRef here
+
+        // 3. Reset UI state to ready
+        setIsProcessing(false);
+        setStatus('ready');
+        setError(null);
+
+        // 3.5. Clear input if requested (e.g., when ESC is pressed during processing)
+        if (clearInput) {
+            setInput('');
+            if (isDebug) {
+                console.log('[Debug] Input cleared due to cancellation');
+            }
+        }
+
+        // 4. Restore bracketed paste mode if TTY (always restore when cleaning up)
+        if (isTTY) {
+            process.stdout.write('\x1b[?2004h');
+            if (isDebug) {
+                console.log('[Debug] Bracketed paste mode restored');
+            }
+        }
+
+        // 5. Update Turso if this was a cancellation (not protected by abort)
+        if (isDebug) {
+            console.log(`[Debug] Cleanup - checking Turso update conditions:`);
+            console.log(`  - reason: "${reason}"`);
+            console.log(`  - reason.includes('cancel'): ${reason.includes('cancel')}`);
+            console.log(`  - request exists: ${!!request}`);
+            console.log(`  - request?.tursoId: ${request?.tursoId}`);
+            console.log(`  - tursoAdapter connected: ${tursoAdapter.current?.isConnected()}`);
+        }
+
+        if (reason.includes('cancel') && request?.tursoId && tursoAdapter.current?.isConnected()) {
+            try {
+                if (isDebug) {
+                    console.log(`[Debug] Updating Turso entry ${request.tursoId} to cancelled status`);
+                }
+                // Update the message status to 'cancelled' in Turso
+                await tursoAdapter.current.updateStatusByRequestId(requestId, 'cancelled');
+                if (isDebug) {
+                    console.log(`[Debug] Turso entry marked as cancelled`);
+                }
+            } catch (err) {
+                console.warn(`[Warning] Failed to update Turso status to cancelled: ${err.message}`);
+            }
+        }
+
+        // 6. Clear references
+        if (currentRequestId.current === requestId) {
+            currentRequestId.current = null;
+        }
+        if (aiAbortControllerRef.current) {
+            aiAbortControllerRef.current = null;
+        }
+        if (dbAbortControllerRef.current) {
+            dbAbortControllerRef.current = null;
+        }
+
+        // 7. Finally remove from Map (do this LAST to ensure all operations can access request data)
+        activeRequests.current.delete(requestId);
+    };
+
     // Process command through backend
     const processCommand = async (command) => {
         if (isDebug) {
@@ -316,9 +408,9 @@ const MCPInkApp = () => {
         const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
         currentRequestId.current = requestId;
 
-        // Cancel any previous request
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
+        // Cancel any previous AI request (but not DB operations)
+        if (aiAbortControllerRef.current) {
+            aiAbortControllerRef.current.abort();
         }
 
         setIsProcessing(true);
@@ -326,12 +418,16 @@ const MCPInkApp = () => {
         setError(null);
         setIsCancelled(false);
 
-        // Create new AbortController and register request
-        const controller = new AbortController();
-        abortControllerRef.current = controller;
+        // Create separate controllers for AI and DB operations
+        const aiController = new AbortController();
+        const dbController = new AbortController();
+        aiAbortControllerRef.current = aiController;
+        dbAbortControllerRef.current = dbController;
+
         activeRequests.current.set(requestId, {
             status: 'pending',
-            controller: controller,
+            aiController: aiController,
+            dbController: dbController,
             command: command,
             tursoId: null
         });
@@ -370,8 +466,7 @@ const MCPInkApp = () => {
                 }
                 // Update to cancelled status immediately
                 await tursoAdapter.current.updateStatusByRequestId(requestId, 'cancelled');
-                activeRequests.current.delete(requestId);
-                setIsProcessing(false);
+                await cleanupRequest(requestId, 'cancelled during save');
                 return;
             }
         }
@@ -433,7 +528,7 @@ const MCPInkApp = () => {
                     history: formattedHistory,
                     verbose: isDebug,
                     patternInfo: patternResult,
-                    signal: abortControllerRef.current?.signal
+                    signal: aiAbortControllerRef.current?.signal
                 });
 
                 // Extract text from result
@@ -465,7 +560,11 @@ const MCPInkApp = () => {
                     }
                 } else {
                     // Fallback to old method if no entry ID
-                    await saveToHistory(command, output);
+                    if (requestId) {
+                        await saveToHistory(command, output);
+                    } else {
+                        console.warn('[Warning] Cannot save to history: requestId is null');
+                    }
                 }
             } else {
                 // Process through AI orchestrator
@@ -477,9 +576,7 @@ const MCPInkApp = () => {
                     if (isDebug) {
                         console.log(`[Debug] Request ${requestId} cancelled before AI call`);
                     }
-                    activeRequests.current.delete(requestId);
-                    setStatus('ready');
-                    setIsProcessing(false);
+                    await cleanupRequest(requestId, 'cancelled before AI call');
                     return;
                 }
 
@@ -488,9 +585,7 @@ const MCPInkApp = () => {
                     if (isDebug) {
                         console.log(`[Debug] Request ${requestId} cancelled before updating status`);
                     }
-                    activeRequests.current.delete(requestId);
-                    setStatus('ready');
-                    setIsProcessing(false);
+                    await cleanupRequest(requestId, 'cancelled before status update');
                     return;
                 }
 
@@ -528,6 +623,16 @@ const MCPInkApp = () => {
                         }
                     });
 
+                    // Final check before calling AI (prevent race condition)
+                    const finalCheck = activeRequests.current.get(requestId);
+                    if (!finalCheck || finalCheck.status === 'cancelled') {
+                        if (isDebug) {
+                            console.log(`[Debug] Request ${requestId} cancelled just before AI call. Aborting.`);
+                        }
+                        await cleanupRequest(requestId, 'cancelled before AI call');
+                        return;
+                    }
+
                     if (isDebug) {
                         console.log(`[Debug] Calling AI for request ${requestId}`);
                         console.log(`[Debug] Passing history with ${formattedHistory.length} formatted messages`);
@@ -537,37 +642,25 @@ const MCPInkApp = () => {
                     const result = await orchestrator.current.askCommand(command, {
                         history: formattedHistory,
                         verbose: isDebug,
-                        signal: abortControllerRef.current?.signal
+                        signal: aiAbortControllerRef.current?.signal
                     });
 
                     if (isDebug) {
                         console.log(`[Debug] AI responded for request ${requestId}, current: ${currentRequestId.current}`);
                     }
 
-                    // CRITICAL: Check status BEFORE processing response
+                    // CRITICAL: Use Map local as primary source of truth (no DB latency)
                     const currentRequest = activeRequests.current.get(requestId);
+                    const isLocalCancelled = !currentRequest ||
+                                              currentRequest.status === 'cancelled' ||
+                                              isCancelled ||
+                                              currentRequestId.current !== requestId;
 
-                    // Get status from database (source of truth)
-                    let dbStatus = 'processing';
-                    if (tursoAdapter.current) {
-                        dbStatus = await tursoAdapter.current.getStatusByRequestId(requestId);
-                    }
-
-                    if (dbStatus === 'cancelled' || currentRequest?.status === 'cancelled' || currentRequestId.current !== requestId) {
+                    if (isLocalCancelled) {
                         if (isDebug) {
-                            console.log(`[Debug] Response received for cancelled request ${requestId} (db status: ${dbStatus}). Ignoring.`);
+                            console.log(`[Debug] Request ${requestId} cancelled (local check). Ignoring response.`);
                         }
-                        activeRequests.current.delete(requestId);
-                        return;
-                    }
-
-                    // Check again after await if request was cancelled
-                    if (isCancelled) {
-                        if (isDebug) {
-                            console.log(`[Debug] Request ${requestId} was cancelled, ignoring response`);
-                        }
-                        setStatus('ready');
-                        setIsProcessing(false);
+                        await cleanupRequest(requestId, 'response after cancellation');
                         return;
                     }
 
@@ -594,8 +687,7 @@ const MCPInkApp = () => {
                     if (isDebug) {
                         console.log(`[Debug] Request ${requestId} cancelled before setting response`);
                     }
-                    setStatus('ready');
-                    setIsProcessing(false);
+                    await cleanupRequest(requestId, 'cancelled before setting response');
                     return;
                 }
 
@@ -614,13 +706,16 @@ const MCPInkApp = () => {
                     }
                 } else {
                     // Fallback to old method if no entry ID
-                    await saveToHistory(command, output);
+                    if (requestId) {
+                        await saveToHistory(command, output);
+                    } else {
+                        console.warn('[Warning] Cannot save to history: requestId is null');
+                    }
                 }
                 } catch (abortErr) {
                     // If it's an abort error or was cancelled, just return silently
-                    if (isCancelled || abortErr.name === 'AbortError' || abortControllerRef.current?.signal.aborted) {
-                        setStatus('ready');
-                        setIsProcessing(false);
+                    if (isCancelled || abortErr.name === 'AbortError' || aiAbortControllerRef.current?.signal.aborted) {
+                        await cleanupRequest(currentRequestId.current || requestId, 'aborted');
                         return;
                     }
                     throw abortErr;
@@ -817,14 +912,14 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                         // Save the request ID before clearing it
                         const requestIdToCancel = currentRequestId.current;
 
-                        if (abortControllerRef.current) {
-                            abortControllerRef.current.abort();
-                            abortControllerRef.current = null;
+                        // IMMEDIATELY mark as cancelled in Map local (primary source)
+                        const request = activeRequests.current.get(requestIdToCancel);
+                        if (request) {
+                            request.status = 'cancelled';
                         }
-                        setIsProcessing(false);
-                        setResponse('Operation cancelled by user');
-                        setError(null);
-                        setStatus('ready');
+
+                        // Use unified cleanup function (it will handle aborting) - clear input on ESC
+                        await cleanupRequest(requestIdToCancel, 'Operation cancelled by user', true);
 
                         // Add cancellation marker to command history for context
                         // This lets the AI know the previous message was interrupted
@@ -836,28 +931,26 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                             return newHistory;
                         });
 
-                        // Mark as cancelled in Turso using request_id
+                        // Update DB async without blocking (it's not the source of truth)
                         if (requestIdToCancel && tursoAdapter.current && tursoAdapter.current.isConnected()) {
-                            // Try to update status immediately
-                            const updated = await tursoAdapter.current.updateStatusByRequestId(requestIdToCancel, 'cancelled');
-
-                            if (!updated && currentTursoEntryId.current) {
-                                // If failed (record might not exist yet), try with entry ID
-                                if (isDebug) {
-                                    console.log(`[Debug] Retry cancel with entry ID: ${currentTursoEntryId.current}`);
-                                }
-                                await tursoAdapter.current.updateStatus(currentTursoEntryId.current, 'cancelled');
-                            }
-
-                            if (isDebug) {
-                                console.log(`[Turso] Marked request ${requestIdToCancel} as cancelled`);
-                            }
-
-                            // Also update the activeRequests Map
-                            const request = activeRequests.current.get(requestIdToCancel);
-                            if (request) {
-                                request.status = 'cancelled';
-                            }
+                            // Don't await - update DB in background
+                            tursoAdapter.current.updateStatusByRequestId(requestIdToCancel, 'cancelled')
+                                .then(updated => {
+                                    if (!updated && currentTursoEntryId.current) {
+                                        // Retry with entry ID if needed
+                                        return tursoAdapter.current.updateStatus(currentTursoEntryId.current, 'cancelled');
+                                    }
+                                })
+                                .then(() => {
+                                    if (isDebug) {
+                                        console.log(`[Turso] Marked request ${requestIdToCancel} as cancelled`);
+                                    }
+                                })
+                                .catch(err => {
+                                    if (isDebug) {
+                                        console.error(`[Turso] Failed to update status:`, err);
+                                    }
+                                });
                         }
 
                         // Now clear the IDs
@@ -890,10 +983,10 @@ Config: ${config ? 'Loaded' : 'Default'}`);
 
                 if (command.startsWith('/')) {
                     if (!handleSpecialCommand(command)) {
-                        processCommand(command);
+                        await processCommand(command);
                     }
                 } else if (command) {
-                    processCommand(command);
+                    await processCommand(command);
                 }
 
                 setInput('');

@@ -91,7 +91,7 @@ Seja conciso e específico para o sistema detectado.`;
         }
     }
 
-    async askCommand(question, systemContext) {
+    async askCommand(question, systemContext, options = {}) {
         console.log('🔵 CLAUDE MODEL CALLED WITH:', question.substring(0, 30));
         try {
             // Format web search results if available
@@ -227,14 +227,27 @@ PERGUNTA: ${msg.content}`;
                 });
             }
 
-            const response = await this.client.messages.create({
+            // Pass AbortSignal to Anthropic SDK if provided
+            const createOptions = {
                 model: this.modelName,
                 max_tokens: 2000,
                 messages: messages
-            });
+            };
+
+            if (options.signal) {
+                createOptions.signal = options.signal;
+                console.log('🟢 AbortSignal passed to Anthropic SDK');
+            }
+
+            const response = await this.client.messages.create(createOptions);
 
             return response.content[0].text;
         } catch (error) {
+            // Check if the error is due to cancellation
+            if (error.name === 'AbortError' || (error.message && error.message.includes('aborted'))) {
+                console.log('🔴 Request was cancelled by user');
+                throw new Error('CANCELLED');
+            }
             console.error('Erro ao consultar Claude:', error);
             return `❌ Erro ao conectar com o assistente Claude. Verifique sua configuração da API Anthropic.`;
         }

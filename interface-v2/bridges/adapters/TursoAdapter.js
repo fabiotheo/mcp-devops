@@ -112,6 +112,101 @@ class TursoAdapter {
     }
 
     /**
+     * Save only the question/command immediately (without response)
+     * @param {string} command - Command to save
+     * @returns {Promise<string>} - The ID of the saved entry
+     */
+    async saveQuestion(command) {
+        if (!this.enabled || !this.tursoClient) {
+            return null;
+        }
+
+        try {
+            // Save command without response (will be updated later)
+            const entryId = await this.tursoClient.saveCommand(
+                command,
+                null,  // No response yet
+                {
+                    source: 'ink-interface',
+                    status: 'pending'  // Mark as pending response
+                }
+            );
+
+            if (this.debug) {
+                console.log(`[TursoAdapter] Question saved with ID: ${entryId}`);
+            }
+
+            return entryId;
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error saving question:', error);
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Update an existing entry with the response
+     * @param {string} entryId - ID of the entry to update
+     * @param {string} response - Response to add
+     * @returns {Promise<boolean>} - Success status
+     */
+    async updateWithResponse(entryId, response) {
+        if (!this.enabled || !this.tursoClient || !entryId) {
+            return false;
+        }
+
+        try {
+            // Update the entry with response
+            await this.tursoClient.updateEntry(entryId, {
+                response: response,
+                status: 'completed'
+            });
+
+            if (this.debug) {
+                console.log(`[TursoAdapter] Entry ${entryId} updated with response`);
+            }
+
+            return true;
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error updating response:', error);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Mark an entry as cancelled
+     * @param {string} entryId - ID of the entry to mark as cancelled
+     * @returns {Promise<boolean>} - Success status
+     */
+    async markAsCancelled(entryId) {
+        if (!this.enabled || !this.tursoClient || !entryId) {
+            return false;
+        }
+
+        try {
+            // Mark the entry as cancelled
+            await this.tursoClient.updateEntry(entryId, {
+                status: 'cancelled',
+                response: '[Cancelled by user]'
+            });
+
+            if (this.debug) {
+                console.log(`[TursoAdapter] Entry ${entryId} marked as cancelled`);
+            }
+
+            return true;
+        } catch (error) {
+            if (this.debug) {
+                console.error('[TursoAdapter] Error marking as cancelled:', error);
+            }
+            return false;
+        }
+    }
+
+    /**
      * Save command to distributed history
      * @param {string} command - Command to save
      * @param {object} metadata - Additional metadata

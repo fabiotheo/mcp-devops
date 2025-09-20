@@ -49,12 +49,16 @@ const MCPInkApp = () => {
     const [lastCtrlC, setLastCtrlC] = useState(0);
     const [lastEsc, setLastEsc] = useState(0);
     const [cancelToken, setCancelToken] = useState(null);
+    const [isCancelled, setIsCancelled] = useState(false);
+    const currentRequestId = useRef(null);
+    const currentTursoEntryId = useRef(null);  // Track current Turso entry ID
 
     const { exit } = useApp();
     const { stdout } = useStdout();
     const orchestrator = useRef(null);
     const patternMatcher = useRef(null);
     const tursoAdapter = useRef(null);
+    const abortControllerRef = useRef(null);
 
     const isTTY = process.stdin.isTTY;
 
@@ -129,10 +133,12 @@ const MCPInkApp = () => {
 
                     // Add wrapper method for compatibility
                     orchestrator.current.askCommand = async function(command, options = {}) {
-                        return await this.orchestrateExecution(command, {
-                            history: options.history || [],
+                        // Pass history and other options directly in the context that becomes systemContext
+                        const contextWithHistory = {
+                            ...options,  // Include all options (history, signal, etc)
                             patternInfo: options.patternInfo
-                        }, options);
+                        };
+                        return await this.orchestrateExecution(command, contextWithHistory);
                     };
                 } else {
                     // Use simple direct AI model without tools
@@ -220,10 +226,26 @@ const MCPInkApp = () => {
             if (tursoAdapter.current && tursoAdapter.current.isConnected() && user !== 'default') {
                 // Load from Turso for the user
                 const userHistory = await tursoAdapter.current.getHistory(100); // Get last 100 commands
-                const commands = userHistory.map(h => h.command).filter(cmd => cmd && cmd.trim());
+                const commands = [];
+
+                // Process history to include cancellation markers
+                userHistory.forEach(h => {
+                    if (h.command && h.command.trim()) {
+                        commands.push(h.command);
+
+                        // Check if this was cancelled (no response or marked as cancelled)
+                        if (!h.response || h.response === '[Cancelled by user]' ||
+                            (h.context && typeof h.context === 'string' &&
+                             h.context.includes('"status":"cancelled"'))) {
+                            commands.push('[User pressed ESC - Previous message was interrupted]');
+                        }
+                    }
+                });
+
                 setCommandHistory(commands);
                 if (isDebug) {
-                    console.log(`[Debug] Loaded ${commands.length} commands from Turso for user ${user}`);
+                    console.log(`[Debug] Loaded ${userHistory.length} entries from Turso for user ${user}`);
+                    console.log(`[Debug] Processed into ${commands.length} command history items (including cancellation markers)`);
                 }
                 return;
             }
@@ -245,14 +267,13 @@ const MCPInkApp = () => {
         }
     };
 
-    // Save command to history
+    // Save command to history (now only saves to file/Turso, not to commandHistory)
     const saveToHistory = async (command, response = null) => {
-        const newHistory = [...commandHistory, command].slice(-100);
-        setCommandHistory(newHistory);
-        setHistoryIndex(-1);
+        // No longer update commandHistory here since it's done immediately in processCommand
+        // This prevents duplicates when command is successful
 
         if (isDebug) {
-            console.log(`[Debug] Saved command to history. Total commands: ${newHistory.length}`);
+            console.log(`[Debug] Saving to persistent history. Total commands in memory: ${commandHistory.length}`);
         }
 
         try {
@@ -279,15 +300,52 @@ const MCPInkApp = () => {
     const processCommand = async (command) => {
         if (!command.trim()) return;
 
+        // Generate unique ID for this request
+        const requestId = Date.now() + Math.random();
+        currentRequestId.current = requestId;
+
+        // Cancel any previous request
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+
         setIsProcessing(true);
         setResponse('');
         setError(null);
+        setIsCancelled(false);
+
+        // Create new AbortController for this request
+        abortControllerRef.current = new AbortController();
+
+        // Save question to Turso immediately (without response)
+        currentTursoEntryId.current = null;
+        if (tursoAdapter.current && tursoAdapter.current.isConnected() && user !== 'default') {
+            currentTursoEntryId.current = await tursoAdapter.current.saveQuestion(command);
+            if (isDebug) {
+                console.log(`[Turso] Question saved immediately with ID: ${currentTursoEntryId.current}`);
+            }
+        }
+
+        if (isDebug) {
+            console.log(`[Debug] Starting request ${requestId}`);
+        }
 
         // Add to display history (show only first line if multi-line)
         const displayCommand = command.includes('\n')
             ? `❯ ${command.split('\n')[0]}... (${command.split('\n').length} lines)`
             : `❯ ${command}`;
         setHistory(prev => [...prev.slice(-50), displayCommand]);
+
+        // IMPORTANT: Add to command history immediately so it's available for context
+        // even if the request is cancelled
+        setCommandHistory(prev => {
+            const newHistory = [...prev, command].slice(-100);
+            if (isDebug) {
+                console.log(`[Debug] Added to commandHistory: "${command.substring(0, 50)}..." (total: ${newHistory.length})`);
+            }
+            return newHistory;
+        });
+        setHistoryIndex(-1);
 
         try {
             let output = '';
@@ -299,10 +357,33 @@ const MCPInkApp = () => {
                 // Pattern matcher recognized it - but we'll process through AI anyway
                 // The pattern info can be used to enhance the AI response
                 setStatus('processing');
+
+                // Convert command history to proper format for AI (same as below)
+                const formattedHistory = [];
+                const recentCommands = commandHistory.slice(-10);
+                recentCommands.forEach((cmd, index) => {
+                    if (cmd.startsWith('[User pressed ESC')) {
+                        return;
+                    }
+                    formattedHistory.push({
+                        role: 'user',
+                        content: cmd
+                    });
+                    if (index < recentCommands.length - 1 &&
+                        recentCommands[index + 1] &&
+                        recentCommands[index + 1].startsWith('[User pressed ESC')) {
+                        formattedHistory.push({
+                            role: 'assistant',
+                            content: '[Message processing was interrupted by user]'
+                        });
+                    }
+                });
+
                 const result = await orchestrator.current.askCommand(command, {
-                    history: commandHistory.slice(-5),
+                    history: formattedHistory,
                     verbose: isDebug,
-                    patternInfo: patternResult
+                    patternInfo: patternResult,
+                    signal: abortControllerRef.current?.signal
                 });
 
                 // Extract text from result
@@ -326,15 +407,91 @@ const MCPInkApp = () => {
                 setResponse(output);
                 setHistory(prev => [...prev, formatResponse(output)]);
 
-                // Save to history with response
-                await saveToHistory(command, output);
+                // Update Turso with response if we have an entry ID
+                if (currentTursoEntryId.current && tursoAdapter.current && tursoAdapter.current.isConnected()) {
+                    await tursoAdapter.current.updateWithResponse(currentTursoEntryId.current, output);
+                    if (isDebug) {
+                        console.log(`[Turso] Updated entry ${currentTursoEntryId.current} with response`);
+                    }
+                } else {
+                    // Fallback to old method if no entry ID
+                    await saveToHistory(command, output);
+                }
             } else {
                 // Process through AI orchestrator
                 setStatus('processing');
-                const result = await orchestrator.current.askCommand(command, {
-                    history: commandHistory.slice(-5),
-                    verbose: isDebug
-                });
+
+                // Check if request was cancelled before starting
+                if (isCancelled || currentRequestId.current !== requestId) {
+                    if (isDebug) {
+                        console.log(`[Debug] Request ${requestId} cancelled before AI call`);
+                    }
+                    setStatus('ready');
+                    setIsProcessing(false);
+                    return;
+                }
+
+                try {
+                    // Convert command history to proper format for AI
+                    const formattedHistory = [];
+                    const recentCommands = commandHistory.slice(-10); // Get last 10 items for context
+
+                    recentCommands.forEach((cmd, index) => {
+                        if (cmd.startsWith('[User pressed ESC')) {
+                            // Skip cancellation markers - they're metadata
+                            return;
+                        }
+                        // Add as user message
+                        formattedHistory.push({
+                            role: 'user',
+                            content: cmd
+                        });
+
+                        // If this was a cancelled message (next item is cancellation marker)
+                        if (index < recentCommands.length - 1 &&
+                            recentCommands[index + 1] &&
+                            recentCommands[index + 1].startsWith('[User pressed ESC')) {
+                            // Add a note that this was interrupted
+                            formattedHistory.push({
+                                role: 'assistant',
+                                content: '[Message processing was interrupted by user]'
+                            });
+                        }
+                    });
+
+                    if (isDebug) {
+                        console.log(`[Debug] Calling AI for request ${requestId}`);
+                        console.log(`[Debug] Passing history with ${formattedHistory.length} formatted messages`);
+                        console.log(`[Debug] Formatted history:`, formattedHistory);
+                    }
+
+                    const result = await orchestrator.current.askCommand(command, {
+                        history: formattedHistory,
+                        verbose: isDebug,
+                        signal: abortControllerRef.current?.signal
+                    });
+
+                    if (isDebug) {
+                        console.log(`[Debug] AI responded for request ${requestId}, current: ${currentRequestId.current}`);
+                    }
+
+                    // Check if this request is still valid
+                    if (currentRequestId.current !== requestId) {
+                        if (isDebug) {
+                            console.log(`[Debug] Request ${requestId} is outdated, ignoring response`);
+                        }
+                        return;
+                    }
+
+                    // Check again after await if request was cancelled
+                    if (isCancelled) {
+                        if (isDebug) {
+                            console.log(`[Debug] Request ${requestId} was cancelled, ignoring response`);
+                        }
+                        setStatus('ready');
+                        setIsProcessing(false);
+                        return;
+                    }
 
                 // Extract text from result
                 if (typeof result === 'string') {
@@ -354,11 +511,42 @@ const MCPInkApp = () => {
                     output = String(result);
                 }
 
+                // Final check before setting response
+                if (isCancelled || currentRequestId.current !== requestId) {
+                    if (isDebug) {
+                        console.log(`[Debug] Request ${requestId} cancelled before setting response`);
+                    }
+                    setStatus('ready');
+                    setIsProcessing(false);
+                    return;
+                }
+
+                if (isDebug) {
+                    console.log(`[Debug] Setting response for request ${requestId}`);
+                }
+
                 setResponse(output);
                 setHistory(prev => [...prev, formatResponse(output)]);
 
-                // Save to history with response
-                await saveToHistory(command, output);
+                // Update Turso with response if we have an entry ID
+                if (currentTursoEntryId.current && tursoAdapter.current && tursoAdapter.current.isConnected()) {
+                    await tursoAdapter.current.updateWithResponse(currentTursoEntryId.current, output);
+                    if (isDebug) {
+                        console.log(`[Turso] Updated entry ${currentTursoEntryId.current} with response`);
+                    }
+                } else {
+                    // Fallback to old method if no entry ID
+                    await saveToHistory(command, output);
+                }
+                } catch (abortErr) {
+                    // If it's an abort error or was cancelled, just return silently
+                    if (isCancelled || abortErr.name === 'AbortError' || abortControllerRef.current?.signal.aborted) {
+                        setStatus('ready');
+                        setIsProcessing(false);
+                        return;
+                    }
+                    throw abortErr;
+                }
             }
 
             setStatus('ready');
@@ -459,7 +647,7 @@ Config: ${config ? 'Loaded' : 'Default'}`);
 
     // Input handling for TTY mode
     if (isTTY) {
-        useInput((char, key) => {
+        useInput(async (char, key) => {
             // Only accept input when ready
             if (status !== 'ready' && status !== 'processing') {
                 return;
@@ -528,12 +716,46 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                     // Single ESC
                     if (isProcessing) {
                         // Cancel current operation
+                        if (isDebug) {
+                            console.log(`[Debug] ESC pressed - cancelling request ${currentRequestId.current}`);
+                        }
+                        setIsCancelled(true);
+                        currentRequestId.current = null; // Invalidate current request
+                        if (abortControllerRef.current) {
+                            abortControllerRef.current.abort();
+                            abortControllerRef.current = null;
+                        }
                         setIsProcessing(false);
                         setResponse('Operation cancelled by user');
                         setError(null);
-                        if (isDebug) {
-                            console.log('[Debug] ESC - Operation cancelled');
+                        setStatus('ready');
+
+                        // Add cancellation marker to command history for context
+                        // This lets the AI know the previous message was interrupted
+                        setCommandHistory(prev => {
+                            const newHistory = [...prev, '[User pressed ESC - Previous message was interrupted]'].slice(-100);
+                            if (isDebug) {
+                                console.log('[Debug] Added cancellation marker to history');
+                            }
+                            return newHistory;
+                        });
+
+                        // Mark as cancelled in Turso
+                        if (currentTursoEntryId.current && tursoAdapter.current && tursoAdapter.current.isConnected()) {
+                            await tursoAdapter.current.markAsCancelled(currentTursoEntryId.current);
+                            if (isDebug) {
+                                console.log(`[Turso] Marked entry ${currentTursoEntryId.current} as cancelled`);
+                            }
+                            currentTursoEntryId.current = null;  // Clear the entry ID
                         }
+
+                        // Reset cancellation flag after a short delay to allow cleanup
+                        setTimeout(() => {
+                            setIsCancelled(false);
+                            if (isDebug) {
+                                console.log('[Debug] Reset isCancelled flag');
+                            }
+                        }, 100);
                     }
                     setLastEsc(now);
                 }

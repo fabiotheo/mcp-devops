@@ -264,23 +264,25 @@ export default class TursoHistoryClient {
         // Adicionar informações da sessão
         metadata.session_id = metadata.session_id || this.sessionId;
 
+        let entryId = null;
+
         try {
             // Salvar baseado no modo
             switch (this.mode) {
                 case 'global':
-                    await this.saveToGlobal(command, response, metadata);
+                    entryId = await this.saveToGlobal(command, response, metadata);
                     break;
                 case 'user':
                     if (!this.userId) {
                         throw new Error('User mode requires a user to be set');
                     }
-                    await this.saveToUser(command, response, metadata);
+                    entryId = await this.saveToUser(command, response, metadata);
                     break;
                 case 'machine':
-                    await this.saveToMachine(command, response, metadata);
+                    entryId = await this.saveToMachine(command, response, metadata);
                     break;
                 case 'hybrid':
-                    // Salvar em múltiplos lugares
+                    // Salvar em múltiplos lugares - return the first ID
                     const saves = [
                         this.saveToGlobal(command, response, metadata),
                         this.saveToMachine(command, response, metadata)
@@ -288,7 +290,8 @@ export default class TursoHistoryClient {
                     if (this.userId) {
                         saves.push(this.saveToUser(command, response, metadata));
                     }
-                    await Promise.all(saves);
+                    const results = await Promise.all(saves);
+                    entryId = results[0];  // Use the global history ID as primary
                     break;
             }
 
@@ -301,8 +304,10 @@ export default class TursoHistoryClient {
             }
 
             if (this.config.debug) {
-                console.log(`Command saved to ${this.mode} history`);
+                console.log(`Command saved to ${this.mode} history with ID: ${entryId}`);
             }
+
+            return entryId;
         } catch (error) {
             console.error('Error saving command:', error);
             throw error;
@@ -310,13 +315,158 @@ export default class TursoHistoryClient {
     }
 
     /**
+     * Update an existing history entry
+     */
+    async updateEntry(entryId, updates) {
+        if (!entryId) return false;
+
+        try {
+            // Update based on mode - different tables have different schemas
+            switch (this.mode) {
+                case 'global':
+                    return await this.updateGlobalEntry(entryId, updates);
+                case 'user':
+                    return await this.updateUserEntry(entryId, updates);
+                case 'machine':
+                    return await this.updateMachineEntry(entryId, updates);
+                case 'hybrid':
+                    // Update all tables in hybrid mode
+                    const results = await Promise.allSettled([
+                        this.updateGlobalEntry(entryId, updates),
+                        this.updateMachineEntry(entryId, updates),
+                        this.updateUserEntry(entryId, updates)
+                    ]);
+                    // Return true if at least one update succeeded
+                    return results.some(r => r.status === 'fulfilled' && r.value === true);
+            }
+        } catch (error) {
+            console.error('Error updating entry:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Update entry in global history table
+     */
+    async updateGlobalEntry(entryId, updates) {
+        try {
+            const updateFields = [];
+            const updateArgs = [];
+
+            if (updates.response !== undefined) {
+                updateFields.push('response = ?');
+                updateArgs.push(updates.response);
+            }
+            if (updates.status !== undefined) {
+                // Global table has tags field - update status in JSON
+                updateFields.push('tags = json_set(tags, "$.status", ?)');
+                updateArgs.push(updates.status);
+            }
+
+            if (updateFields.length === 0) return true;
+
+            updateArgs.push(entryId);
+
+            await this.client.execute({
+                sql: `UPDATE history_global SET ${updateFields.join(', ')} WHERE id = ?`,
+                args: updateArgs
+            });
+
+            if (this.config.debug) {
+                console.log(`Entry ${entryId} updated in history_global`);
+            }
+            return true;
+        } catch (error) {
+            if (this.config.debug) {
+                console.error('Error updating global entry:', error);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Update entry in user history table
+     */
+    async updateUserEntry(entryId, updates) {
+        try {
+            const updateFields = [];
+            const updateArgs = [];
+
+            if (updates.response !== undefined) {
+                updateFields.push('response = ?');
+                updateArgs.push(updates.response);
+            }
+            if (updates.status !== undefined) {
+                // User table has context field - update status in JSON
+                updateFields.push('context = json_set(context, "$.status", ?)');
+                updateArgs.push(updates.status);
+            }
+
+            if (updateFields.length === 0) return true;
+
+            updateArgs.push(entryId);
+
+            await this.client.execute({
+                sql: `UPDATE history_user SET ${updateFields.join(', ')} WHERE id = ?`,
+                args: updateArgs
+            });
+
+            if (this.config.debug) {
+                console.log(`Entry ${entryId} updated in history_user`);
+            }
+            return true;
+        } catch (error) {
+            if (this.config.debug) {
+                console.error('Error updating user entry:', error);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Update entry in machine history table
+     */
+    async updateMachineEntry(entryId, updates) {
+        try {
+            const updateFields = [];
+            const updateArgs = [];
+
+            if (updates.response !== undefined) {
+                updateFields.push('response = ?');
+                updateArgs.push(updates.response);
+            }
+            // Machine table doesn't have tags or context field for status
+
+            if (updateFields.length === 0) return true;
+
+            updateArgs.push(entryId);
+
+            await this.client.execute({
+                sql: `UPDATE history_machine SET ${updateFields.join(', ')} WHERE id = ?`,
+                args: updateArgs
+            });
+
+            if (this.config.debug) {
+                console.log(`Entry ${entryId} updated in history_machine`);
+            }
+            return true;
+        } catch (error) {
+            if (this.config.debug) {
+                console.error('Error updating machine entry:', error);
+            }
+            return false;
+        }
+    }
+
+    /**
      * Salva no histórico global
      */
     async saveToGlobal(command, response, metadata) {
-        await this.client.execute({
+        const result = await this.client.execute({
             sql: `INSERT INTO history_global
                   (command, response, machine_id, user_id, timestamp, tokens_used, execution_time_ms, tags, session_id)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  RETURNING id`,
             args: [
                 command,
                 response,
@@ -329,18 +479,22 @@ export default class TursoHistoryClient {
                 metadata.session_id || this.sessionId
             ]
         });
+
+        // Return the ID of the inserted row
+        return result.rows?.[0]?.id || null;
     }
 
     /**
      * Salva no histórico do usuário
      */
     async saveToUser(command, response, metadata) {
-        if (!this.userId) return;
+        if (!this.userId) return null;
 
-        await this.client.execute({
+        const result = await this.client.execute({
             sql: `INSERT INTO history_user
                   (user_id, command, response, machine_id, timestamp, session_id, context, tokens_used, execution_time_ms)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  RETURNING id`,
             args: [
                 this.userId,
                 command,
@@ -353,16 +507,20 @@ export default class TursoHistoryClient {
                 metadata.execution_time_ms || null
             ]
         });
+
+        // Return the ID of the inserted row
+        return result.rows?.[0]?.id || null;
     }
 
     /**
      * Salva no histórico da máquina
      */
     async saveToMachine(command, response, metadata) {
-        await this.client.execute({
+        const result = await this.client.execute({
             sql: `INSERT INTO history_machine
                   (machine_id, command, response, user_id, timestamp, error_code, session_id)
-                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                  VALUES (?, ?, ?, ?, ?, ?, ?)
+                  RETURNING id`,
             args: [
                 this.machineId,
                 command,
@@ -373,6 +531,9 @@ export default class TursoHistoryClient {
                 metadata.session_id || this.sessionId
             ]
         });
+
+        // Return the ID of the inserted row
+        return result.rows?.[0]?.id || null;
     }
 
     /**

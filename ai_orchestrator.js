@@ -24,9 +24,67 @@ export default class AICommandOrchestrator {
 
     async orchestrateExecution(question, context, animator = null) {
         this.startTime = Date.now();
+
+        // Extract signal from context if provided
+        const signal = context.signal || null;
+
+        // Check if already aborted
+        if (signal?.aborted) {
+            console.log(chalk.yellow('⚠️ [Orchestrator] Request already aborted'));
+            throw new Error('Request aborted');
+        }
+
+        // CRITICAL: Check for questions about previous messages FIRST
+        if (question.toLowerCase().includes('anterior') ||
+            question.toLowerCase().includes('disse') ||
+            question.toLowerCase().includes('escrevi') ||
+            question.toLowerCase().includes('pergunt')) {
+
+            // Check if we have history to reference
+            if (context.history && context.history.length > 0) {
+                console.log('🔍 [Orchestrator] Detected history question with', context.history.length, 'messages');
+
+                // Find previous user messages
+                const previousUserMessages = [];
+                for (let i = context.history.length - 1; i >= 0; i--) {
+                    const msg = context.history[i];
+                    if (msg.role === 'user' && msg.content !== question) {
+                        previousUserMessages.push(msg.content);
+                        if (previousUserMessages.length >= 3) break;
+                    }
+                }
+
+                if (previousUserMessages.length > 0) {
+                    // Return direct answer without executing commands
+                    const answer = previousUserMessages.length === 1
+                        ? `Você escreveu anteriormente: "${previousUserMessages[0]}"`
+                        : `Suas mensagens anteriores foram:\n${previousUserMessages.map((m, i) => `${i+1}. "${m}"`).join('\n')}`;
+
+                    return {
+                        success: true,
+                        directAnswer: answer,
+                        executedCommands: [],
+                        results: [],
+                        iterations: 0
+                    };
+                }
+            }
+        }
+
+        // Debug logging
+        if (context.verbose) {
+            console.log('🔍 [Orchestrator] Received context with history?', !!context.history);
+            if (context.history) {
+                console.log('🔍 [Orchestrator] History length:', context.history.length);
+                console.log('🔍 [Orchestrator] History content:', context.history);
+            }
+        }
+
         const executionContext = {
             originalQuestion: question,
-            systemContext: context,
+            systemContext: context,  // This now contains history directly
+            options: context, // Pass the entire context as options (includes signal if provided)
+            signal: signal,  // Store signal for use in helper methods
             executedCommands: [],
             results: [],
             currentPlan: [],
@@ -49,11 +107,24 @@ export default class AICommandOrchestrator {
             if (animator) {
                 animator.updateStatus('Analisando pergunta e planejando comandos');
             }
+
+            // Check before AI call
+            if (signal?.aborted) {
+                console.log(chalk.yellow('\n⚠️ [Orchestrator] Request aborted before initial planning'));
+                throw new Error('Request aborted');
+            }
+
             const initialPlan = await this.planInitialCommands(executionContext);
             executionContext.currentPlan = initialPlan.commands || [];
             executionContext.metadata.aiCalls++;
 
             while (executionContext.iteration < this.config.maxIterations && !executionContext.isComplete) {
+                // Check if request was aborted
+                if (signal?.aborted) {
+                    console.log(chalk.yellow('\n⚠️ [Orchestrator] Request aborted by user'));
+                    throw new Error('Request aborted');
+                }
+
                 if (Date.now() - this.startTime > this.config.maxExecutionTime) {
                     console.log(chalk.yellow('\n⚠️ Tempo limite excedido'));
                     break;
@@ -68,6 +139,13 @@ export default class AICommandOrchestrator {
                 if (animator) {
                     animator.updateStatus('Verificando se a tarefa está completa');
                 }
+
+                // Check before AI call
+                if (signal?.aborted) {
+                    console.log(chalk.yellow('\n⚠️ [Orchestrator] Request aborted before completion check'));
+                    throw new Error('Request aborted');
+                }
+
                 const completionCheck = await this.isTaskComplete(executionContext);
                 executionContext.metadata.aiCalls++;
 
@@ -83,6 +161,13 @@ export default class AICommandOrchestrator {
                     if (animator) {
                         animator.updateStatus('Planejando próximos comandos');
                     }
+
+                    // Check before AI call
+                    if (signal?.aborted) {
+                        console.log(chalk.yellow('\n⚠️ [Orchestrator] Request aborted before planning next commands'));
+                        throw new Error('Request aborted');
+                    }
+
                     const nextStep = await this.planNextCommands(executionContext, completionCheck.reasoning);
                     executionContext.metadata.aiCalls++;
 
@@ -106,6 +191,13 @@ export default class AICommandOrchestrator {
             if (animator) {
                 animator.updateStatus('Preparando resposta final');
             }
+
+            // Check before final AI call
+            if (signal?.aborted) {
+                console.log(chalk.yellow('\n⚠️ [Orchestrator] Request aborted before final synthesis'));
+                throw new Error('Request aborted');
+            }
+
             const synthesis = await this.synthesizeDirectAnswer(executionContext);
             executionContext.directAnswer = synthesis.directAnswer;
 
@@ -119,8 +211,24 @@ export default class AICommandOrchestrator {
 
     async planInitialCommands(context) {
         const sanitizedQuestion = context.originalQuestion.replace(/[\r\n]+/g, ' ').substring(0, this.config.maxQuestionLength);
-        const prompt = `Você é um planejador de comandos. Sua tarefa é analisar uma pergunta e criar um plano inicial de comandos para respondê-la.
 
+        // CRITICAL FIX: Include conversation history in the prompt
+        let historyContext = '';
+        if (context.systemContext.history && context.systemContext.history.length > 0) {
+            historyContext = '\n\nCONTEXTO DA CONVERSA ANTERIOR:\n';
+            context.systemContext.history.forEach(msg => {
+                if (msg.role === 'user') {
+                    historyContext += `Usuário disse: "${msg.content}"\n`;
+                } else if (msg.role === 'assistant' && !msg.content.includes('[Message processing was interrupted]')) {
+                    const preview = msg.content.substring(0, 100);
+                    historyContext += `Assistente respondeu: "${preview}..."\n`;
+                }
+            });
+            historyContext += '\nLEVE EM CONTA O CONTEXTO ACIMA AO RESPONDER!\n';
+        }
+
+        const prompt = `Você é um planejador de comandos. Sua tarefa é analisar uma pergunta e criar um plano inicial de comandos para respondê-la.
+${historyContext}
 <pergunta_original>
 ${sanitizedQuestion}
 </pergunta_original>
@@ -130,6 +238,7 @@ OS: ${context.systemContext.os || 'Linux'}
 Distribuição: ${context.systemContext.distro || 'Unknown'}
 
 REGRAS:
+- IMPORTANTE: Se a pergunta se refere a algo mencionado anteriormente, considere o contexto
 - Pense no primeiro comando mais lógico para iniciar a investigação.
 
 Retorne APENAS um objeto JSON com a lista de comandos iniciais.
@@ -138,7 +247,8 @@ Retorne APENAS um objeto JSON com a lista de comandos iniciais.
 }`;
 
         try {
-            const response = await this.ai.askCommand(prompt, context.systemContext);
+            // Now systemContext IS the context, which contains history directly
+            const response = await this.ai.askCommand(prompt, context.systemContext, context.systemContext);
             if (!response) throw new Error('IA não retornou plano inicial');
             const jsonStr = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/)?.[1] || response;
             return JSON.parse(jsonStr);
@@ -163,7 +273,8 @@ IMPORTANTE: Responda APENAS com JSON puro, sem texto adicional.
 Formato: {"isComplete": true} ou {"isComplete": false, "reasoning": "o que falta"}`;
 
         try {
-            const response = await this.ai.askCommand(prompt, context.systemContext);
+            // Now systemContext IS the context, which contains history directly
+            const response = await this.ai.askCommand(prompt, context.systemContext, context.systemContext);
             if (!response) throw new Error('IA não retornou resposta para isTaskComplete');
 
             // Try to extract JSON from the response
@@ -243,7 +354,8 @@ Responda APENAS com JSON:
 }`;
 
         try {
-            const response = await this.ai.askCommand(prompt, context.systemContext);
+            // Now systemContext IS the context, which contains history directly
+            const response = await this.ai.askCommand(prompt, context.systemContext, context.systemContext);
             if (!response) throw new Error('IA não retornou resposta para planNextCommands');
 
             // Try to extract JSON from the response
@@ -281,6 +393,32 @@ Responda APENAS com JSON:
     }
 
     async synthesizeDirectAnswer(context) {
+        // Special handling for conversational queries about previous messages
+        if (context.originalQuestion.toLowerCase().includes('anterior') ||
+            context.originalQuestion.toLowerCase().includes('disse') ||
+            context.originalQuestion.toLowerCase().includes('escrevi')) {
+
+            // Check if we have conversation history
+            if (context.systemContext.history && context.systemContext.history.length > 0) {
+                // Find the most recent user messages before the current question
+                const previousMessages = [];
+                for (let i = context.systemContext.history.length - 1; i >= 0; i--) {
+                    const msg = context.systemContext.history[i];
+                    if (msg.role === 'user' && msg.content !== context.originalQuestion) {
+                        previousMessages.push(msg.content);
+                        if (previousMessages.length >= 2) break; // Get last 2 messages
+                    }
+                }
+
+                if (previousMessages.length > 0) {
+                    const answer = previousMessages.length === 1
+                        ? `Você disse anteriormente: "${previousMessages[0]}"`
+                        : `Suas mensagens anteriores foram:\n1. "${previousMessages[1]}"\n2. "${previousMessages[0]}"`;
+                    return { directAnswer: answer };
+                }
+            }
+        }
+
         if (!context.results.length) return { directAnswer: "Nenhum comando foi executado, não foi possível obter uma resposta." };
 
         // Use working memory data for synthesis
@@ -296,7 +434,8 @@ Seja direto e específico.
 Responda APENAS: {"directAnswer": "resposta direta com dados reais"}`;
 
         try {
-            const response = await this.ai.askCommand(prompt, context.systemContext);
+            // Now systemContext IS the context, which contains history directly
+            const response = await this.ai.askCommand(prompt, context.systemContext, context.systemContext);
             if (!response) throw new Error('IA não retornou resposta para síntese');
             const jsonStr = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/)?.[1] || response;
             return JSON.parse(jsonStr);
@@ -306,6 +445,12 @@ Responda APENAS: {"directAnswer": "resposta direta com dados reais"}`;
     }
 
     async executeNextBatch(context, animator = null) {
+        // Check if request was aborted before executing command
+        if (context.signal?.aborted) {
+            console.log(chalk.yellow('\n⚠️ [Orchestrator] Request aborted before command execution'));
+            throw new Error('Request aborted');
+        }
+
         const command = context.currentPlan.shift();
         if (!command) return false;
 

@@ -11,13 +11,12 @@
  * - Bracketed paste mode support
  */
 
-import React from 'react';
-import { render, Text, Box, useInput, useApp, useStdout } from 'ink';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, {useEffect, useRef, useState} from 'react';
+import {Box, render, Text, useApp, useInput} from 'ink';
 import Spinner from 'ink-spinner';
 import MultilineInput from './components/MultilineInput.js';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import {fileURLToPath} from 'url';
 import fs from 'fs/promises';
 
 // Import backend modules
@@ -62,14 +61,12 @@ const MCPInkApp = () => {
     // New state for enhanced controls
     const [lastCtrlC, setLastCtrlC] = useState(0);
     const [lastEsc, setLastEsc] = useState(0);
-    const [cancelToken, setCancelToken] = useState(null);
     const [isCancelled, setIsCancelled] = useState(false);
     const currentRequestId = useRef(null);
     const currentTursoEntryId = useRef(null);  // Track current Turso entry ID
     const activeRequests = useRef(new Map());  // Track active requests
 
     const { exit } = useApp();
-    const { stdout } = useStdout();
     const orchestrator = useRef(null);
     const patternMatcher = useRef(null);
     const tursoAdapter = useRef(null);
@@ -116,9 +113,7 @@ const MCPInkApp = () => {
                 let aiModel;
                 try {
                     // Use the loaded config
-                    const modelConfig = loadedConfig;
-
-                    aiModel = await ModelFactory.createModel(modelConfig);
+                    aiModel = await ModelFactory.createModel(loadedConfig);
                     if (isDebug) {
                         console.log('  ✓ AI Model initialized');
                     }
@@ -126,7 +121,7 @@ const MCPInkApp = () => {
                     console.error('Failed to initialize AI model:', error);
                     // Fall back to a simple wrapper
                     aiModel = {
-                        askCommand: async (prompt, options = {}) => {
+                        askCommand: async (_prompt, _options = {}) => {
                             return {
                                 response: `Error: AI model not available - ${error.message}`,
                                 success: false
@@ -162,8 +157,7 @@ const MCPInkApp = () => {
                             try {
                                 // Simple conversation without tools
                                 if (aiModel.askCommand) {
-                                    const result = await aiModel.askCommand(command, options);
-                                    return result;
+                                    return await aiModel.askCommand(command, options);
                                 } else {
                                     // Fallback to a simple response
                                     return {
@@ -319,7 +313,7 @@ const MCPInkApp = () => {
         if (!command.trim()) return;
 
         // Generate unique request_id (timestamp + random for uniqueness)
-        const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
         currentRequestId.current = requestId;
 
         // Cancel any previous request
@@ -782,8 +776,7 @@ Config: ${config ? 'Loaded' : 'Default'}`);
 
                 // Update input with pasted content and add a space at the end
                 setInput(prev => {
-                    const newContent = prev + processedContent + ' ';
-                    return newContent;
+                    return prev + processedContent + ' ';
                 });
 
                 if (isDebug) {
@@ -949,7 +942,6 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                         setLastCtrlC(0);
                     }, 2000);
                 }
-                return;
             } else if (key.backspace || key.delete) {
                 setInput(prev => prev.slice(0, -1));
             } else if (key.ctrl && key.l) {

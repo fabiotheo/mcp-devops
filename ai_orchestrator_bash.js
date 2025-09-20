@@ -245,12 +245,19 @@ export default class AICommandOrchestratorBash {
             const systemPrompt = `Você é um assistente Linux especializado em administração de sistemas.
 Você tem acesso a uma ferramenta bash com sessão persistente que mantém estado entre comandos.
 
+IMPORTANTE - HISTÓRICO E MENSAGENS CANCELADAS:
+- Você tem acesso ao HISTÓRICO COMPLETO da conversa
+- Mensagens marcadas com "[A mensagem anterior foi cancelada pelo usuário com ESC antes de ser respondida]" indicam que o usuário cancelou o processamento, mas A MENSAGEM DO USUÁRIO AINDA EXISTE E DEVE SER CONSIDERADA
+- Quando o usuário perguntar "o que eu escrevi antes?" ou "qual foi minha pergunta anterior?", você DEVE mencionar TODAS as mensagens anteriores, incluindo as que foram canceladas
+- Trate mensagens canceladas como parte normal do histórico - elas foram escritas pelo usuário e devem ser reconhecidas
+
 INSTRUÇÕES IMPORTANTES:
 1. Use a ferramenta bash para executar comandos do sistema
 2. A sessão mantém variáveis, diretório atual e arquivos entre comandos
 3. Você pode encadear comandos com && ou ;
 4. Use pipes, redirecionamentos e scripts conforme necessário
 5. Para tarefas específicas de fail2ban, use as ferramentas otimizadas quando disponíveis
+6. Considere todo o histórico da conversa ao responder, incluindo mensagens canceladas
 
 <use_parallel_tool_calls>
 Sempre que possível, execute operações independentes em paralelo.
@@ -297,12 +304,17 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
     }
 
     async executeWithTools(context, systemPrompt, question, tools, toolChoice = null, options = {}) {
-        const messages = [
-            {
-                role: 'user',
-                content: question
-            }
-        ];
+        // Start with history from context if available, otherwise empty array
+        // The history is nested inside systemContext when coming from orchestrateExecution
+        const messages = context.systemContext?.history && Array.isArray(context.systemContext.history)
+            ? [...context.systemContext.history]  // Use existing history from systemContext
+            : [];
+
+        // Add current question as the latest user message
+        messages.push({
+            role: 'user',
+            content: question
+        });
 
         let continueProcessing = true;
         let iterations = 0;
@@ -366,6 +378,13 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
             } else {
                 const textBlocks = response.content.filter(block => block.type === 'text');
                 context.finalAnswer = textBlocks.map(block => block.text).join('\n');
+
+                // Add the assistant's response to messages for history continuity
+                messages.push({
+                    role: 'assistant',
+                    content: context.finalAnswer
+                });
+
                 continueProcessing = false;
             }
         }

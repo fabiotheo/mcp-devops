@@ -58,7 +58,9 @@
       "Bash(./test-context-preservation.sh:*)",
       "Bash(./testar-agora.sh:*)",
       "Bash(python3:*)",
-      "Bash(./test-cancel-flow.sh:*)"
+      "Bash(./test-cancel-flow.sh:*)",
+      "mcp__zen__thinkdeep",
+      "Bash(./test-fase1.sh:*)"
     ],
     "deny": [],
     "ask": []

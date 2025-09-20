@@ -31,6 +31,9 @@ const __dirname = path.dirname(__filename);
 // Module-level variables
 const isDebug = process.argv.includes('--debug');
 
+// Constant for cancellation marker
+const CANCELLATION_MARKER = '[A mensagem anterior foi cancelada pelo usuário com ESC antes de ser respondida]';
+
 // Process --user argument or use environment variable
 const getUserFromArgs = () => {
     const userArgIndex = process.argv.indexOf('--user');
@@ -51,6 +54,7 @@ const MCPInkApp = () => {
     const [input, setInput] = useState('');
     const [history, setHistory] = useState([]);
     const [commandHistory, setCommandHistory] = useState([]);
+    const [fullHistory, setFullHistory] = useState([]); // Full conversation with responses
     const [historyIndex, setHistoryIndex] = useState(-1);
     const [status, setStatus] = useState('initializing');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -145,6 +149,9 @@ const MCPInkApp = () => {
 
                     // Add wrapper method for compatibility
                     orchestrator.current.askCommand = async function(command, options = {}) {
+                        if (isDebug) {
+                            console.log('[Debug] askCommand wrapper called, using orchestrateExecution');
+                        }
                         // Pass history and other options directly in the context that becomes systemContext
                         const contextWithHistory = {
                             ...options,  // Include all options (history, signal, etc)
@@ -240,24 +247,47 @@ const MCPInkApp = () => {
                 const userHistory = await tursoAdapter.current.getHistory(100); // Get last 100 commands
                 const commands = [];
 
-                // Process history to include cancellation markers
+                // Store full conversation history (not just commands)
+                const fullConversationHistory = [];
+
+                // Process history to include both questions and responses
                 userHistory.forEach(h => {
                     if (h.command && h.command.trim()) {
+                        // Add the user's command
                         commands.push(h.command);
+                        fullConversationHistory.push({
+                            role: 'user',
+                            content: h.command
+                        });
 
-                        // Check if this was cancelled (no response or marked as cancelled)
-                        if (!h.response || h.response === '[Cancelled by user]' ||
-                            (h.context && typeof h.context === 'string' &&
-                             h.context.includes('"status":"cancelled"'))) {
+                        // Add the response or cancellation marker
+                        if (h.status === 'cancelled') {
+                            // For cancelled messages, show what was asked but not answered
                             commands.push('[User pressed ESC - Previous message was interrupted]');
+                            fullConversationHistory.push({
+                                role: 'assistant',
+                                content: '[Message processing was interrupted - no response generated]'
+                            });
+                        } else if (h.response && h.response.trim()) {
+                            // Add the actual response
+                            fullConversationHistory.push({
+                                role: 'assistant',
+                                content: h.response
+                            });
                         }
                     }
                 });
 
+                // Store both for different uses
                 setCommandHistory(commands);
+
+                // Store full conversation for AI context (we'll need to add this state)
+                setFullHistory(fullConversationHistory);
                 if (isDebug) {
                     console.log(`[Debug] Loaded ${userHistory.length} entries from Turso for user ${user}`);
                     console.log(`[Debug] Processed into ${commands.length} command history items (including cancellation markers)`);
+                    console.log(`[Debug] Full conversation history has ${fullConversationHistory.length} messages`);
+                    console.log(`[Debug] Full history:`, JSON.stringify(fullConversationHistory, null, 2));
                 }
                 return;
             }
@@ -357,7 +387,56 @@ const MCPInkApp = () => {
             }
         }
 
-        // 5. Update Turso if this was a cancellation (not protected by abort)
+        // 5. CRITICAL: Add cancelled message to fullHistory IMMEDIATELY
+        if (reason.includes('cancel') && request?.command) {
+            if (isDebug) {
+                console.log('[Debug] Adding cancelled message to fullHistory');
+            }
+
+            // Add the user's cancelled message and cancellation marker to fullHistory
+            setFullHistory(prev => {
+                const updated = [...prev];
+
+                // Check if the user message is already in history
+                const lastMessage = updated[updated.length - 1];
+                const secondLastMessage = updated[updated.length - 2];
+                const userMessageExists = (lastMessage?.role === 'user' && lastMessage?.content === request.command) ||
+                                         (secondLastMessage?.role === 'user' && secondLastMessage?.content === request.command);
+
+                // Check if cancellation marker already exists
+                const hasMarker = lastMessage?.role === 'assistant' && lastMessage?.content === CANCELLATION_MARKER;
+
+                // Add user message if it doesn't exist
+                if (!userMessageExists) {
+                    updated.push({
+                        role: 'user',
+                        content: request.command
+                    });
+                    if (isDebug) {
+                        console.log('[Debug] Added user message to fullHistory');
+                    }
+                }
+
+                // Add cancellation marker if it doesn't exist
+                if (!hasMarker) {
+                    updated.push({
+                        role: 'assistant',
+                        content: CANCELLATION_MARKER
+                    });
+                    if (isDebug) {
+                        console.log('[Debug] Added cancellation marker to history');
+                    }
+                }
+
+                if (isDebug) {
+                    console.log('[Debug] fullHistory now has', updated.length, 'messages');
+                }
+
+                return updated;
+            });
+        }
+
+        // 6. Update Turso if this was a cancellation (not protected by abort)
         if (isDebug) {
             console.log(`[Debug] Cleanup - checking Turso update conditions:`);
             console.log(`  - reason: "${reason}"`);
@@ -382,7 +461,7 @@ const MCPInkApp = () => {
             }
         }
 
-        // 6. Clear references
+        // 7. Clear references
         if (currentRequestId.current === requestId) {
             currentRequestId.current = null;
         }
@@ -393,7 +472,7 @@ const MCPInkApp = () => {
             dbAbortControllerRef.current = null;
         }
 
-        // 7. Finally remove from Map (do this LAST to ensure all operations can access request data)
+        // 8. Finally remove from Map (do this LAST to ensure all operations can access request data)
         activeRequests.current.delete(requestId);
     };
 
@@ -492,6 +571,9 @@ const MCPInkApp = () => {
         });
         setHistoryIndex(-1);
 
+        // Also add to full history as user message
+        setFullHistory(prev => [...prev, { role: 'user', content: command }]);
+
         try {
             let output = '';
 
@@ -503,26 +585,10 @@ const MCPInkApp = () => {
                 // The pattern info can be used to enhance the AI response
                 setStatus('processing');
 
-                // Convert command history to proper format for AI (same as below)
-                const formattedHistory = [];
-                const recentCommands = commandHistory.slice(-10);
-                recentCommands.forEach((cmd, index) => {
-                    if (cmd.startsWith('[User pressed ESC')) {
-                        return;
-                    }
-                    formattedHistory.push({
-                        role: 'user',
-                        content: cmd
-                    });
-                    if (index < recentCommands.length - 1 &&
-                        recentCommands[index + 1] &&
-                        recentCommands[index + 1].startsWith('[User pressed ESC')) {
-                        formattedHistory.push({
-                            role: 'assistant',
-                            content: '[Message processing was interrupted by user]'
-                        });
-                    }
-                });
+                // Use full history if available, otherwise convert command history
+                const formattedHistory = fullHistory.length > 0
+                    ? fullHistory.slice(-20)  // Last 20 messages (10 exchanges)
+                    : [];
 
                 const result = await orchestrator.current.askCommand(command, {
                     history: formattedHistory,
@@ -540,6 +606,11 @@ const MCPInkApp = () => {
 
                     // If still no output but result has success and a response somewhere, try to extract it
                     if (!output && result.success === false && result.error) {
+                        // Don't show error message for cancelled operations
+                        if (result.error === 'CANCELLED') {
+                            // Silently ignore - the cancellation is already handled
+                            return;
+                        }
                         output = `Erro: ${result.error}`;
                     } else if (!output) {
                         // Last resort - show JSON if we can't find the actual response
@@ -552,8 +623,14 @@ const MCPInkApp = () => {
                 setResponse(output);
                 setHistory(prev => [...prev, formatResponse(output)]);
 
+                // Add response to full history
+                setFullHistory(prev => [...prev, { role: 'assistant', content: output }]);
+
                 // Update Turso with response and status 'completed'
                 if (currentTursoEntryId.current && tursoAdapter.current && tursoAdapter.current.isConnected()) {
+                    if (isDebug) {
+                        console.log(`[Debug] About to update Turso entry ${currentTursoEntryId.current} to completed (should not happen for cancelled requests!)`);
+                    }
                     await tursoAdapter.current.updateWithResponseAndStatus(currentTursoEntryId.current, output, 'completed');
                     if (isDebug) {
                         console.log(`[Turso] Updated entry ${currentTursoEntryId.current} with response and status: completed`);
@@ -596,32 +673,10 @@ const MCPInkApp = () => {
                 }
 
                 try {
-                    // Convert command history to proper format for AI
-                    const formattedHistory = [];
-                    const recentCommands = commandHistory.slice(-10); // Get last 10 items for context
-
-                    recentCommands.forEach((cmd, index) => {
-                        if (cmd.startsWith('[User pressed ESC')) {
-                            // Skip cancellation markers - they're metadata
-                            return;
-                        }
-                        // Add as user message
-                        formattedHistory.push({
-                            role: 'user',
-                            content: cmd
-                        });
-
-                        // If this was a cancelled message (next item is cancellation marker)
-                        if (index < recentCommands.length - 1 &&
-                            recentCommands[index + 1] &&
-                            recentCommands[index + 1].startsWith('[User pressed ESC')) {
-                            // Add a note that this was interrupted
-                            formattedHistory.push({
-                                role: 'assistant',
-                                content: '[Message processing was interrupted by user]'
-                            });
-                        }
-                    });
+                    // Use full history if available, otherwise empty
+                    const formattedHistory = fullHistory.length > 0
+                        ? fullHistory.slice(-20)  // Last 20 messages (10 exchanges)
+                        : [];
 
                     // Final check before calling AI (prevent race condition)
                     const finalCheck = activeRequests.current.get(requestId);
@@ -673,6 +728,11 @@ const MCPInkApp = () => {
 
                     // If still no output but result has success and a response somewhere, try to extract it
                     if (!output && result.success === false && result.error) {
+                        // Don't show error message for cancelled operations
+                        if (result.error === 'CANCELLED') {
+                            // Silently ignore - the cancellation is already handled
+                            return;
+                        }
                         output = `Erro: ${result.error}`;
                     } else if (!output) {
                         // Last resort - show JSON if we can't find the actual response
@@ -698,8 +758,14 @@ const MCPInkApp = () => {
                 setResponse(output);
                 setHistory(prev => [...prev, formatResponse(output)]);
 
+                // Add response to full history
+                setFullHistory(prev => [...prev, { role: 'assistant', content: output }]);
+
                 // Update Turso with response and status 'completed'
                 if (currentTursoEntryId.current && tursoAdapter.current && tursoAdapter.current.isConnected()) {
+                    if (isDebug) {
+                        console.log(`[Debug] About to update Turso entry ${currentTursoEntryId.current} to completed (should not happen for cancelled requests!)`);
+                    }
                     await tursoAdapter.current.updateWithResponseAndStatus(currentTursoEntryId.current, output, 'completed');
                     if (isDebug) {
                         console.log(`[Turso] Updated entry ${currentTursoEntryId.current} with response and status: completed`);
@@ -918,7 +984,7 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                             request.status = 'cancelled';
                         }
 
-                        // Use unified cleanup function (it will handle aborting) - clear input on ESC
+                        // Use unified cleanup function (it will handle everything including fullHistory update)
                         await cleanupRequest(requestIdToCancel, 'Operation cancelled by user', true);
 
                         // Add cancellation marker to command history for context
@@ -926,36 +992,10 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                         setCommandHistory(prev => {
                             const newHistory = [...prev, '[User pressed ESC - Previous message was interrupted]'].slice(-100);
                             if (isDebug) {
-                                console.log('[Debug] Added cancellation marker to history');
+                                console.log('[Debug] Added cancellation marker to command history');
                             }
                             return newHistory;
                         });
-
-                        // Update DB async without blocking (it's not the source of truth)
-                        if (requestIdToCancel && tursoAdapter.current && tursoAdapter.current.isConnected()) {
-                            // Don't await - update DB in background
-                            tursoAdapter.current.updateStatusByRequestId(requestIdToCancel, 'cancelled')
-                                .then(updated => {
-                                    if (!updated && currentTursoEntryId.current) {
-                                        // Retry with entry ID if needed
-                                        return tursoAdapter.current.updateStatus(currentTursoEntryId.current, 'cancelled');
-                                    }
-                                })
-                                .then(() => {
-                                    if (isDebug) {
-                                        console.log(`[Turso] Marked request ${requestIdToCancel} as cancelled`);
-                                    }
-                                })
-                                .catch(err => {
-                                    if (isDebug) {
-                                        console.error(`[Turso] Failed to update status:`, err);
-                                    }
-                                });
-                        }
-
-                        // Now clear the IDs
-                        currentRequestId.current = null;
-                        currentTursoEntryId.current = null;
 
                         // Reset cancellation flag after a short delay to allow cleanup
                         setTimeout(() => {

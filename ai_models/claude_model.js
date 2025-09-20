@@ -43,6 +43,9 @@ export default class ClaudeModel extends BaseAIModel {
     }
 
     async askWithTools({ system, messages, tools, tool_choice = { type: 'auto' }, signal }) {
+        console.log('------------------------------')
+        console.log({system, messages, tools, tool_choice, signal})
+        console.log('------------------------------')
         if (!this.isInitialized) {
             await this.initialize();
         }
@@ -86,6 +89,11 @@ export default class ClaudeModel extends BaseAIModel {
 
     // Manter compatibilidade com o sistema antigo
     async askCommand(prompt, context) {
+        console.log("*********************************************")
+        console.log({prompt, context})
+        console.log("*********************************************")
+
+
         if (!this.isInitialized) {
             await this.initialize();
         }
@@ -123,10 +131,31 @@ export default class ClaudeModel extends BaseAIModel {
                 content: prompt
             });
 
+            // DEBUG: Log exactly what we're sending to Anthropic
+            console.log('\n========== SENDING TO ANTHROPIC API ==========');
+            console.log('Model:', this.modelName);
+            console.log('System prompt:', `Você é um assistente Linux especializado. Responda de forma concisa e precisa.
+
+IMPORTANTE - HISTÓRICO E MENSAGENS CANCELADAS:
+- Você tem acesso ao HISTÓRICO COMPLETO da conversa
+- Mensagens marcadas com "[A mensagem anterior foi cancelada pelo usuário com ESC antes de ser respondida]" indicam que o usuário cancelou o processamento, mas A MENSAGEM DO USUÁRIO AINDA EXISTE E DEVE SER CONSIDERADA
+- Quando o usuário perguntar "o que eu escrevi antes?" ou "qual foi minha pergunta anterior?", você DEVE mencionar TODAS as mensagens anteriores, incluindo as que foram canceladas
+- Trate mensagens canceladas como parte normal do histórico - elas foram escritas pelo usuário e devem ser reconhecidas`);
+            console.log('Messages array being sent:');
+            console.log(JSON.stringify(messages, null, 2));
+            console.log('Total messages:', messages.length);
+            console.log('===============================================\n');
+
             const response = await this.client.messages.create({
                 model: this.modelName,
                 max_tokens: 2048,
-                system: "Você é um assistente Linux especializado. Responda de forma concisa e precisa.",
+                system: `Você é um assistente Linux especializado. Responda de forma concisa e precisa.
+
+IMPORTANTE - HISTÓRICO E MENSAGENS CANCELADAS:
+- Você tem acesso ao HISTÓRICO COMPLETO da conversa
+- Mensagens marcadas com "[A mensagem anterior foi cancelada pelo usuário com ESC antes de ser respondida]" indicam que o usuário cancelou o processamento, mas A MENSAGEM DO USUÁRIO AINDA EXISTE E DEVE SER CONSIDERADA
+- Quando o usuário perguntar "o que eu escrevi antes?" ou "qual foi minha pergunta anterior?", você DEVE mencionar TODAS as mensagens anteriores, incluindo as que foram canceladas
+- Trate mensagens canceladas como parte normal do histórico - elas foram escritas pelo usuário e devem ser reconhecidas`,
                 messages: messages
             });
 

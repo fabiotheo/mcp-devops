@@ -76,7 +76,11 @@
       "Bash(if [ -f interface-v2/package.json ])",
       "Bash(then cat interface-v2/package.json)",
       "Bash(else echo \"  Usando package.json principal\")",
-      "Bash(while read dir)"
+      "Bash(while read dir)",
+      "Bash(for:*)",
+      "Bash(do echo \"📁 Verificando: interface-v2/$file\")",
+      "Bash(do echo \"📄 $file:\")",
+      "Bash(head:*)"
     ],
     "deny": [],
     "ask": []

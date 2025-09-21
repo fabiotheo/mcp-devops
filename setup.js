@@ -949,6 +949,18 @@ export default class ModelFactory {
         // Ajusta os imports relativos para funcionarem na estrutura instalada
         let adjustedContent = content;
 
+        // Se o arquivo vem de interface-v2/, precisa ajustar os imports da v2
+        if (sourceFile.includes('interface-v2/')) {
+            // ../ai_orchestrator_bash.js -> ./ai_orchestrator_bash.js
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_orchestrator_bash\.js['"]/g, "from './ai_orchestrator_bash.js'");
+            // ../libs/ -> ./libs/
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
+            // ../ai_models/ -> ./ai_models/
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_models\//g, "from './ai_models/");
+            // ./bridges/adapters/TursoAdapter.js -> ./interface-v2/bridges/adapters/TursoAdapter.js
+            adjustedContent = adjustedContent.replace(/from ['"]\.\/bridges\/adapters\/TursoAdapter\.js['"]/g, "from './interface-v2/bridges/adapters/TursoAdapter.js'");
+        }
+
         // Se o arquivo vem de src/core/, precisa ajustar os imports relativos
         if (sourceFile.includes('src/core/')) {
             // ../libs/ -> ./libs/

@@ -36,11 +36,7 @@
   "scripts": {
     "test:ink": "node interface-v2/tests/test-ink-basic.js",
     "test:ink-advanced": "node interface-v2/tests/test-ink-advanced.js",
-    "test:integration": "node interface-v2/tests/test-integration.js",
-    "ink": "node interface-v2/index.js",
-    "ink:v2": "node interface-v2/indexV2.js",
-    "ink:v3": "node interface-v2/indexV3.js",
-    "ink:debug": "node interface-v2/indexV3.js --debug"
+    "test:integration": "node interface-v2/tests/test-integration.js"
   },
   "devDependencies": {
     "@types/react": "^19.1.13",

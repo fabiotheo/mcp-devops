@@ -983,28 +983,24 @@ export default class ModelFactory {
         console.log('\n🔧 Copiando e configurando scripts...');
 
         // Lista de arquivos a serem copiados
-        // MIGRAÇÃO V2: interface-v2/mcp-ink-cli.mjs agora é a interface principal
         const filesToCopy = [
-            // Interface principal V2
-            { src: 'interface-v2/mcp-ink-cli.mjs', dest: 'ipcom-chat-cli.js' },
-
-            // Backup da v1 (se existir)
-            { src: 'ipcom-chat-cli.js', dest: 'ipcom-chat-cli-v1.backup.js' },
-
-            // Orquestradores e libs essenciais
-            { src: 'ai_orchestrator.js', dest: 'ai_orchestrator.js' },
-            { src: 'ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
-
-            // Arquivos de configuração
-            { src: 'configure-ai.js', dest: 'configure-ai.js' },
-
-            // Scripts shell
+            { src: 'src/core/mcp-client.js', dest: 'mcp-client.js' },
+            { src: 'src/core/mcp-assistant.js', dest: 'mcp-assistant.js' },
             { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' },
+            { src: 'configure-ai.js', dest: 'configure-ai.js' },
+            { src: 'mcp-configure', dest: 'mcp-configure' },
+            { src: 'src/core/mcp-interactive.js', dest: 'mcp-interactive.js' },
             { src: 'ipcom-chat', dest: 'ipcom-chat' },
+            { src: 'ipcom-chat-new', dest: 'ipcom-chat-new' },  // Nova interface
+            { src: 'ipcom-chat-cli.js', dest: 'ipcom-chat-cli.js' },
             { src: 'ipcom-chat-launcher.sh', dest: 'ipcom-chat-launcher.sh' },
-
-            // Mantém deploy para Linux
-            { src: 'deploy-linux.sh', dest: 'deploy-linux.sh' }
+            { src: 'src/core/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
+            { src: 'src/core/ai_orchestrator_tools.js', dest: 'ai_orchestrator_tools.js' },
+            { src: 'ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
+            { src: 'deploy-linux.sh', dest: 'deploy-linux.sh' },
+            { src: 'test-turso-integration.js', dest: 'test-turso-integration.js' },
+            { src: 'migrate-to-ink.js', dest: 'migrate-to-ink.js' },
+            { src: 'ipcom-ink', dest: 'ipcom-ink' }
         ];
 
         // Copiar arquivos principais
@@ -1048,7 +1044,7 @@ export default class ModelFactory {
 
         // Copiar libs
         try {
-            const libsDir = path.join(process.cwd(), 'libs');
+            const libsDir = path.join(process.cwd(), 'src/libs');
             const destLibsDir = path.join(this.mcpDir, 'libs');
 
             // Criar diretório libs se não existir
@@ -1071,30 +1067,6 @@ export default class ModelFactory {
         } catch (error) {
             // Silenciosamente ignora se não existir libs
             // console.log(`  ⚠ Diretório libs não encontrado (normal em versões antigas)`);
-        }
-
-        // Copiar components da interface-v2 (necessário para a v2)
-        try {
-            const componentsDir = path.join(process.cwd(), 'interface-v2', 'components');
-            const destComponentsDir = path.join(this.mcpDir, 'components');
-
-            // Criar diretório components se não existir
-            try {
-                await fs.access(destComponentsDir);
-            } catch {
-                await fs.mkdir(destComponentsDir, { recursive: true });
-            }
-
-            const componentFiles = await fs.readdir(componentsDir);
-            for (const file of componentFiles) {
-                const srcPath = path.join(componentsDir, file);
-                const destPath = path.join(destComponentsDir, file);
-                const content = await fs.readFile(srcPath);
-                await fs.writeFile(destPath, content);
-            }
-            console.log(`  ✓ Componentes da interface copiados`);
-        } catch (error) {
-            console.log(`  ⚠ Erro ao copiar components: ${error.message}`);
         }
 
         // Copiar interface-v2 (Nova interface Ink)
@@ -1135,7 +1107,7 @@ export default class ModelFactory {
 
         // Copiar ai_models
         try {
-            const aiModelsDir = path.join(process.cwd(), 'ai_models');
+            const aiModelsDir = path.join(process.cwd(), 'src/ai-models');
             const destAiModelsDir = path.join(this.mcpDir, 'ai_models');
 
             // Criar diretório ai_models se não existir

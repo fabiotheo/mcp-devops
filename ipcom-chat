@@ -1,10 +1,4 @@
 #!/usr/bin/env node
 
-// Check if running with arguments for CLI commands
-if (process.argv.length > 2) {
-    // If arguments provided, use CLI interface
-    await import('./ipcom-chat-cli.js');
-} else {
-    // No arguments - run interactive mode
-    await import('./mcp-interactive.js');
-}
+// V2 Interface - Always use the new Ink interface
+await import('./ipcom-chat-cli.js');

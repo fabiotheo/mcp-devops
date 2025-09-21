@@ -266,7 +266,7 @@ class MCPClaudeFixedFinal {
         return lines;
     }
 
-    handleInput(key) {
+    async handleInput(key) {
         // DEBUG: Log all input if debugging
         if (process.env.DEBUG_PASTE) {
             console.log(`\n[INPUT] Length: ${key.length}, Raw: ${JSON.stringify(key.substring(0, 50))}`);

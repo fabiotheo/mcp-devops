@@ -262,8 +262,8 @@ const MCPInkApp = () => {
 
                         // Add the response or cancellation marker
                         if (h.status === 'cancelled') {
-                            // For cancelled messages, show what was asked but not answered
-                            commands.push('[User pressed ESC - Previous message was interrupted]');
+                            // For cancelled messages, only add to fullConversationHistory for AI context
+                            // Don't add to commands array to keep navigation clean
                             fullConversationHistory.push({
                                 role: 'assistant',
                                 content: '[Message processing was interrupted - no response generated]'

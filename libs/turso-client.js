@@ -694,7 +694,7 @@ export default class TursoHistoryClient {
         switch (table) {
             case 'global':
                 sql = `SELECT * FROM history_global
-                       ORDER BY timestamp DESC
+                       ORDER BY timestamp ASC
                        LIMIT ? OFFSET ?`;
                 args = [limit, offset];
                 break;
@@ -705,7 +705,7 @@ export default class TursoHistoryClient {
                 }
                 sql = `SELECT * FROM history_user
                        WHERE user_id = ?
-                       ORDER BY timestamp DESC
+                       ORDER BY timestamp ASC
                        LIMIT ? OFFSET ?`;
                 args = [this.userId, limit, offset];
                 break;
@@ -713,7 +713,7 @@ export default class TursoHistoryClient {
             case 'machine':
                 sql = `SELECT * FROM history_machine
                        WHERE machine_id = ?
-                       ORDER BY timestamp DESC
+                       ORDER BY timestamp ASC
                        LIMIT ? OFFSET ?`;
                 args = [this.machineId, limit, offset];
                 break;
@@ -735,7 +735,7 @@ export default class TursoHistoryClient {
         switch (this.mode) {
             case 'global':
                 sql = `SELECT * FROM history_global
-                       ORDER BY timestamp DESC
+                       ORDER BY timestamp ASC
                        LIMIT ? OFFSET ?`;
                 args = [limit, offset];
                 break;
@@ -746,7 +746,7 @@ export default class TursoHistoryClient {
                 }
                 sql = `SELECT * FROM history_user
                        WHERE user_id = ?
-                       ORDER BY timestamp DESC
+                       ORDER BY timestamp ASC
                        LIMIT ? OFFSET ?`;
                 args = [this.userId, limit, offset];
                 break;
@@ -754,7 +754,7 @@ export default class TursoHistoryClient {
             case 'machine':
                 sql = `SELECT * FROM history_machine
                        WHERE machine_id = ?
-                       ORDER BY timestamp DESC
+                       ORDER BY timestamp ASC
                        LIMIT ? OFFSET ?`;
                 args = [this.machineId, limit, offset];
                 break;
@@ -776,7 +776,7 @@ export default class TursoHistoryClient {
                            machine_id, user_id, session_id, NULL as tokens_used, NULL as execution_time_ms
                     FROM history_machine
                     WHERE machine_id = ? AND timestamp > unixepoch('now', '-7 days')
-                    ORDER BY timestamp DESC
+                    ORDER BY timestamp ASC
                     LIMIT ? OFFSET ?`;
                 args = [this.userId || '', this.machineId, limit, offset];
                 break;
@@ -799,7 +799,7 @@ export default class TursoHistoryClient {
             case 'global':
                 sql = `SELECT * FROM history_global
                        WHERE command LIKE ? OR response LIKE ?
-                       ORDER BY timestamp DESC
+                       ORDER BY timestamp ASC
                        LIMIT ?`;
                 args = [`%${query}%`, `%${query}%`, limit];
                 break;
@@ -810,7 +810,7 @@ export default class TursoHistoryClient {
                 }
                 sql = `SELECT * FROM history_user
                        WHERE user_id = ? AND (command LIKE ? OR response LIKE ?)
-                       ORDER BY timestamp DESC
+                       ORDER BY timestamp ASC
                        LIMIT ?`;
                 args = [options.userId || this.userId, `%${query}%`, `%${query}%`, limit];
                 break;
@@ -818,7 +818,7 @@ export default class TursoHistoryClient {
             case 'machine':
                 sql = `SELECT * FROM history_machine
                        WHERE machine_id = ? AND (command LIKE ? OR response LIKE ?)
-                       ORDER BY timestamp DESC
+                       ORDER BY timestamp ASC
                        LIMIT ?`;
                 args = [options.machineId || this.machineId, `%${query}%`, `%${query}%`, limit];
                 break;
@@ -841,7 +841,7 @@ export default class TursoHistoryClient {
                            NULL as tokens_used, NULL as execution_time_ms
                     FROM history_machine
                     WHERE command LIKE ? OR response LIKE ?
-                    ORDER BY timestamp DESC
+                    ORDER BY timestamp ASC
                     LIMIT ?`;
                 args = [
                     `%${query}%`, `%${query}%`,

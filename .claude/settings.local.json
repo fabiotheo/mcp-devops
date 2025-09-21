@@ -80,7 +80,8 @@
       "Bash(for:*)",
       "Bash(do echo \"📁 Verificando: interface-v2/$file\")",
       "Bash(do echo \"📄 $file:\")",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(./rollback-ai-models.sh:*)"
     ],
     "deny": [],
     "ask": []

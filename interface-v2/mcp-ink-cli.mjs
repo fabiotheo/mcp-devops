@@ -22,7 +22,7 @@ import fs from 'fs/promises';
 // Import backend modules
 import AICommandOrchestratorBash from '../ai_orchestrator_bash.js';
 import PatternMatcher from '../libs/pattern_matcher.js';
-import ModelFactory from '../ai_models/model_factory.js';
+import ModelFactory from './ai_models/model_factory.js';
 import TursoAdapter from './bridges/adapters/TursoAdapter.js';
 
 const __filename = fileURLToPath(import.meta.url);

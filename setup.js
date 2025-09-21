@@ -417,7 +417,7 @@ class MCPSetup {
         try {
             await fs.mkdir(aiModelsDir, { recursive: true });
 
-            const sourceDir = path.join(process.cwd(), 'ai_models');
+            const sourceDir = path.join(process.cwd(), 'interface-v2', 'ai_models');
 
             // Verificar se o diretório de origem existe
             try {
@@ -955,8 +955,8 @@ export default class ModelFactory {
             adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_orchestrator_bash\.js['"]/g, "from './ai_orchestrator_bash.js'");
             // ../libs/ -> ./libs/
             adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
-            // ../ai_models/ -> ./ai_models/
-            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_models\//g, "from './ai_models/");
+            // ai_models agora está dentro de interface-v2, então ./ai_models/ já está correto
+            // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_models\//g, "from './ai_models/");
             // ./bridges/adapters/TursoAdapter.js -> ./interface-v2/bridges/adapters/TursoAdapter.js
             adjustedContent = adjustedContent.replace(/from ['"]\.\/bridges\/adapters\/TursoAdapter\.js['"]/g, "from './interface-v2/bridges/adapters/TursoAdapter.js'");
         }
@@ -1145,30 +1145,34 @@ export default class ModelFactory {
             console.log(`  ⚠ Interface-v2 não encontrada (${error.message})`);
         }
 
-        // Copiar ai_models
+        // ai_models agora é copiado junto com interface-v2
+        // Criar link simbólico para ai_models na raiz para compatibilidade
         try {
-            const aiModelsDir = path.join(process.cwd(), 'ai_models');
+            const srcAiModelsDir = path.join(this.mcpDir, 'interface-v2', 'ai_models');
             const destAiModelsDir = path.join(this.mcpDir, 'ai_models');
 
-            // Criar diretório ai_models se não existir
+            // Verificar se ai_models foi copiado com interface-v2
             try {
-                await fs.access(destAiModelsDir);
-            } catch {
-                await fs.mkdir(destAiModelsDir, { recursive: true });
-            }
+                await fs.access(srcAiModelsDir);
 
-            const aiModelFiles = await fs.readdir(aiModelsDir);
-            for (const file of aiModelFiles) {
-                if (file.endsWith('.js')) {
-                    const srcPath = path.join(aiModelsDir, file);
-                    const destPath = path.join(destAiModelsDir, file);
-                    const content = await fs.readFile(srcPath, 'utf8');
-                    await fs.writeFile(destPath, content);
+                // Remover link/diretório antigo se existir
+                try {
+                    const stats = await fs.lstat(destAiModelsDir);
+                    if (stats.isDirectory() || stats.isSymbolicLink()) {
+                        await fs.rm(destAiModelsDir, { recursive: true, force: true });
+                    }
+                } catch {
+                    // Diretório não existe, tudo bem
                 }
+
+                // Criar link simbólico para manter compatibilidade
+                await fs.symlink(srcAiModelsDir, destAiModelsDir, 'dir');
+                console.log(`  ✓ Link simbólico para ai_models criado`);
+            } catch (error) {
+                console.log(`  ⚠ ai_models não encontrado em interface-v2: ${error.message}`);
             }
-            console.log(`  ✓ Arquivos de ai_models copiados`);
         } catch (error) {
-            console.log(`  ⚠ Erro ao copiar ai_models: ${error.message}`);
+            console.log(`  ⚠ Erro ao criar link para ai_models: ${error.message}`);
         }
 
         // Copiar web_search e web_scraper

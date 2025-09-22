@@ -84,7 +84,8 @@
       "Bash(./rollback-ai-models.sh:*)",
       "Bash(do)",
       "Bash(./migrate-libs.sh:*)",
-      "Bash(do [ -f \"$file\" ])"
+      "Bash(do [ -f \"$file\" ])",
+      "Bash(./ipcom-chat:*)"
     ],
     "deny": [],
     "ask": []

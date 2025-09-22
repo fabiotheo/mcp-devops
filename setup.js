@@ -986,7 +986,7 @@ export default class ModelFactory {
             { src: 'src/mcp-ink-cli.mjs', dest: 'ipcom-chat-cli.js' },
 
             // Backup da v1 (se existir)
-            { src: 'ipcom-chat-cli.js', dest: 'ipcom-chat-cli-v1.backup.js' },
+            { src: 'src/ipcom-chat-cli.js', dest: 'ipcom-chat-cli-v1.backup.js' },
 
             // Orquestradores e libs essenciais
             { src: 'src/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
@@ -997,7 +997,6 @@ export default class ModelFactory {
 
             // Scripts shell
             { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' },
-            { src: 'ipcom-chat', dest: 'ipcom-chat' },
 
             // Mantém deploy para Linux
             { src: 'deploy-linux.sh', dest: 'deploy-linux.sh' }
@@ -1138,6 +1137,21 @@ export default class ModelFactory {
             }
         } catch (error) {
             console.log(`  ⚠ Erro ao criar link para ai_models: ${error.message}`);
+        }
+
+        // Criar ipcom-chat launcher dinamicamente
+        try {
+            const ipcomChatContent = `#!/usr/bin/env node
+
+// V2 Interface - Always use the new Ink interface
+await import('./ipcom-chat-cli.js');`;
+
+            const ipcomChatPath = path.join(this.mcpDir, 'ipcom-chat');
+            await fs.writeFile(ipcomChatPath, ipcomChatContent);
+            await fs.chmod(ipcomChatPath, 0o755);
+            console.log('  ✓ Launcher ipcom-chat criado');
+        } catch (error) {
+            console.log(`  ⚠ Erro ao criar ipcom-chat: ${error.message}`);
         }
 
         // Copiar documentação

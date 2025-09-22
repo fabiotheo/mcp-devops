@@ -1,4 +1,4 @@
 #!/usr/bin/env node
 
 // V2 Interface - Always use the new Ink interface
-await import('./ipcom-chat-cli.js');
+await import('./src/ipcom-chat-cli.js');

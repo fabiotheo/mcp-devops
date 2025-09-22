@@ -1126,30 +1126,35 @@ Config: ${config ? 'Loaded' : 'Default'}`);
         );
     }
 
-    // Render main UI without height restrictions - let terminal handle scrolling
+    // Render main UI - let terminal handle scrolling naturally
     return React.createElement(Box, {
-        flexDirection: 'column'
+        flexDirection: 'column',
+        minHeight: stdout ? stdout.rows : 24  // Use minHeight instead of height
     },
-        // Clean header with title and version
-        React.createElement(Box, { paddingLeft: 1, paddingTop: 1 },
-            React.createElement(Text, { color: 'yellow', bold: true }, '✨ MCP Terminal Assistant'),
-            React.createElement(Text, { color: 'gray' }, '  v3.0'),
-            isDebug && React.createElement(Text, { color: 'magenta' }, ' [DEBUG]')
-        ),
-
-        // Elegant divider line
-        React.createElement(Box, { paddingLeft: 1, paddingRight: 1, marginTop: 1 },
-            React.createElement(Text, { dimColor: true }, '─'.repeat(60))
-        ),
-
-        // Conversation history - show everything, let terminal scroll
+        // Top section: Header + History (grows to push input down)
         React.createElement(Box, {
-            paddingLeft: 1,
-            paddingRight: 1,
-            marginTop: 1,
-            marginBottom: 1,
-            flexDirection: 'column'
+            flexDirection: 'column',
+            flexGrow: 1  // This pushes the input to bottom
         },
+            // Clean header with title and version
+            React.createElement(Box, { paddingLeft: 1, paddingTop: 1 },
+                React.createElement(Text, { color: 'yellow', bold: true }, '✨ MCP Terminal Assistant'),
+                React.createElement(Text, { color: 'gray' }, '  v3.0'),
+                isDebug && React.createElement(Text, { color: 'magenta' }, ' [DEBUG]')
+            ),
+
+            // Elegant divider line
+            React.createElement(Box, { paddingLeft: 1, paddingRight: 1, marginTop: 1 },
+                React.createElement(Text, { dimColor: true }, '─'.repeat(60))
+            ),
+
+            // Conversation history
+            React.createElement(Box, {
+                paddingLeft: 1,
+                paddingRight: 1,
+                marginTop: 1,
+                flexDirection: 'column'
+            },
             history.length === 0 ?
                 React.createElement(Box, null,
                     React.createElement(Text, { color: 'gray', italic: true }, 'Ready for your questions...')
@@ -1191,40 +1196,46 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                         return elements;
                     }).flat()
                 )
+            )
         ),
 
-        // Top separator line
-        React.createElement(Box, { paddingLeft: 1, paddingRight: 1 },
-            React.createElement(Text, { dimColor: true }, '─'.repeat(60))
-        ),
-
-        // Input prompt with minimal padding
+        // Bottom section: Input area
         React.createElement(Box, {
-            paddingLeft: 1
+            flexDirection: 'column'
         },
-            isProcessing ?
-                React.createElement(Box, null,
-                    React.createElement(Text, { color: 'yellow' }, '❯ Processing '),
-                    React.createElement(Spinner, { type: 'dots' })
-                ) :
-                React.createElement(MultilineInput, {
-                    value: input,
-                    onChange: setInput,
-                    placeholder: 'Type your question...',
-                    showCursor: true,
-                    isActive: status === 'ready'
-                })
-        ),
+            // Top separator line
+            React.createElement(Box, { paddingLeft: 1, paddingRight: 1 },
+                React.createElement(Text, { dimColor: true }, '─'.repeat(60))
+            ),
 
-        // Bottom separator line
-        React.createElement(Box, { paddingLeft: 1, paddingRight: 1 },
-            React.createElement(Text, { dimColor: true }, '─'.repeat(60))
-        ),
+            // Input prompt
+            React.createElement(Box, {
+                paddingLeft: 1
+            },
+                isProcessing ?
+                    React.createElement(Box, null,
+                        React.createElement(Text, { color: 'yellow' }, '❯ Processing '),
+                        React.createElement(Spinner, { type: 'dots' })
+                    ) :
+                    React.createElement(MultilineInput, {
+                        value: input,
+                        onChange: setInput,
+                        placeholder: 'Type your question...',
+                        showCursor: true,
+                        isActive: status === 'ready'
+                    })
+            ),
 
-        // Clean footer
-        React.createElement(Box, { paddingLeft: 1, marginTop: 1 },
-            React.createElement(Text, { dimColor: true, italic: true },
-                '/help for commands • ↑↓ for history • Ctrl+C to exit')
+            // Bottom separator line
+            React.createElement(Box, { paddingLeft: 1, paddingRight: 1 },
+                React.createElement(Text, { dimColor: true }, '─'.repeat(60))
+            ),
+
+            // Clean footer
+            React.createElement(Box, { paddingLeft: 1, marginTop: 1 },
+                React.createElement(Text, { dimColor: true, italic: true },
+                    '/help for commands • ↑↓ for history • Ctrl+C to exit')
+            )
         )
     );
 };

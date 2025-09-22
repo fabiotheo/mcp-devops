@@ -6,9 +6,9 @@
  */
 
 import { Command } from 'commander';
-import TursoHistoryClient from './interface-v2/libs/turso-client.js';
-import UserManager from './interface-v2/libs/user-manager.js';
-import MachineIdentityManager from './interface-v2/libs/machine-identity.js';
+import TursoHistoryClient from './src/libs/turso-client.js';
+import UserManager from './src/libs/user-manager.js';
+import MachineIdentityManager from './src/libs/machine-identity.js';
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';

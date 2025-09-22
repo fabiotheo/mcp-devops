@@ -18,7 +18,7 @@ echo ""
 # Check if required files exist
 echo "Checking required files..."
 
-if [ ! -f "interface-v2/mcp-ink-cli.mjs" ]; then
+if [ ! -f "src/mcp-ink-cli.mjs" ]; then
     echo -e "${RED}❌ mcp-ink-cli.mjs not found${NC}"
     exit 1
 fi
@@ -48,7 +48,7 @@ case $option in
     1)
         echo -e "\n${GREEN}▶ Running quick automated test...${NC}"
         # Run in non-TTY mode with timeout
-        timeout 10 node interface-v2/mcp-ink-cli.mjs <<EOF
+        timeout 10 node src/mcp-ink-cli.mjs <<EOF
 /status
 /help
 How do I list files?
@@ -60,12 +60,12 @@ EOF
         echo -e "${YELLOW}You can now interact with the real MCP Assistant${NC}"
         echo -e "${YELLOW}Type /help for commands or ask any Linux/Unix question${NC}"
         echo ""
-        node interface-v2/mcp-ink-cli.mjs
+        node src/mcp-ink-cli.mjs
         ;;
     3)
         echo -e "\n${GREEN}▶ Starting debug mode...${NC}"
         echo -e "${YELLOW}Verbose output enabled${NC}"
-        node interface-v2/mcp-ink-cli.mjs --debug
+        node src/mcp-ink-cli.mjs --debug
         ;;
     *)
         echo -e "${RED}Invalid option${NC}"

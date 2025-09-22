@@ -37,16 +37,16 @@ read -p "Select test option (1-6): " option
 case $option in
     1)
         echo -e "\n${GREEN}▶ Running Basic Interface Test...${NC}"
-        node interface-v2/index.mjs
+        node src/index.mjs
         ;;
     2)
         echo -e "\n${GREEN}▶ Running Advanced Features Test...${NC}"
-        node interface-v2/indexV2.mjs
+        node src/indexV2.mjs
         ;;
     3)
         echo -e "\n${GREEN}▶ Running Full Integration Test...${NC}"
         echo -e "${YELLOW}Note: This connects to real backend services${NC}"
-        node interface-v2/indexV3.mjs
+        node src/indexV3.mjs
         ;;
     4)
         echo -e "\n${GREEN}▶ Starting Interactive Test Session...${NC}"
@@ -57,21 +57,21 @@ case $option in
         echo "- Use Ctrl+C to exit"
         echo ""
         sleep 2
-        node interface-v2/indexV3.mjs --debug
+        node src/indexV3.mjs --debug
         ;;
     5)
         echo -e "\n${GREEN}▶ Running All Automated Tests...${NC}"
         echo -e "\n${BLUE}Test 1/3: Basic Interface${NC}"
-        timeout 5 node interface-v2/tests/test-ink-basic.js
+        timeout 5 node src/tests/test-ink-basic.js
         echo -e "\n${BLUE}Test 2/3: Advanced Features${NC}"
-        timeout 5 node interface-v2/tests/test-ink-advanced.js
+        timeout 5 node src/tests/test-ink-advanced.js
         echo -e "\n${BLUE}Test 3/3: Integration${NC}"
-        timeout 10 node interface-v2/tests/test-integration.js
+        timeout 10 node src/tests/test-integration.js
         ;;
     6)
         echo -e "\n${GREEN}▶ Running Integrated Backend Test (FASE 4)...${NC}"
         echo -e "${YELLOW}Note: This connects to the real MCP Assistant backend${NC}"
-        node interface-v2/indexV4-integrated.mjs
+        node src/indexV4-integrated.mjs
         ;;
     *)
         echo -e "${RED}Invalid option${NC}"

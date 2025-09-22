@@ -417,7 +417,7 @@ class MCPSetup {
         try {
             await fs.mkdir(aiModelsDir, { recursive: true });
 
-            const sourceDir = path.join(process.cwd(), 'interface-v2', 'ai_models');
+            const sourceDir = path.join(process.cwd(), 'src', 'ai_models');
 
             // Verificar se o diretório de origem existe
             try {
@@ -948,21 +948,21 @@ export default class ModelFactory {
         // Ajusta os imports relativos para funcionarem na estrutura instalada
         let adjustedContent = content;
 
-        // Se o arquivo vem de interface-v2/, precisa ajustar os imports da v2
-        if (sourceFile.includes('interface-v2/')) {
+        // Se o arquivo vem de src/, precisa ajustar os imports da v2
+        if (sourceFile.includes('src/')) {
             // ../ai_orchestrator_bash.js -> ./ai_orchestrator_bash.js
             adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_orchestrator_bash\.js['"]/g, "from './ai_orchestrator_bash.js'");
-            // libs agora está dentro de interface-v2, então ./libs/ já está correto
+            // libs agora está dentro de src, então ./libs/ já está correto
             // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
-            // ai_models agora está dentro de interface-v2, então ./ai_models/ já está correto
+            // ai_models agora está dentro de src, então ./ai_models/ já está correto
             // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_models\//g, "from './ai_models/");
-            // ./bridges/adapters/TursoAdapter.js -> ./interface-v2/bridges/adapters/TursoAdapter.js
-            adjustedContent = adjustedContent.replace(/from ['"]\.\/bridges\/adapters\/TursoAdapter\.js['"]/g, "from './interface-v2/bridges/adapters/TursoAdapter.js'");
+            // ./bridges/adapters/TursoAdapter.js -> ./src/bridges/adapters/TursoAdapter.js
+            adjustedContent = adjustedContent.replace(/from ['"]\.\/bridges\/adapters\/TursoAdapter\.js['"]/g, "from './src/bridges/adapters/TursoAdapter.js'");
         }
 
         // Se o arquivo vem de src/core/, precisa ajustar os imports relativos
         if (sourceFile.includes('src/core/')) {
-            // libs agora está dentro de interface-v2, então ./libs/ já está correto
+            // libs agora está dentro de src, então ./libs/ já está correto
             // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
             // ../ai-models/ -> ./ai_models/
             adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai-models\//g, "from './ai_models/");
@@ -980,10 +980,10 @@ export default class ModelFactory {
         console.log('\n🔧 Copiando e configurando scripts...');
 
         // Lista de arquivos a serem copiados
-        // MIGRAÇÃO V2: interface-v2/mcp-ink-cli.mjs agora é a interface principal
+        // MIGRAÇÃO V2: src/mcp-ink-cli.mjs agora é a interface principal
         const filesToCopy = [
             // Interface principal V2
-            { src: 'interface-v2/mcp-ink-cli.mjs', dest: 'ipcom-chat-cli.js' },
+            { src: 'src/mcp-ink-cli.mjs', dest: 'ipcom-chat-cli.js' },
 
             // Backup da v1 (se existir)
             { src: 'ipcom-chat-cli.js', dest: 'ipcom-chat-cli-v1.backup.js' },
@@ -1025,7 +1025,7 @@ export default class ModelFactory {
 
         // Copiar libs
         try {
-            const libsDir = path.join(process.cwd(), 'interface-v2', 'libs');
+            const libsDir = path.join(process.cwd(), 'src', 'libs');
             const destLibsDir = path.join(this.mcpDir, 'libs');
 
             // Criar diretório libs se não existir
@@ -1050,9 +1050,9 @@ export default class ModelFactory {
             // console.log(`  ⚠ Diretório libs não encontrado (normal em versões antigas)`);
         }
 
-        // Copiar components da interface-v2 (necessário para a v2)
+        // Copiar components da src (necessário para a v2)
         try {
-            const componentsDir = path.join(process.cwd(), 'interface-v2', 'components');
+            const componentsDir = path.join(process.cwd(), 'src', 'components');
             const destComponentsDir = path.join(this.mcpDir, 'components');
 
             // Criar diretório components se não existir
@@ -1074,19 +1074,19 @@ export default class ModelFactory {
             console.log(`  ⚠ Erro ao copiar components: ${error.message}`);
         }
 
-        // Copiar interface-v2 (Nova interface Ink)
+        // Copiar src (Nova interface Ink)
         try {
-            const interfaceV2Dir = path.join(process.cwd(), 'interface-v2');
-            const destInterfaceV2Dir = path.join(this.mcpDir, 'interface-v2');
+            const interfaceV2Dir = path.join(process.cwd(), 'src');
+            const destInterfaceV2Dir = path.join(this.mcpDir, 'src');
 
-            // Criar diretório interface-v2 se não existir
+            // Criar diretório src se não existir
             try {
                 await fs.access(destInterfaceV2Dir);
             } catch {
                 await fs.mkdir(destInterfaceV2Dir, { recursive: true });
             }
 
-            // Copiar todos os arquivos da interface-v2
+            // Copiar todos os arquivos da src
             const copyRecursive = async (src, dest) => {
                 const stats = await fs.stat(src);
                 if (stats.isDirectory()) {
@@ -1105,18 +1105,18 @@ export default class ModelFactory {
             };
 
             await copyRecursive(interfaceV2Dir, destInterfaceV2Dir);
-            console.log(`  ✓ Nova interface Ink (interface-v2) copiada`);
+            console.log(`  ✓ Nova interface Ink (src) copiada`);
         } catch (error) {
             console.log(`  ⚠ Interface-v2 não encontrada (${error.message})`);
         }
 
-        // ai_models agora é copiado junto com interface-v2
+        // ai_models agora é copiado junto com src
         // Criar link simbólico para ai_models na raiz para compatibilidade
         try {
-            const srcAiModelsDir = path.join(this.mcpDir, 'interface-v2', 'ai_models');
+            const srcAiModelsDir = path.join(this.mcpDir, 'src', 'ai_models');
             const destAiModelsDir = path.join(this.mcpDir, 'ai_models');
 
-            // Verificar se ai_models foi copiado com interface-v2
+            // Verificar se ai_models foi copiado com src
             try {
                 await fs.access(srcAiModelsDir);
 
@@ -1134,7 +1134,7 @@ export default class ModelFactory {
                 await fs.symlink(srcAiModelsDir, destAiModelsDir, 'dir');
                 console.log(`  ✓ Link simbólico para ai_models criado`);
             } catch (error) {
-                console.log(`  ⚠ ai_models não encontrado em interface-v2: ${error.message}`);
+                console.log(`  ⚠ ai_models não encontrado em src: ${error.message}`);
             }
         } catch (error) {
             console.log(`  ⚠ Erro ao criar link para ai_models: ${error.message}`);

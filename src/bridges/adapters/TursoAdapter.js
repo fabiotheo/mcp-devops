@@ -15,7 +15,7 @@ class TursoAdapter {
         this.debug = options.debug || false;
         this.userId = options.userId || 'default';
         this.tursoClientPath = options.tursoClientPath ||
-            path.join(__dirname, '..', '..', '..', 'libs', 'turso-client.js');
+            path.join(__dirname, '..', '..', 'libs', 'turso-client.js');
         this.configPath = path.join(os.homedir(), '.mcp-terminal', 'turso-config.json');
         this.tursoClient = null;
         this.initialized = false;

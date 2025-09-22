@@ -29,10 +29,10 @@ else
     echo -e "${RED}❌ ipcom-chat-new not found${NC}"
 fi
 
-if [ -d "$HOME/.mcp-terminal/interface-v2" ]; then
-    echo -e "${GREEN}✅ interface-v2 directory installed${NC}"
+if [ -d "$HOME/.mcp-terminal/src" ]; then
+    echo -e "${GREEN}✅ src directory installed${NC}"
 else
-    echo -e "${RED}❌ interface-v2 directory not found${NC}"
+    echo -e "${RED}❌ src directory not found${NC}"
 fi
 
 echo ""

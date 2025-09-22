@@ -34,9 +34,9 @@
     "mcp": "./ipcom-chat"
   },
   "scripts": {
-    "test:ink": "node interface-v2/tests/test-ink-basic.js",
-    "test:ink-advanced": "node interface-v2/tests/test-ink-advanced.js",
-    "test:integration": "node interface-v2/tests/test-integration.js"
+    "test:ink": "node src/tests/test-ink-basic.js",
+    "test:ink-advanced": "node src/tests/test-ink-advanced.js",
+    "test:integration": "node src/tests/test-integration.js"
   },
   "devDependencies": {
     "@types/react": "^19.1.13",

@@ -11,7 +11,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 
-const interfacePath = path.join(process.cwd(), 'interface-v2', 'index.mjs');
+const interfacePath = path.join(process.cwd(), 'src', 'index.mjs');
 
 console.log('🧪 Testing Ink Interface - Basic Functionality\n');
 

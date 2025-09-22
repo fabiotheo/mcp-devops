@@ -127,6 +127,8 @@ export default class TursoHistoryClient {
                 session_id TEXT,
                 status TEXT DEFAULT 'pending',
                 request_id TEXT,
+                updated_at INTEGER,
+                completed_at INTEGER,
                 FOREIGN KEY (machine_id) REFERENCES machines(machine_id),
                 FOREIGN KEY (user_id) REFERENCES users(id)
             );
@@ -163,6 +165,8 @@ export default class TursoHistoryClient {
                 session_id TEXT,
                 status TEXT DEFAULT 'pending',
                 request_id TEXT,
+                updated_at INTEGER,
+                completed_at INTEGER,
                 FOREIGN KEY (machine_id) REFERENCES machines(machine_id),
                 FOREIGN KEY (user_id) REFERENCES users(id)
             );
@@ -656,6 +660,74 @@ export default class TursoHistoryClient {
                       total_commands = total_commands + 1
                   WHERE machine_id = ?`,
             args: [this.machineId]
+        });
+    }
+
+    /**
+     * Atualiza o status de um comando pelo request_id
+     * @param {string} requestId - ID único do request
+     * @param {string} status - Novo status ('completed', 'cancelled', 'failed')
+     * @param {Object} additionalData - Dados adicionais (response, completedAt, etc)
+     */
+    async updateCommandStatus(requestId, status, additionalData = {}) {
+        if (!requestId) return;
+
+        const now = Math.floor(Date.now() / 1000);
+        const updates = {
+            status,
+            updated_at: now
+        };
+
+        if (status === 'completed' || status === 'cancelled' || status === 'failed') {
+            updates.completed_at = now;
+        }
+
+        // Atualizar em todas as tabelas que tenham o request_id
+        const tables = ['history_global', 'history_user', 'history_machine'];
+
+        for (const table of tables) {
+            try {
+                let sql = `UPDATE ${table} SET status = ?, updated_at = ?`;
+                const args = [updates.status, updates.updated_at];
+
+                if (updates.completed_at) {
+                    sql += ', completed_at = ?';
+                    args.push(updates.completed_at);
+                }
+
+                if (additionalData.response) {
+                    sql += ', response = ?';
+                    args.push(additionalData.response);
+                }
+
+                sql += ' WHERE request_id = ?';
+                args.push(requestId);
+
+                await this.client.execute({ sql, args });
+            } catch (err) {
+                if (this.debug) {
+                    console.error(`Error updating ${table}:`, err);
+                }
+            }
+        }
+    }
+
+    /**
+     * Marca um comando como completado
+     * @param {string} requestId - ID único do request
+     * @param {string} response - Resposta do comando
+     */
+    async completeCommand(requestId, response) {
+        await this.updateCommandStatus(requestId, 'completed', { response });
+    }
+
+    /**
+     * Marca um comando como cancelado
+     * @param {string} requestId - ID único do request
+     */
+    async cancelCommand(requestId) {
+        await this.updateCommandStatus(requestId, 'cancelled', {
+            response: '[Cancelled by user]'
         });
     }
 

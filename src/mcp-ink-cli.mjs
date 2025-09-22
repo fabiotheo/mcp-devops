@@ -555,11 +555,9 @@ const MCPInkApp = () => {
             console.log(`[Debug] Starting request ${requestId}`);
         }
 
-        // Add to display history (show only first line if multi-line)
-        const displayCommand = command.includes('\n')
-            ? `❯ ${command.split('\n')[0]}... (${command.split('\n').length} lines)`
-            : `❯ ${command}`;
-        setHistory(prev => [...prev.slice(-50), displayCommand]);
+        // Add to display history (show complete command, including multi-line)
+        const displayCommand = `❯ ${command}`;
+        setHistory(prev => [...prev.slice(-200), displayCommand]);
 
         // IMPORTANT: Add to command history immediately so it's available for context
         // even if the request is cancelled
@@ -1128,22 +1126,9 @@ Config: ${config ? 'Loaded' : 'Default'}`);
         );
     }
 
-    // Calculate terminal height for proper layout
-    const terminalHeight = stdout ? stdout.rows : 24;
-
-    // Calculate how many lines the input is using
-    const inputLines = input.split('\n').length;
-    const inputHeight = inputLines + 1; // +1 for the prompt line
-
-    // Calculate available space for history
-    const headerHeight = 4; // Title + divider
-    const footerHeight = 2; // Footer text
-    const availableHistoryHeight = Math.max(1, terminalHeight - headerHeight - footerHeight - inputHeight - 2);
-
-    // Render main UI with full height and bottom-aligned input
+    // Render main UI without height restrictions - let terminal handle scrolling
     return React.createElement(Box, {
-        flexDirection: 'column',
-        height: terminalHeight
+        flexDirection: 'column'
     },
         // Clean header with title and version
         React.createElement(Box, { paddingLeft: 1, paddingTop: 1 },
@@ -1157,45 +1142,46 @@ Config: ${config ? 'Loaded' : 'Default'}`);
             React.createElement(Text, { dimColor: true }, '─'.repeat(60))
         ),
 
-        // Conversation history with dynamic height based on available space
+        // Conversation history - show everything, let terminal scroll
         React.createElement(Box, {
             paddingLeft: 1,
             paddingRight: 1,
             marginTop: 1,
             marginBottom: 1,
-            flexDirection: 'column',
-            height: availableHistoryHeight,
-            overflow: 'hidden'
+            flexDirection: 'column'
         },
             history.length === 0 ?
                 React.createElement(Box, null,
                     React.createElement(Text, { color: 'gray', italic: true }, 'Ready for your questions...')
                 ) :
                 React.createElement(Box, { flexDirection: 'column' },
-                    // Show only what fits in available space
-                    ...history.slice(-(availableHistoryHeight * 2)).slice(-availableHistoryHeight).map((line, i) => {
+                    // Show ALL history - no slicing, no truncation
+                    ...history.map((line, i) => {
                         // Add spacing between Q&A pairs
                         const elements = [];
                         if (i > 0 && line.startsWith('❯')) {
                             elements.push(React.createElement(Text, { key: `space-${i}` }, ''));
                         }
-                        elements.push(
-                            React.createElement(Text, {
-                                key: i,
-                                color: line.startsWith('❯') ? 'cyan' :
-                                       line.startsWith('✗') ? 'red' : 'white',
-                                bold: line.startsWith('❯')
-                            }, line)
-                        );
+                        // Handle multi-line content properly
+                        const lines = line.split('\n');
+                        lines.forEach((subline, j) => {
+                            elements.push(
+                                React.createElement(Text, {
+                                    key: `${i}-${j}`,
+                                    color: subline.startsWith('❯') || line.startsWith('❯') ? 'cyan' :
+                                           subline.startsWith('✗') || line.startsWith('✗') ? 'red' : 'white',
+                                    bold: j === 0 && line.startsWith('❯')
+                                }, subline)
+                            );
+                        });
                         return elements;
                     }).flat()
                 )
         ),
 
-        // Input prompt - allow it to grow naturally
+        // Input prompt
         React.createElement(Box, {
-            paddingLeft: 1,
-            flexShrink: 0  // Don't shrink the input area
+            paddingLeft: 1
         },
             isProcessing ?
                 React.createElement(Box, null,

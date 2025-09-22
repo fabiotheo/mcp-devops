@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Simple wrapper to run the AI configurator
-import AIConfigurator from './configure-ai.js';
+import AIConfigurator from './src/configure-ai.js';
 
 const configurator = new AIConfigurator();
 configurator.run().catch(error => {

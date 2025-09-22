@@ -993,7 +993,7 @@ export default class ModelFactory {
             { src: 'src/ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
 
             // Arquivos de configuração
-            { src: 'configure-ai.js', dest: 'configure-ai.js' },
+            { src: 'src/configure-ai.js', dest: 'configure-ai.js' },
 
             // Scripts shell
             { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' },

@@ -81,7 +81,9 @@
       "Bash(do echo \"📁 Verificando: interface-v2/$file\")",
       "Bash(do echo \"📄 $file:\")",
       "Bash(head:*)",
-      "Bash(./rollback-ai-models.sh:*)"
+      "Bash(./rollback-ai-models.sh:*)",
+      "Bash(do)",
+      "Bash(./migrate-libs.sh:*)"
     ],
     "deny": [],
     "ask": []

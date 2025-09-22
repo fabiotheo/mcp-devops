@@ -426,7 +426,6 @@ class MCPSetup {
                 const sourceFiles = [
                     'base_model.js',
                     'claude_model.js',
-                    'claude_model_tools.js',
                     'openai_model.js',
                     'gemini_model.js',
                     'model_factory.js'
@@ -953,8 +952,8 @@ export default class ModelFactory {
         if (sourceFile.includes('interface-v2/')) {
             // ../ai_orchestrator_bash.js -> ./ai_orchestrator_bash.js
             adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_orchestrator_bash\.js['"]/g, "from './ai_orchestrator_bash.js'");
-            // ../libs/ -> ./libs/
-            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
+            // libs agora está dentro de interface-v2, então ./libs/ já está correto
+            // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
             // ai_models agora está dentro de interface-v2, então ./ai_models/ já está correto
             // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_models\//g, "from './ai_models/");
             // ./bridges/adapters/TursoAdapter.js -> ./interface-v2/bridges/adapters/TursoAdapter.js
@@ -963,30 +962,16 @@ export default class ModelFactory {
 
         // Se o arquivo vem de src/core/, precisa ajustar os imports relativos
         if (sourceFile.includes('src/core/')) {
-            // ../libs/ -> ./libs/
-            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
+            // libs agora está dentro de interface-v2, então ./libs/ já está correto
+            // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
             // ../ai-models/ -> ./ai_models/
             adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai-models\//g, "from './ai_models/");
             // ../patterns/ -> ./patterns/
-            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/patterns\//g, "from './patterns/");
-            // ../web/search/ -> ./web_search/
-            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/web\/search\//g, "from './web_search/");
-            // ../web/scraper/ -> ./web_scraper/
-            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/web\/scraper\//g, "from './web_scraper/");
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/patterns\//g, "from './patterns/'");
             // ./ai_orchestrator -> ./ai_orchestrator (já está correto)
         }
 
-        // Se o arquivo vem de src/web/search/, precisa ajustar import do scraper
-        if (sourceFile.includes('src/web/search/')) {
-            // ../scraper/ -> ../web_scraper/
-            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/scraper\//g, "from '../web_scraper/");
-        }
 
-        // Se o arquivo vem de src/web/scraper/, precisa ajustar import do search
-        if (sourceFile.includes('src/web/scraper/')) {
-            // ../search/ -> ../web_search/
-            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/search\//g, "from '../web_search/");
-        }
 
         return adjustedContent;
     }
@@ -1013,7 +998,6 @@ export default class ModelFactory {
             // Scripts shell
             { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' },
             { src: 'ipcom-chat', dest: 'ipcom-chat' },
-            { src: 'ipcom-chat-launcher.sh', dest: 'ipcom-chat-launcher.sh' },
 
             // Mantém deploy para Linux
             { src: 'deploy-linux.sh', dest: 'deploy-linux.sh' }
@@ -1039,28 +1023,9 @@ export default class ModelFactory {
             }
         }
 
-        // Copiar padrões
-        try {
-            const patternsDir = path.join(process.cwd(), 'src/patterns');
-            const destPatternsDir = path.join(this.mcpDir, 'patterns');
-
-            const patternFiles = await fs.readdir(patternsDir);
-            for (const file of patternFiles) {
-                if (file.endsWith('.json')) {
-                    const srcPath = path.join(patternsDir, file);
-                    const destPath = path.join(destPatternsDir, file);
-                    const content = await fs.readFile(srcPath, 'utf8');
-                    await fs.writeFile(destPath, content);
-                }
-            }
-            console.log(`  ✓ Arquivos de padrões copiados`);
-        } catch (error) {
-            console.log(`  ⚠ Erro ao copiar padrões: ${error.message}`);
-        }
-
         // Copiar libs
         try {
-            const libsDir = path.join(process.cwd(), 'libs');
+            const libsDir = path.join(process.cwd(), 'interface-v2', 'libs');
             const destLibsDir = path.join(this.mcpDir, 'libs');
 
             // Criar diretório libs se não existir
@@ -1175,53 +1140,6 @@ export default class ModelFactory {
             console.log(`  ⚠ Erro ao criar link para ai_models: ${error.message}`);
         }
 
-        // Copiar web_search e web_scraper
-        try {
-            // Copiar web_search
-            const webSearchDir = path.join(process.cwd(), 'src/web/search');
-            const destWebSearchDir = path.join(this.mcpDir, 'web_search');
-
-            // Criar diretório web_search se não existir
-            await fs.mkdir(destWebSearchDir, { recursive: true });
-
-            // Copiar arquivos de web_search
-            const webSearchFiles = await fs.readdir(webSearchDir);
-            for (const file of webSearchFiles) {
-                if (file.endsWith('.js')) {
-                    const srcPath = path.join(webSearchDir, file);
-                    const destPath = path.join(destWebSearchDir, file);
-                    let content = await fs.readFile(srcPath, 'utf8');
-                    // Ajusta os imports para a estrutura instalada
-                    content = this.adjustImportsForInstallation(content, 'src/web/search/' + file);
-                    await fs.writeFile(destPath, content);
-                }
-            }
-            console.log(`  ✓ Arquivos de web_search copiados`);
-
-            // Copiar web_scraper
-            const webScraperDir = path.join(process.cwd(), 'src/web/scraper');
-            const destWebScraperDir = path.join(this.mcpDir, 'web_scraper');
-
-            // Criar diretório web_scraper se não existir
-            await fs.mkdir(destWebScraperDir, { recursive: true });
-
-            // Copiar arquivos de web_scraper
-            const webScraperFiles = await fs.readdir(webScraperDir);
-            for (const file of webScraperFiles) {
-                if (file.endsWith('.js')) {
-                    const srcPath = path.join(webScraperDir, file);
-                    const destPath = path.join(destWebScraperDir, file);
-                    let content = await fs.readFile(srcPath, 'utf8');
-                    // Ajusta os imports para a estrutura instalada
-                    content = this.adjustImportsForInstallation(content, 'src/web/scraper/' + file);
-                    await fs.writeFile(destPath, content);
-                }
-            }
-            console.log(`  ✓ Arquivos de web_scraper copiados`);
-        } catch (error) {
-            console.log(`  ⚠ Erro ao copiar web_search ou web_scraper: ${error.message}`);
-        }
-
         // Copiar documentação
         try {
             const docsDir = path.join(process.cwd(), 'docs');
@@ -1251,8 +1169,7 @@ export default class ModelFactory {
             'configure-ai.js',
             'mcp-configure',
             'mcp-interactive.js',
-            'ipcom-chat',
-            'ipcom-chat-launcher.sh'
+            'ipcom-chat'
         ];
 
         for (const script of scripts) {

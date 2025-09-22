@@ -1154,6 +1154,27 @@ await import('./ipcom-chat-cli.js');`;
             console.log(`  ⚠ Erro ao criar ipcom-chat: ${error.message}`);
         }
 
+        // Criar mcp-configure launcher dinamicamente
+        try {
+            const mcpConfigureContent = `#!/usr/bin/env node
+
+// Simple wrapper to run the AI configurator
+import AIConfigurator from './configure-ai.js';
+
+const configurator = new AIConfigurator();
+configurator.run().catch(error => {
+    console.error('❌ Erro na configuração:', error.message);
+    process.exit(1);
+});`;
+
+            const mcpConfigurePath = path.join(this.mcpDir, 'mcp-configure');
+            await fs.writeFile(mcpConfigurePath, mcpConfigureContent);
+            await fs.chmod(mcpConfigurePath, 0o755);
+            console.log('  ✓ Launcher mcp-configure criado');
+        } catch (error) {
+            console.log(`  ⚠ Erro ao criar mcp-configure: ${error.message}`);
+        }
+
         // Copiar documentação
         try {
             const docsDir = path.join(process.cwd(), 'docs');

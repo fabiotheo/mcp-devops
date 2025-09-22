@@ -85,7 +85,8 @@
       "Bash(do)",
       "Bash(./migrate-libs.sh:*)",
       "Bash(do [ -f \"$file\" ])",
-      "Bash(./ipcom-chat:*)"
+      "Bash(./ipcom-chat:*)",
+      "Bash(mcp-configure:*)"
     ],
     "deny": [],
     "ask": []

@@ -225,7 +225,7 @@ EOF
 3. **Executar deployment nas máquinas clientes:**
 ```bash
 # Usa TOKEN DE CLIENTE, não de admin!
-./deploy-linux.sh hosts.txt \
+./scripts/deploy-linux.sh hosts.txt \
     --turso-url "libsql://ipcom.turso.io" \
     --turso-token "TOKEN-DE-CLIENTE-AQUI" \
     --user deploy \

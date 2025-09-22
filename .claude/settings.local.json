@@ -86,7 +86,9 @@
       "Bash(./migrate-libs.sh:*)",
       "Bash(do [ -f \"$file\" ])",
       "Bash(./ipcom-chat:*)",
-      "Bash(mcp-configure:*)"
+      "Bash(mcp-configure:*)",
+      "Bash(do echo \"=== $script ===\")",
+      "Bash(do [ -f \"$script\" ])"
     ],
     "deny": [],
     "ask": []

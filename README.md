@@ -84,10 +84,10 @@ First, run the prerequisites installer, which will set up Node.js, Zsh, and othe
 
 ```bash
 # Make the script executable
-chmod +x install_prerequisites.sh
+chmod +x scripts/install_prerequisites.sh
 
 # Run the prerequisites installer
-./install_prerequisites.sh
+./scripts/install_prerequisites.sh
 ```
 
 ### Installation Process
@@ -142,7 +142,7 @@ node setup.js --upgrade --auto
 
 # Or use the quick update script (simplest option)
 # This is a convenience wrapper around the automatic upgrade
-./upgrade.sh
+./scripts/upgrade.sh
 ```
 
 #### What Happens During Update

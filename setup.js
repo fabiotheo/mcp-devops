@@ -996,10 +996,10 @@ export default class ModelFactory {
             { src: 'src/configure-ai.js', dest: 'configure-ai.js' },
 
             // Scripts shell
-            { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' },
+            { src: 'scripts/zsh_integration.sh', dest: 'zsh_integration.sh' },
 
             // Mantém deploy para Linux
-            { src: 'deploy-linux.sh', dest: 'deploy-linux.sh' }
+            { src: 'scripts/deploy-linux.sh', dest: 'deploy-linux.sh' }
         ];
 
         // Copiar arquivos principais

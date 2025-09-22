@@ -1157,20 +1157,34 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                 React.createElement(Box, { flexDirection: 'column' },
                     // Show ALL history - no slicing, no truncation
                     ...history.map((line, i) => {
-                        // Add spacing between Q&A pairs
                         const elements = [];
-                        if (i > 0 && line.startsWith('❯')) {
-                            elements.push(React.createElement(Text, { key: `space-${i}` }, ''));
+
+                        // Add spacing before ALL messages (both questions and answers)
+                        if (i > 0) {
+                            // Add an actual empty line (with a space to ensure it renders)
+                            elements.push(React.createElement(Text, { key: `space-${i}` }, ' '));
                         }
+
                         // Handle multi-line content properly
                         const lines = line.split('\n');
+                        const isUserMessage = line.startsWith('❯');
+                        const isErrorMessage = line.startsWith('✗');
+
                         lines.forEach((subline, j) => {
+                            // Determine color for this specific line
+                            let color = 'white'; // default for responses
+                            if (isUserMessage) {
+                                // For user messages, first line with ❯ is cyan, rest is cyan too
+                                color = 'cyan';
+                            } else if (isErrorMessage) {
+                                color = 'red';
+                            }
+
                             elements.push(
                                 React.createElement(Text, {
                                     key: `${i}-${j}`,
-                                    color: subline.startsWith('❯') || line.startsWith('❯') ? 'cyan' :
-                                           subline.startsWith('✗') || line.startsWith('✗') ? 'red' : 'white',
-                                    bold: j === 0 && line.startsWith('❯')
+                                    color: color,
+                                    bold: j === 0 && isUserMessage // Only bold the first line of user messages
                                 }, subline)
                             );
                         });

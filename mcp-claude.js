@@ -13,7 +13,7 @@ import os from 'os';
 import { existsSync } from 'fs';
 import ModelFactory from './ai_models/model_factory.js';
 import SystemDetector from './src/libs/system_detector.js';
-import AICommandOrchestrator from './ai_orchestrator.js';
+import AICommandOrchestrator from './src/ai_orchestrator.js';
 import TursoHistoryClient from './src/libs/turso-client.js';
 import SyncManager from './src/libs/sync-manager.js';
 import { v4 as uuidv4 } from 'uuid';

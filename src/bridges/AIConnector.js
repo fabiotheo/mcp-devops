@@ -14,7 +14,7 @@ class AIConnector extends EventEmitter {
         super();
         this.debug = options.debug || false;
         this.orchestratorPath = options.orchestratorPath ||
-            path.join(__dirname, '..', '..', 'ai_orchestrator_bash.js');
+            path.join(__dirname, '..', 'ai_orchestrator_bash.js');
         this.initialized = false;
         this.orchestratorModule = null;
     }

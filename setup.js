@@ -989,8 +989,8 @@ export default class ModelFactory {
             { src: 'ipcom-chat-cli.js', dest: 'ipcom-chat-cli-v1.backup.js' },
 
             // Orquestradores e libs essenciais
-            { src: 'ai_orchestrator.js', dest: 'ai_orchestrator.js' },
-            { src: 'ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
+            { src: 'src/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
+            { src: 'src/ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
 
             // Arquivos de configuração
             { src: 'configure-ai.js', dest: 'configure-ai.js' },

@@ -88,7 +88,13 @@
       "Bash(./ipcom-chat:*)",
       "Bash(mcp-configure:*)",
       "Bash(do echo \"=== $script ===\")",
-      "Bash(do [ -f \"$script\" ])"
+      "Bash(do [ -f \"$script\" ])",
+      "Bash(gtimeout:*)",
+      "Bash(MCP_USER=testphase2 node mcp-ink-cli.mjs)",
+      "Bash(export MCP_USER=testphase2)",
+      "Bash(export MCP_USER=testphase3)",
+      "Bash(MCP_USER=testpaste node src/mcp-ink-cli.mjs --debug)",
+      "Bash(export MCP_USER=testpaste)"
     ],
     "deny": [],
     "ask": []

@@ -21,6 +21,7 @@ const MultilineInput = ({
     const hasMultipleLines = lines.length > 1;
 
     // Render empty state with placeholder
+    // IMPORTANT: Even when empty, we need to be able to receive paste events
     if (value === '' && placeholder) {
         return React.createElement(Box, null,
             React.createElement(Text, { color: 'green', bold: true }, prompt + ' '),
@@ -38,7 +39,7 @@ const MultilineInput = ({
         );
     }
 
-    // Multi-line rendering
+    // Multi-line rendering - show all lines
     return React.createElement(Box, { flexDirection: 'column' },
         ...lines.map((line, index) =>
             React.createElement(Box, { key: index },

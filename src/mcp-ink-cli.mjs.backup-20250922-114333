@@ -12,7 +12,7 @@
  */
 
 import React, {useEffect, useRef, useState} from 'react';
-import {Box, render, Text, useApp, useInput, useStdout} from 'ink';
+import {Box, render, Text, useApp, useInput} from 'ink';
 import Spinner from 'ink-spinner';
 import MultilineInput from './components/MultilineInput.js';
 import path from 'path';
@@ -71,7 +71,6 @@ const MCPInkApp = () => {
     const activeRequests = useRef(new Map());  // Track active requests
 
     const { exit } = useApp();
-    const { stdout } = useStdout();
     const orchestrator = useRef(null);
     const patternMatcher = useRef(null);
     const tursoAdapter = useRef(null);
@@ -815,13 +814,13 @@ const MCPInkApp = () => {
         }
     };
 
-    // Format response for display - show complete response
+    // Format response for display
     const formatResponse = (text) => {
         if (!text) return '';
         // Ensure text is a string
         const textStr = typeof text === 'string' ? text : String(text);
-        // Return full response without truncation
-        return textStr;
+        const lines = textStr.split('\n');
+        return lines.slice(0, 3).join('\n') + (lines.length > 3 ? '...' : '');
     };
 
     // Handle special commands
@@ -910,55 +909,50 @@ Config: ${config ? 'Loaded' : 'Default'}`);
             }
 
             // Debug all input
-            if (isDebug) {
-                if (char) {
-                    console.log('[Debug] Raw input received:', JSON.stringify(char));
-                    console.log('[Debug] Current input state:', JSON.stringify(input));
-                    console.log('[Debug] Input length:', input.length);
-                    console.log('[Debug] Char codes:', Array.from(char).map(c => c.charCodeAt(0)));
-                    // Check for paste markers
-                    if (char.includes('200~') || char.includes('201~')) {
-                        console.log('[Debug] Paste marker detected in char!');
-                    }
-                }
-                if (key) {
-                    console.log('[Debug] Key event:', key);
-                }
+            if (isDebug && char) {
+                console.log('[Debug] Raw input received:', JSON.stringify(char));
+                console.log('[Debug] Char codes:', Array.from(char).map(c => c.charCodeAt(0)));
             }
 
-            // SIMPLE paste detection - if we get multiple chars at once, it's a paste
-            if (char && (char.length > 1 || char.includes('\n'))) {
-                if (isDebug) {
-                    console.log('[Debug] Paste detected! Length:', char.length, 'Has newline:', char.includes('\n'));
-                    console.log('[Debug] Raw paste content:', JSON.stringify(char));
+            // Handle complete bracketed paste (comes in one chunk)
+            // Note: Ink seems to strip the \x1b from the beginning
+            if (char && (
+                (char.includes('\x1b[200~') && char.includes('\x1b[201~')) ||
+                (char.includes('[200~') && char.includes('\x1b[201~'))
+            )) {
+                let start, end;
+
+                // Check which format we have
+                if (char.includes('\x1b[200~')) {
+                    start = char.indexOf('\x1b[200~') + 6;
+                } else if (char.includes('[200~')) {
+                    start = char.indexOf('[200~') + 5;
                 }
 
-                // Clean any bracketed paste markers if they leaked through
-                let cleanContent = char;
-                cleanContent = cleanContent.replace(/\x1b\[200~/g, '');
-                cleanContent = cleanContent.replace(/\x1b\[201~/g, '');
-                cleanContent = cleanContent.replace(/\[200~/g, '');
-                cleanContent = cleanContent.replace(/\[201~/g, '');
+                end = char.indexOf('\x1b[201~');
 
+                const pastedContent = char.substring(start, end);
                 // Convert \r to \n for multi-line
-                cleanContent = cleanContent.replace(/\r/g, '\n');
+                const processedContent = pastedContent.replace(/\r/g, '\n');
 
-                // Update input with pasted content
+                // Update input with pasted content and add a space at the end
                 setInput(prev => {
-                    if (prev === '') {
-                        // Empty input - just set the pasted content
-                        return cleanContent;
-                    }
-                    // Otherwise append to existing input
-                    return prev + cleanContent;
+                    return prev + processedContent + ' ';
                 });
 
                 if (isDebug) {
-                    console.log('[Debug] Clean pasted content:', JSON.stringify(cleanContent));
+                    console.log('[Debug] Bracketed paste detected!');
+                    console.log('[Debug] Paste content:', processedContent);
+                    console.log('[Debug] Lines:', processedContent.split('\n').length);
                 }
-
                 return;
             }
+
+            // Skip partial bracketed paste sequences
+            // Commented out to test if this is blocking paste
+            // if (char && (char.includes('\x1b[200~') || char.includes('\x1b[201~'))) {
+            //     return;
+            // }
 
             // Handle ESC key
             if (key.escape) {
@@ -1036,10 +1030,6 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                 }
 
                 setInput('');
-                // Force re-enable bracketed paste mode after clearing input
-                if (isTTY) {
-                    process.stdout.write('\x1b[?2004h');
-                }
             } else if (key.upArrow) {
                 // Navigate history up
                 if (isDebug) {
@@ -1086,20 +1076,17 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                     }, 2000);
                 }
             } else if (key.backspace || key.delete) {
-                setInput(prev => {
-                    const newValue = prev.slice(0, -1);
-                    if (isDebug && newValue === '') {
-                        console.log('[Debug] Input cleared via backspace - now empty');
-                    }
-                    return newValue;
-                });
+                setInput(prev => prev.slice(0, -1));
             } else if (key.ctrl && key.l) {
                 // Clear screen
                 setHistory([]);
                 setResponse('');
             } else if (char && !key.ctrl && !key.meta) {
-                // Regular single character input
-                setInput(prev => prev + char);
+                // Don't add the char if it contains paste sequences
+                if (!char.includes('[200~') && !char.includes('\x1b[201~') &&
+                    !char.includes('\x1b[200~')) {
+                    setInput(prev => prev + char);
+                }
             }
         });
     }
@@ -1128,78 +1115,66 @@ Config: ${config ? 'Loaded' : 'Default'}`);
         );
     }
 
-    // Calculate terminal height for proper layout
-    const terminalHeight = stdout ? stdout.rows : 24;
-
-    // Calculate how many lines the input is using
-    const inputLines = input.split('\n').length;
-    const inputHeight = inputLines + 1; // +1 for the prompt line
-
-    // Calculate available space for history
-    const headerHeight = 4; // Title + divider
-    const footerHeight = 2; // Footer text
-    const availableHistoryHeight = Math.max(1, terminalHeight - headerHeight - footerHeight - inputHeight - 2);
-
-    // Render main UI with full height and bottom-aligned input
-    return React.createElement(Box, {
-        flexDirection: 'column',
-        height: terminalHeight
-    },
-        // Clean header with title and version
-        React.createElement(Box, { paddingLeft: 1, paddingTop: 1 },
-            React.createElement(Text, { color: 'yellow', bold: true }, '✨ MCP Terminal Assistant'),
-            React.createElement(Text, { color: 'gray' }, '  v3.0'),
+    // Render main UI
+    return React.createElement(Box, { flexDirection: 'column', padding: 1 },
+        // Header
+        React.createElement(Box, { marginBottom: 1 },
+            React.createElement(Text, { color: 'green', bold: true }, '✨ MCP Terminal Assistant'),
+            React.createElement(Text, { color: 'gray' }, ' v3.0'),
             isDebug && React.createElement(Text, { color: 'magenta' }, ' [DEBUG]')
         ),
 
-        // Elegant divider line
-        React.createElement(Box, { paddingLeft: 1, paddingRight: 1, marginTop: 1 },
-            React.createElement(Text, { dimColor: true }, '─'.repeat(60))
+        // Status bar
+        React.createElement(Box, null,
+            React.createElement(Text, null, 'Status: '),
+            React.createElement(Text, {
+                color: status === 'ready' ? 'green' :
+                       status === 'processing' ? 'yellow' :
+                       status === 'error' ? 'red' :
+                       'cyan'
+            }, status),
+            error && React.createElement(Text, { color: 'red' }, ` - ${error}`)
         ),
 
-        // Conversation history with dynamic height based on available space
+        // History display
         React.createElement(Box, {
-            paddingLeft: 1,
-            paddingRight: 1,
             marginTop: 1,
-            marginBottom: 1,
             flexDirection: 'column',
-            height: availableHistoryHeight,
-            overflow: 'hidden'
+            borderStyle: 'single',
+            padding: 1,
+            height: 15
         },
+            React.createElement(Text, { dimColor: true }, 'Session:'),
             history.length === 0 ?
-                React.createElement(Box, null,
-                    React.createElement(Text, { color: 'gray', italic: true }, 'Ready for your questions...')
-                ) :
+                React.createElement(Text, { color: 'gray' }, 'Ready for your questions...') :
                 React.createElement(Box, { flexDirection: 'column' },
-                    // Show only what fits in available space
-                    ...history.slice(-(availableHistoryHeight * 2)).slice(-availableHistoryHeight).map((line, i) => {
-                        // Add spacing between Q&A pairs
-                        const elements = [];
-                        if (i > 0 && line.startsWith('❯')) {
-                            elements.push(React.createElement(Text, { key: `space-${i}` }, ''));
-                        }
-                        elements.push(
-                            React.createElement(Text, {
-                                key: i,
-                                color: line.startsWith('❯') ? 'cyan' :
-                                       line.startsWith('✗') ? 'red' : 'white',
-                                bold: line.startsWith('❯')
-                            }, line)
-                        );
-                        return elements;
-                    }).flat()
+                    ...history.slice(-10).map((line, i) =>
+                        React.createElement(Text, {
+                            key: i,
+                            color: line.startsWith('❯') ? 'cyan' :
+                                   line.startsWith('✗') ? 'red' : 'white'
+                        }, line)
+                    )
                 )
         ),
 
-        // Input prompt - allow it to grow naturally
-        React.createElement(Box, {
-            paddingLeft: 1,
-            flexShrink: 0  // Don't shrink the input area
+        // Response area
+        response && React.createElement(Box, {
+            marginTop: 1,
+            borderStyle: 'round',
+            padding: 1,
+            borderColor: error ? 'red' : 'green'
         },
+            React.createElement(Text, {
+                color: error ? 'red' : 'white'
+            }, response)
+        ),
+
+        // Input line
+        React.createElement(Box, { marginTop: 1 },
             isProcessing ?
                 React.createElement(Box, null,
-                    React.createElement(Text, { color: 'yellow' }, '❯ Processing '),
+                    React.createElement(Text, { color: 'yellow' }, 'Processing '),
                     React.createElement(Spinner, { type: 'dots' })
                 ) :
                 React.createElement(MultilineInput, {
@@ -1211,10 +1186,10 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                 })
         ),
 
-        // Clean footer - no bottom margin to keep at terminal bottom
-        React.createElement(Box, { paddingLeft: 1, marginTop: 1 },
-            React.createElement(Text, { dimColor: true, italic: true },
-                '/help for commands • ↑↓ for history • Ctrl+C to exit')
+        // Footer
+        React.createElement(Box, { marginTop: 1 },
+            React.createElement(Text, { dimColor: true },
+                'Type your question • /help for commands • ↑↓ for history • Ctrl+C to exit')
         )
     );
 };

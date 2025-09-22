@@ -1193,7 +1193,12 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                 )
         ),
 
-        // Input prompt
+        // Top separator line
+        React.createElement(Box, { paddingLeft: 1, paddingRight: 1 },
+            React.createElement(Text, { dimColor: true }, '─'.repeat(60))
+        ),
+
+        // Input prompt with minimal padding
         React.createElement(Box, {
             paddingLeft: 1
         },
@@ -1211,7 +1216,12 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                 })
         ),
 
-        // Clean footer - no bottom margin to keep at terminal bottom
+        // Bottom separator line
+        React.createElement(Box, { paddingLeft: 1, paddingRight: 1 },
+            React.createElement(Text, { dimColor: true }, '─'.repeat(60))
+        ),
+
+        // Clean footer
         React.createElement(Box, { paddingLeft: 1, marginTop: 1 },
             React.createElement(Text, { dimColor: true, italic: true },
                 '/help for commands • ↑↓ for history • Ctrl+C to exit')

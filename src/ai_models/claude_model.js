@@ -43,9 +43,6 @@ export default class ClaudeModel extends BaseAIModel {
     }
 
     async askWithTools({ system, messages, tools, tool_choice = { type: 'auto' }, signal }) {
-        console.log('------------------------------')
-        console.log({system, messages, tools, tool_choice, signal})
-        console.log('------------------------------')
         if (!this.isInitialized) {
             await this.initialize();
         }

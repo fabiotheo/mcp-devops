@@ -354,7 +354,9 @@ class MCPSetup {
             "commander": "^14.0.1",
             "react": "^18.2.0",
             "ink": "^4.4.1",
-            "ink-spinner": "^5.0.0"
+            "ink-spinner": "^5.0.0",
+            "marked": "^16.0.0",
+            "marked-terminal": "^8.2.0"
         };
 
         let needsUpdate = false;

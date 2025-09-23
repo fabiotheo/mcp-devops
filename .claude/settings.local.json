@@ -94,7 +94,10 @@
       "Bash(export MCP_USER=testphase2)",
       "Bash(export MCP_USER=testphase3)",
       "Bash(MCP_USER=testpaste node src/mcp-ink-cli.mjs --debug)",
-      "Bash(export MCP_USER=testpaste)"
+      "Bash(export MCP_USER=testpaste)",
+      "Bash(./test-markdown-production.sh:*)",
+      "Bash(FORCE_COLOR=3 node -e \"\nimport chalk from ''chalk'';\nconsole.log(''With FORCE_COLOR:'', chalk.bold(''test''));\nconsole.log(''Bytes:'', Array.from(chalk.bold(''test'')).map(c => c.charCodeAt(0).toString(16)).join('' ''));\n\")",
+      "Bash(/tmp/test-markdown-app.sh:*)"
     ],
     "deny": [],
     "ask": []

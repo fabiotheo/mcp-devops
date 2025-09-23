@@ -19,11 +19,6 @@ import path from 'path';
 import {fileURLToPath} from 'url';
 import fs from 'fs/promises';
 
-// Import markdown processing modules
-import { marked } from 'marked';
-import TerminalRenderer from 'marked-terminal';
-import chalk from 'chalk';
-
 // Import backend modules
 import AICommandOrchestratorBash from './ai_orchestrator_bash.js';
 import PatternMatcher from './libs/pattern_matcher.js';
@@ -32,40 +27,6 @@ import TursoAdapter from './bridges/adapters/TursoAdapter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Force chalk to use colors even when not in TTY
-// This is needed for marked-terminal to generate ANSI codes
-import { Chalk } from 'chalk';
-const chalkInstance = new Chalk({ level: 3 }); // Force 256 colors
-
-// Configure marked with TerminalRenderer for markdown processing
-marked.setOptions({
-    renderer: new TerminalRenderer({
-        // Text formatting
-        strong: chalkInstance.bold,
-        em: chalkInstance.italic,
-        del: chalkInstance.strikethrough,
-
-        // Code formatting
-        code: chalkInstance.yellow,
-        blockquote: chalkInstance.gray.italic,
-
-        // Headings
-        heading: chalkInstance.green.bold,
-        firstHeading: chalkInstance.green.underline.bold,
-
-        // Links
-        link: chalkInstance.blue.underline,
-        href: chalkInstance.blue.underline,
-
-        // Layout options
-        paragraph: true,
-        reflowText: true,
-        width: 80,
-        showSectionPrefix: false,
-        unescape: true
-    })
-});
 
 // Module-level variables
 const isDebug = process.argv.includes('--debug');
@@ -852,24 +813,13 @@ const MCPInkApp = () => {
         }
     };
 
-    // Format response for display - remove markdown syntax for now
-    // Since Ink v4 doesn't properly render ANSI codes in strings,
-    // we'll strip markdown for cleaner output
+    // Format response for display - show complete response
     const formatResponse = (text) => {
         if (!text) return '';
-
         // Ensure text is a string
         const textStr = typeof text === 'string' ? text : String(text);
-
-        // For now, just strip markdown syntax to avoid visual clutter
-        // TODO: Implement proper React element-based formatting
-        return textStr
-            .replace(/\*\*(.*?)\*\*/g, '$1')  // Remove bold markers
-            .replace(/\*(.*?)\*/g, '$1')      // Remove italic markers
-            .replace(/`(.*?)`/g, '$1')        // Remove code markers
-            .replace(/^#{1,6}\s+/gm, '')      // Remove headers
-            .replace(/\n{3,}/g, '\n\n')       // Clean up excessive newlines
-            .trim();
+        // Return full response without truncation
+        return textStr;
     };
 
     // Handle special commands
@@ -1226,28 +1176,21 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                         const isErrorMessage = line.startsWith('✗');
 
                         lines.forEach((subline, j) => {
-                            // Check if this line contains ANSI codes (from markdown processing)
-                            const hasAnsiCodes = subline.includes('\x1b');
-
-                            // Determine props based on content type
-                            const textProps = { key: `${i}-${j}` };
-
-                            if (!hasAnsiCodes) {
-                                // Only apply color prop if there are no ANSI codes
-                                let color = 'white'; // default for responses
-                                if (isUserMessage) {
-                                    // For user messages, first line with ❯ is cyan, rest is cyan too
-                                    color = 'cyan';
-                                } else if (isErrorMessage) {
-                                    color = 'red';
-                                }
-                                textProps.color = color;
-                                textProps.bold = j === 0 && isUserMessage; // Only bold the first line of user messages
+                            // Determine color for this specific line
+                            let color = 'white'; // default for responses
+                            if (isUserMessage) {
+                                // For user messages, first line with ❯ is cyan, rest is cyan too
+                                color = 'cyan';
+                            } else if (isErrorMessage) {
+                                color = 'red';
                             }
-                            // If hasAnsiCodes is true, we let the ANSI codes handle the formatting
 
                             elements.push(
-                                React.createElement(Text, textProps, subline)
+                                React.createElement(Text, {
+                                    key: `${i}-${j}`,
+                                    color: color,
+                                    bold: j === 0 && isUserMessage // Only bold the first line of user messages
+                                }, subline)
                             );
                         });
                         return elements;

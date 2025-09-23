@@ -212,19 +212,18 @@ export default class AICommandOrchestrator {
     async planInitialCommands(context) {
         const sanitizedQuestion = context.originalQuestion.replace(/[\r\n]+/g, ' ').substring(0, this.config.maxQuestionLength);
 
-        // CRITICAL FIX: Include conversation history in the prompt
+        // Include conversation history for context but instruct AI not to comment on it
         let historyContext = '';
         if (context.systemContext.history && context.systemContext.history.length > 0) {
-            historyContext = '\n\nCONTEXTO DA CONVERSA ANTERIOR:\n';
+            historyContext = '\n\nCONTEXTO DA CONVERSA (use apenas para continuidade, NÃO comente sobre ele):\n';
             context.systemContext.history.forEach(msg => {
                 if (msg.role === 'user') {
-                    historyContext += `Usuário disse: "${msg.content}"\n`;
+                    historyContext += `Usuário: "${msg.content}"\n`;
                 } else if (msg.role === 'assistant' && !msg.content.includes('[Message processing was interrupted]')) {
                     const preview = msg.content.substring(0, 100);
-                    historyContext += `Assistente respondeu: "${preview}..."\n`;
+                    historyContext += `Assistente: "${preview}..."\n`;
                 }
             });
-            historyContext += '\nLEVE EM CONTA O CONTEXTO ACIMA AO RESPONDER!\n';
         }
 
         const prompt = `Você é um planejador de comandos. Sua tarefa é analisar uma pergunta e criar um plano inicial de comandos para respondê-la.
@@ -237,9 +236,13 @@ CONTEXTO DO SISTEMA:
 OS: ${context.systemContext.os || 'Linux'}
 Distribuição: ${context.systemContext.distro || 'Unknown'}
 
-REGRAS:
-- IMPORTANTE: Se a pergunta se refere a algo mencionado anteriormente, considere o contexto
-- Pense no primeiro comando mais lógico para iniciar a investigação.
+REGRAS IMPORTANTES:
+- Foque APENAS na pergunta atual
+- NÃO faça observações sobre padrões, repetições ou mudanças de comportamento
+- NÃO mencione que o usuário fez perguntas similares antes
+- NÃO comente sobre mensagens canceladas ou histórico
+- Use o contexto apenas para continuidade técnica
+- Pense no primeiro comando mais lógico para iniciar a investigação
 
 Retorne APENAS um objeto JSON com a lista de comandos iniciais.
 {

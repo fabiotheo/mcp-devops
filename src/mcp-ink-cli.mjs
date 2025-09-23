@@ -67,6 +67,66 @@ marked.setOptions({
     })
 });
 
+// Parser de markdown para elementos React do Ink
+const parseMarkdownToElements = (text, baseKey) => {
+    if (!text) return [React.createElement(Text, {key: baseKey}, '')];
+
+    const elements = [];
+    const regex = /(\*\*(.*?)\*\*|\*(.*?)\*|`(.*?)`)/g;
+    let lastIndex = 0;
+    let elementIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+        // Adiciona texto antes do match
+        if (match.index > lastIndex) {
+            elements.push(
+                React.createElement(Text, {
+                    key: `${baseKey}-txt-${elementIndex++}`
+                }, text.substring(lastIndex, match.index))
+            );
+        }
+
+        // Adiciona elemento formatado
+        if (match[2]) { // Bold
+            elements.push(
+                React.createElement(Text, {
+                    key: `${baseKey}-b-${elementIndex++}`,
+                    bold: true
+                }, match[2])
+            );
+        } else if (match[3]) { // Italic
+            elements.push(
+                React.createElement(Text, {
+                    key: `${baseKey}-i-${elementIndex++}`,
+                    italic: true
+                }, match[3])
+            );
+        } else if (match[4]) { // Code
+            elements.push(
+                React.createElement(Text, {
+                    key: `${baseKey}-c-${elementIndex++}`,
+                    color: 'yellow'
+                }, match[4])
+            );
+        }
+
+        lastIndex = match.index + match[0].length;
+    }
+
+    // Adiciona texto restante
+    if (lastIndex < text.length) {
+        elements.push(
+            React.createElement(Text, {
+                key: `${baseKey}-end`
+            }, text.substring(lastIndex))
+        );
+    }
+
+    return elements.length > 0 ? elements :
+        [React.createElement(Text, {key: baseKey}, text)];
+};
+
 // Module-level variables
 const isDebug = process.argv.includes('--debug');
 
@@ -852,22 +912,16 @@ const MCPInkApp = () => {
         }
     };
 
-    // Format response for display - remove markdown syntax for now
-    // Since Ink v4 doesn't properly render ANSI codes in strings,
-    // we'll strip markdown for cleaner output
+    // Format response for display - keep markdown for parser to handle
     const formatResponse = (text) => {
         if (!text) return '';
 
         // Ensure text is a string
         const textStr = typeof text === 'string' ? text : String(text);
 
-        // For now, just strip markdown syntax to avoid visual clutter
-        // TODO: Implement proper React element-based formatting
+        // Keep markdown syntax - it will be processed by parseMarkdownToElements
+        // Just clean up excessive newlines
         return textStr
-            .replace(/\*\*(.*?)\*\*/g, '$1')  // Remove bold markers
-            .replace(/\*(.*?)\*/g, '$1')      // Remove italic markers
-            .replace(/`(.*?)`/g, '$1')        // Remove code markers
-            .replace(/^#{1,6}\s+/gm, '')      // Remove headers
             .replace(/\n{3,}/g, '\n\n')       // Clean up excessive newlines
             .trim();
     };
@@ -1093,19 +1147,29 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                 if (isDebug) {
                     console.log(`[Debug] History navigation UP - Current index: ${historyIndex}, History length: ${commandHistory.length}`);
                 }
-                if (commandHistory.length > 0) {
-                    const newIndex = historyIndex < commandHistory.length - 1
+                // Filter out ESC markers from navigation
+                const navigableHistory = commandHistory.filter(cmd =>
+                    !cmd.includes('[User pressed ESC') &&
+                    !cmd.includes('Previous message was interrupted')
+                );
+                if (navigableHistory.length > 0) {
+                    const newIndex = historyIndex < navigableHistory.length - 1
                         ? historyIndex + 1
                         : historyIndex;
                     setHistoryIndex(newIndex);
-                    setInput(commandHistory[commandHistory.length - 1 - newIndex] || '');
+                    setInput(navigableHistory[navigableHistory.length - 1 - newIndex] || '');
                 }
             } else if (key.downArrow) {
                 // Navigate history down
+                // Filter out ESC markers from navigation
+                const navigableHistory = commandHistory.filter(cmd =>
+                    !cmd.includes('[User pressed ESC') &&
+                    !cmd.includes('Previous message was interrupted')
+                );
                 if (historyIndex > 0) {
                     const newIndex = historyIndex - 1;
                     setHistoryIndex(newIndex);
-                    setInput(commandHistory[commandHistory.length - 1 - newIndex] || '');
+                    setInput(navigableHistory[navigableHistory.length - 1 - newIndex] || '');
                 } else if (historyIndex === 0) {
                     setHistoryIndex(-1);
                     setInput('');
@@ -1226,29 +1290,22 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                         const isErrorMessage = line.startsWith('✗');
 
                         lines.forEach((subline, j) => {
-                            // Check if this line contains ANSI codes (from markdown processing)
-                            const hasAnsiCodes = subline.includes('\x1b');
+                            const lineKey = `${i}-${j}`;
 
-                            // Determine props based on content type
-                            const textProps = { key: `${i}-${j}` };
-
-                            if (!hasAnsiCodes) {
-                                // Only apply color prop if there are no ANSI codes
-                                let color = 'white'; // default for responses
-                                if (isUserMessage) {
-                                    // For user messages, first line with ❯ is cyan, rest is cyan too
-                                    color = 'cyan';
-                                } else if (isErrorMessage) {
-                                    color = 'red';
-                                }
-                                textProps.color = color;
-                                textProps.bold = j === 0 && isUserMessage; // Only bold the first line of user messages
+                            // Para mensagens do usuário e erros, manter comportamento atual
+                            if (isUserMessage || isErrorMessage) {
+                                elements.push(
+                                    React.createElement(Text, {
+                                        key: lineKey,
+                                        color: isUserMessage ? 'cyan' : 'red',
+                                        bold: j === 0 && isUserMessage
+                                    }, subline)
+                                );
+                            } else {
+                                // Para respostas da IA, aplicar parser de markdown
+                                const markdownElements = parseMarkdownToElements(subline, lineKey);
+                                elements.push(...markdownElements);
                             }
-                            // If hasAnsiCodes is true, we let the ANSI codes handle the formatting
-
-                            elements.push(
-                                React.createElement(Text, textProps, subline)
-                            );
                         });
                         return elements;
                     }).flat()

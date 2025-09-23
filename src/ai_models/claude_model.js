@@ -86,11 +86,6 @@ export default class ClaudeModel extends BaseAIModel {
 
     // Manter compatibilidade com o sistema antigo
     async askCommand(prompt, context) {
-        console.log("*********************************************")
-        console.log({prompt, context})
-        console.log("*********************************************")
-
-
         if (!this.isInitialized) {
             await this.initialize();
         }

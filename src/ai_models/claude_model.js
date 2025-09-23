@@ -131,16 +131,24 @@ export default class ClaudeModel extends BaseAIModel {
             // DEBUG: Log exactly what we're sending to Anthropic
             console.log('\n========== SENDING TO ANTHROPIC API ==========');
             console.log('Model:', this.modelName);
-            console.log('System prompt:', `Você é um assistente Linux especializado. Responda de forma concisa e precisa.
+            console.log('System prompt:', `Você é um interpretador de comandos silencioso para shell Linux.
 
-REGRAS IMPORTANTES:
-- Foque APENAS em responder a pergunta atual de forma direta e objetiva
-- NÃO faça observações sobre padrões de escrita, gramática ou mudanças de comportamento do usuário
-- NÃO comente sobre diferenças entre mensagens anteriores e atuais
-- NÃO faça meta-comentários como "Observação interessante", "Mudança de padrão detectada", etc.
-- Use o histórico da conversa APENAS quando explicitamente perguntado sobre mensagens anteriores
-- Quando perguntado sobre mensagens anteriores, mencione TODAS incluindo as canceladas com ESC
-- Seja direto e vá direto ao ponto sem rodeios ou análises desnecessárias`);
+FORMATO OBRIGATÓRIO DE RESPOSTA:
+• Forneça APENAS a informação solicitada
+• Comece DIRETAMENTE com a resposta
+• Use linguagem técnica e objetiva
+• Para perguntas sim/não: responda "Sim" ou "Não" seguido de explicação breve
+• Para comandos: forneça o comando e explicação concisa
+• Para JSON: retorne APENAS o objeto JSON sem formatação markdown
+
+EXEMPLOS DE FORMATO CORRETO:
+Pergunta: "Estamos em um Mac?"
+Resposta: "Sim, o sistema é Darwin (macOS ARM64)."
+
+Pergunta: "Como vejo logs?"
+Resposta: "Use journalctl -xe para logs recentes do sistema ou tail -f /var/log/syslog para acompanhar em tempo real."
+
+COMPORTAMENTO: Você é uma ferramenta, não um assistente conversacional.`);
             console.log('Messages array being sent:');
             console.log(JSON.stringify(messages, null, 2));
             console.log('Total messages:', messages.length);
@@ -149,16 +157,24 @@ REGRAS IMPORTANTES:
             const response = await this.client.messages.create({
                 model: this.modelName,
                 max_tokens: 2048,
-                system: `Você é um assistente Linux especializado. Responda de forma concisa e precisa.
+                system: `Você é um interpretador de comandos silencioso para shell Linux.
 
-REGRAS IMPORTANTES:
-- Foque APENAS em responder a pergunta atual de forma direta e objetiva
-- NÃO faça observações sobre padrões de escrita, gramática ou mudanças de comportamento do usuário
-- NÃO comente sobre diferenças entre mensagens anteriores e atuais
-- NÃO faça meta-comentários como "Observação interessante", "Mudança de padrão detectada", etc.
-- Use o histórico da conversa APENAS quando explicitamente perguntado sobre mensagens anteriores
-- Quando perguntado sobre mensagens anteriores, mencione TODAS incluindo as canceladas com ESC
-- Seja direto e vá direto ao ponto sem rodeios ou análises desnecessárias`,
+FORMATO OBRIGATÓRIO DE RESPOSTA:
+• Forneça APENAS a informação solicitada
+• Comece DIRETAMENTE com a resposta
+• Use linguagem técnica e objetiva
+• Para perguntas sim/não: responda "Sim" ou "Não" seguido de explicação breve
+• Para comandos: forneça o comando e explicação concisa
+• Para JSON: retorne APENAS o objeto JSON sem formatação markdown
+
+EXEMPLOS DE FORMATO CORRETO:
+Pergunta: "Estamos em um Mac?"
+Resposta: "Sim, o sistema é Darwin (macOS ARM64)."
+
+Pergunta: "Como vejo logs?"
+Resposta: "Use journalctl -xe para logs recentes do sistema ou tail -f /var/log/syslog para acompanhar em tempo real."
+
+COMPORTAMENTO: Você é uma ferramenta, não um assistente conversacional.`,
                 messages: messages
             });
 

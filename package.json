@@ -1,16 +1,30 @@
 {
   "name": "mcp-terminal",
-  "version": "1.0.45",
+  "version": "1.0.46",
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.60.0",
     "@google/generative-ai": "^0.24.1",
+    "@inkjs/ui": "^2.0.0",
     "@libsql/client": "^0.15.15",
     "@mendable/firecrawl-js": "^4.1.0",
+    "better-sqlite3": "^12.2.0",
     "chalk": "^5.6.0",
+    "cli-highlight": "^2.1.11",
     "commander": "^14.0.1",
+    "express": "^5.1.0",
+    "external-editor": "^3.1.0",
+    "ink": "^6.3.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "marked": "^16.3.0",
+    "marked-terminal": "^7.3.0",
     "minimist": "^1.2.8",
-    "openai": "^5.16.0"
+    "openai": "^5.16.0",
+    "react": "^19.1.1",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "uuid": "^13.0.0"
   },
   "bin": {
     "mcp-setup": "./setup.js",
@@ -18,5 +32,14 @@
     "mcp-monitor": "./mcp-client.js",
     "ipcom-chat": "./ipcom-chat",
     "mcp": "./ipcom-chat"
+  },
+  "scripts": {
+    "test:ink": "node src/tests/test-ink-basic.js",
+    "test:ink-advanced": "node src/tests/test-ink-advanced.js",
+    "test:integration": "node src/tests/test-integration.js"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.13",
+    "fuse.js": "^7.1.0"
   }
 }

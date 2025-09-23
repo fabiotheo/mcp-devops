@@ -351,7 +351,12 @@ class MCPSetup {
             "@libsql/client": "^0.15.15",
             "minimist": "^1.2.8",
             "chalk": "^5.3.0",
-            "commander": "^14.0.1"
+            "commander": "^14.0.1",
+            "react": "^18.2.0",
+            "ink": "^4.4.1",
+            "ink-spinner": "^5.0.0",
+            "marked": "^16.0.0",
+            "marked-terminal": "^8.2.0"
         };
 
         let needsUpdate = false;
@@ -414,7 +419,7 @@ class MCPSetup {
         try {
             await fs.mkdir(aiModelsDir, { recursive: true });
 
-            const sourceDir = path.join(process.cwd(), 'ai_models');
+            const sourceDir = path.join(process.cwd(), 'src', 'ai_models');
 
             // Verificar se o diretório de origem existe
             try {
@@ -423,7 +428,6 @@ class MCPSetup {
                 const sourceFiles = [
                     'base_model.js',
                     'claude_model.js',
-                    'claude_model_tools.js',
                     'openai_model.js',
                     'gemini_model.js',
                     'model_factory.js'
@@ -942,29 +946,62 @@ export default class ModelFactory {
         return this.setupShellIntegration();
     }
 
+    adjustImportsForInstallation(content, sourceFile) {
+        // Ajusta os imports relativos para funcionarem na estrutura instalada
+        let adjustedContent = content;
+
+        // Se o arquivo vem de src/, precisa ajustar os imports da v2
+        if (sourceFile.includes('src/')) {
+            // ../ai_orchestrator_bash.js -> ./ai_orchestrator_bash.js
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_orchestrator_bash\.js['"]/g, "from './ai_orchestrator_bash.js'");
+            // libs agora está dentro de src, então ./libs/ já está correto
+            // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
+            // ai_models agora está dentro de src, então ./ai_models/ já está correto
+            // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_models\//g, "from './ai_models/");
+            // ./bridges/adapters/TursoAdapter.js -> ./src/bridges/adapters/TursoAdapter.js
+            adjustedContent = adjustedContent.replace(/from ['"]\.\/bridges\/adapters\/TursoAdapter\.js['"]/g, "from './src/bridges/adapters/TursoAdapter.js'");
+        }
+
+        // Se o arquivo vem de src/core/, precisa ajustar os imports relativos
+        if (sourceFile.includes('src/core/')) {
+            // libs agora está dentro de src, então ./libs/ já está correto
+            // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
+            // ../ai-models/ -> ./ai_models/
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai-models\//g, "from './ai_models/");
+            // ../patterns/ -> ./patterns/
+            adjustedContent = adjustedContent.replace(/from ['"]\.\.\/patterns\//g, "from './patterns/'");
+            // ./ai_orchestrator -> ./ai_orchestrator (já está correto)
+        }
+
+
+
+        return adjustedContent;
+    }
+
     async makeExecutable() {
         console.log('\n🔧 Copiando e configurando scripts...');
 
         // Lista de arquivos a serem copiados
+        // MIGRAÇÃO V2: src/mcp-ink-cli.mjs agora é a interface principal
         const filesToCopy = [
-            { src: 'mcp-client.js', dest: 'mcp-client.js' },
-            { src: 'mcp-assistant.js', dest: 'mcp-assistant.js' },
-            { src: 'zsh_integration.sh', dest: 'zsh_integration.sh' },
-            { src: 'configure-ai.js', dest: 'configure-ai.js' },
-            { src: 'mcp-configure', dest: 'mcp-configure' },
-            { src: 'mcp-interactive.js', dest: 'mcp-interactive.js' },
-            { src: 'ipcom-chat', dest: 'ipcom-chat' },
-            { src: 'ipcom-chat-cli.js', dest: 'ipcom-chat-cli.js' },
-            { src: 'ipcom-chat-launcher.sh', dest: 'ipcom-chat-launcher.sh' },
-            { src: 'ai_orchestrator.js', dest: 'ai_orchestrator.js' },
-            { src: 'ai_orchestrator_tools.js', dest: 'ai_orchestrator_tools.js' },
-            { src: 'ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
-            { src: 'deploy-linux.sh', dest: 'deploy-linux.sh' },
-            { src: 'test-turso-integration.js', dest: 'test-turso-integration.js' },
-            { src: 'libs/paste-detector.js', dest: 'libs/paste-detector.js' },
-            { src: 'libs/paste-attachments.js', dest: 'libs/paste-attachments.js' },
-            { src: 'libs/paste-manager.js', dest: 'libs/paste-manager.js' },
-            { src: 'libs/enhanced-paste-manager.js', dest: 'libs/enhanced-paste-manager.js' }
+            // Interface principal V2
+            { src: 'src/mcp-ink-cli.mjs', dest: 'ipcom-chat-cli.js' },
+
+            // Backup da v1 (se existir)
+            { src: 'src/ipcom-chat-cli.js', dest: 'ipcom-chat-cli-v1.backup.js' },
+
+            // Orquestradores e libs essenciais
+            { src: 'src/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
+            { src: 'src/ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
+
+            // Arquivos de configuração
+            { src: 'src/configure-ai.js', dest: 'configure-ai.js' },
+
+            // Scripts shell
+            { src: 'scripts/zsh_integration.sh', dest: 'zsh_integration.sh' },
+
+            // Mantém deploy para Linux
+            { src: 'scripts/deploy-linux.sh', dest: 'deploy-linux.sh' }
         ];
 
         // Copiar arquivos principais
@@ -974,7 +1011,9 @@ export default class ModelFactory {
                 const destPath = path.join(this.mcpDir, file.dest);
 
                 try {
-                    const content = await fs.readFile(srcPath, 'utf8');
+                    let content = await fs.readFile(srcPath, 'utf8');
+                    // Ajusta os imports para a estrutura instalada
+                    content = this.adjustImportsForInstallation(content, file.src);
                     await fs.writeFile(destPath, content);
                     console.log(`  ✓ Arquivo ${file.dest} copiado`);
                 } catch (err) {
@@ -985,28 +1024,9 @@ export default class ModelFactory {
             }
         }
 
-        // Copiar padrões
-        try {
-            const patternsDir = path.join(process.cwd(), 'patterns');
-            const destPatternsDir = path.join(this.mcpDir, 'patterns');
-
-            const patternFiles = await fs.readdir(patternsDir);
-            for (const file of patternFiles) {
-                if (file.endsWith('.json')) {
-                    const srcPath = path.join(patternsDir, file);
-                    const destPath = path.join(destPatternsDir, file);
-                    const content = await fs.readFile(srcPath, 'utf8');
-                    await fs.writeFile(destPath, content);
-                }
-            }
-            console.log(`  ✓ Arquivos de padrões copiados`);
-        } catch (error) {
-            console.log(`  ⚠ Erro ao copiar padrões: ${error.message}`);
-        }
-
         // Copiar libs
         try {
-            const libsDir = path.join(process.cwd(), 'libs');
+            const libsDir = path.join(process.cwd(), 'src', 'libs');
             const destLibsDir = path.join(this.mcpDir, 'libs');
 
             // Criar diretório libs se não existir
@@ -1031,47 +1051,130 @@ export default class ModelFactory {
             // console.log(`  ⚠ Diretório libs não encontrado (normal em versões antigas)`);
         }
 
-        // Copiar web_search e web_scraper
+        // Copiar components da src (necessário para a v2)
         try {
-            // Copiar web_search
-            const webSearchDir = path.join(process.cwd(), 'web_search');
-            const destWebSearchDir = path.join(this.mcpDir, 'web_search');
+            const componentsDir = path.join(process.cwd(), 'src', 'components');
+            const destComponentsDir = path.join(this.mcpDir, 'components');
 
-            // Criar diretório web_search se não existir
-            await fs.mkdir(destWebSearchDir, { recursive: true });
-
-            // Copiar arquivos de web_search
-            const webSearchFiles = await fs.readdir(webSearchDir);
-            for (const file of webSearchFiles) {
-                if (file.endsWith('.js')) {
-                    const srcPath = path.join(webSearchDir, file);
-                    const destPath = path.join(destWebSearchDir, file);
-                    const content = await fs.readFile(srcPath, 'utf8');
-                    await fs.writeFile(destPath, content);
-                }
+            // Criar diretório components se não existir
+            try {
+                await fs.access(destComponentsDir);
+            } catch {
+                await fs.mkdir(destComponentsDir, { recursive: true });
             }
-            console.log(`  ✓ Arquivos de web_search copiados`);
 
-            // Copiar web_scraper
-            const webScraperDir = path.join(process.cwd(), 'web_scraper');
-            const destWebScraperDir = path.join(this.mcpDir, 'web_scraper');
-
-            // Criar diretório web_scraper se não existir
-            await fs.mkdir(destWebScraperDir, { recursive: true });
-
-            // Copiar arquivos de web_scraper
-            const webScraperFiles = await fs.readdir(webScraperDir);
-            for (const file of webScraperFiles) {
-                if (file.endsWith('.js')) {
-                    const srcPath = path.join(webScraperDir, file);
-                    const destPath = path.join(destWebScraperDir, file);
-                    const content = await fs.readFile(srcPath, 'utf8');
-                    await fs.writeFile(destPath, content);
-                }
+            const componentFiles = await fs.readdir(componentsDir);
+            for (const file of componentFiles) {
+                const srcPath = path.join(componentsDir, file);
+                const destPath = path.join(destComponentsDir, file);
+                const content = await fs.readFile(srcPath);
+                await fs.writeFile(destPath, content);
             }
-            console.log(`  ✓ Arquivos de web_scraper copiados`);
+            console.log(`  ✓ Componentes da interface copiados`);
         } catch (error) {
-            console.log(`  ⚠ Erro ao copiar web_search ou web_scraper: ${error.message}`);
+            console.log(`  ⚠ Erro ao copiar components: ${error.message}`);
+        }
+
+        // Copiar src (Nova interface Ink)
+        try {
+            const interfaceV2Dir = path.join(process.cwd(), 'src');
+            const destInterfaceV2Dir = path.join(this.mcpDir, 'src');
+
+            // Criar diretório src se não existir
+            try {
+                await fs.access(destInterfaceV2Dir);
+            } catch {
+                await fs.mkdir(destInterfaceV2Dir, { recursive: true });
+            }
+
+            // Copiar todos os arquivos da src
+            const copyRecursive = async (src, dest) => {
+                const stats = await fs.stat(src);
+                if (stats.isDirectory()) {
+                    await fs.mkdir(dest, { recursive: true });
+                    const files = await fs.readdir(src);
+                    for (const file of files) {
+                        await copyRecursive(
+                            path.join(src, file),
+                            path.join(dest, file)
+                        );
+                    }
+                } else {
+                    const content = await fs.readFile(src);
+                    await fs.writeFile(dest, content);
+                }
+            };
+
+            await copyRecursive(interfaceV2Dir, destInterfaceV2Dir);
+            console.log(`  ✓ Nova interface Ink (src) copiada`);
+        } catch (error) {
+            console.log(`  ⚠ Interface-v2 não encontrada (${error.message})`);
+        }
+
+        // ai_models agora é copiado junto com src
+        // Criar link simbólico para ai_models na raiz para compatibilidade
+        try {
+            const srcAiModelsDir = path.join(this.mcpDir, 'src', 'ai_models');
+            const destAiModelsDir = path.join(this.mcpDir, 'ai_models');
+
+            // Verificar se ai_models foi copiado com src
+            try {
+                await fs.access(srcAiModelsDir);
+
+                // Remover link/diretório antigo se existir
+                try {
+                    const stats = await fs.lstat(destAiModelsDir);
+                    if (stats.isDirectory() || stats.isSymbolicLink()) {
+                        await fs.rm(destAiModelsDir, { recursive: true, force: true });
+                    }
+                } catch {
+                    // Diretório não existe, tudo bem
+                }
+
+                // Criar link simbólico para manter compatibilidade
+                await fs.symlink(srcAiModelsDir, destAiModelsDir, 'dir');
+                console.log(`  ✓ Link simbólico para ai_models criado`);
+            } catch (error) {
+                console.log(`  ⚠ ai_models não encontrado em src: ${error.message}`);
+            }
+        } catch (error) {
+            console.log(`  ⚠ Erro ao criar link para ai_models: ${error.message}`);
+        }
+
+        // Criar ipcom-chat launcher dinamicamente
+        try {
+            const ipcomChatContent = `#!/usr/bin/env node
+
+// V2 Interface - Always use the new Ink interface
+await import('./ipcom-chat-cli.js');`;
+
+            const ipcomChatPath = path.join(this.mcpDir, 'ipcom-chat');
+            await fs.writeFile(ipcomChatPath, ipcomChatContent);
+            await fs.chmod(ipcomChatPath, 0o755);
+            console.log('  ✓ Launcher ipcom-chat criado');
+        } catch (error) {
+            console.log(`  ⚠ Erro ao criar ipcom-chat: ${error.message}`);
+        }
+
+        // Criar mcp-configure launcher dinamicamente
+        try {
+            const mcpConfigureContent = `#!/usr/bin/env node
+
+// Simple wrapper to run the AI configurator
+import AIConfigurator from './configure-ai.js';
+
+const configurator = new AIConfigurator();
+configurator.run().catch(error => {
+    console.error('❌ Erro na configuração:', error.message);
+    process.exit(1);
+});`;
+
+            const mcpConfigurePath = path.join(this.mcpDir, 'mcp-configure');
+            await fs.writeFile(mcpConfigurePath, mcpConfigureContent);
+            await fs.chmod(mcpConfigurePath, 0o755);
+            console.log('  ✓ Launcher mcp-configure criado');
+        } catch (error) {
+            console.log(`  ⚠ Erro ao criar mcp-configure: ${error.message}`);
         }
 
         // Copiar documentação
@@ -1103,8 +1206,7 @@ export default class ModelFactory {
             'configure-ai.js',
             'mcp-configure',
             'mcp-interactive.js',
-            'ipcom-chat',
-            'ipcom-chat-launcher.sh'
+            'ipcom-chat'
         ];
 
         for (const script of scripts) {

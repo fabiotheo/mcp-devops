@@ -119,7 +119,7 @@ servidor-teste2.ipcom.local
 EOF
 
 # Teste dry-run primeiro (simula sem executar)
-./deploy-linux.sh test-hosts.txt \
+./scripts/deploy-linux.sh test-hosts.txt \
 --turso-url "libsql://ipcom-linux-fabioipcom.aws-us-east-1.turso.io" \
 --turso-token "SEU_TOKEN_AQUI" \
 --user seu_usuario \
@@ -128,7 +128,7 @@ EOF
 2.2 - Deployment Real
 
 # Executar deployment real
-./deploy-linux.sh test-hosts.txt \
+./scripts/deploy-linux.sh test-hosts.txt \
 --turso-url "libsql://ipcom-linux-fabioipcom.aws-us-east-1.turso.io" \
 --turso-token "SEU_TOKEN_AQUI" \
 --user seu_usuario

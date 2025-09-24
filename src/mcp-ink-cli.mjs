@@ -1344,17 +1344,46 @@ Config: ${config ? 'Loaded' : 'Default'}`);
             flexDirection: 'column',
             flexGrow: 1  // This pushes the input to bottom
         },
-            // Clean header with title and version
-            React.createElement(Box, { paddingLeft: 1, paddingTop: 1 },
-                React.createElement(Text, { color: 'yellow', bold: true }, '✨ MCP Terminal Assistant'),
-                React.createElement(Text, { color: 'gray' }, '  v3.0'),
-                isDebug && React.createElement(Text, { color: 'magenta' }, ' [DEBUG]')
+            // Compact professional header
+            React.createElement(Box, {
+                flexDirection: 'column',
+                borderStyle: 'round',
+                borderColor: 'cyan',
+                paddingLeft: 1,
+                paddingRight: 1,
+                paddingTop: 0,
+                paddingBottom: 0,
+                marginTop: 1,
+                marginLeft: 1,
+                width: 55  // Fixed width for compact design
+            },
+                // Title line
+                React.createElement(Text, { color: 'cyan', bold: true },
+                    '✻ Terminal Assistant IPCOM'
+                ),
+
+                // Version and status line
+                React.createElement(Box, null,
+                    React.createElement(Text, { color: 'gray' }, '  Powered by AI • '),
+                    React.createElement(Text, { color: 'green', bold: true }, 'IPCOM TECNOLOGIA'),
+                    React.createElement(Text, { color: 'gray' }, ' • v1.0'),
+                    isDebug && React.createElement(Text, { color: 'magenta', bold: true }, ' [DEBUG]')
+                ),
+
+                // Developer credits - elegant 3 lines
+                React.createElement(Box, { flexDirection: 'column', marginTop: 0 },
+                    React.createElement(Text, { dimColor: true, italic: true },
+                        '  Developed by Fábio F. Theodoro'
+                    ),
+                    React.createElement(Text, { dimColor: true, italic: true },
+                        '  https://github.com/fabiotheo'
+                    ),
+                    React.createElement(Text, { dimColor: true, italic: true },
+                        '  https://ipcom.com.br'
+                    )
+                )
             ),
 
-            // Elegant divider line
-            React.createElement(Box, { marginTop: 1 },
-                React.createElement(Text, { dimColor: true }, '─'.repeat(terminalWidth))
-            ),
 
             // Conversation history
             React.createElement(Box, {

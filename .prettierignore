@@ -1,0 +1,10 @@
+out
+pnpm-lock.yaml
+tsconfig.*.json
+node_modules
+scripts
+docs
+dashboard
+interface-v2
+.claude
+.idea

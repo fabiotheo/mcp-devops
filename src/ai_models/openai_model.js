@@ -5,30 +5,37 @@ import OpenAI from 'openai';
 import BaseAIModel from './base_model.js';
 
 export default class OpenAIModel extends BaseAIModel {
-    constructor(config) {
-        super(config);
-        this.apiKey = config.openai_api_key;
-        this.modelName = config.openai_model || 'gpt-4o';
-        this.client = null;
+  constructor(config) {
+    super(config);
+    this.apiKey = config.openai_api_key;
+    this.modelName = config.openai_model || 'gpt-4o';
+    this.client = null;
+  }
+
+  async initialize() {
+    if (!this.apiKey) {
+      throw new Error('Chave de API da OpenAI não configurada');
     }
 
-    async initialize() {
-        if (!this.apiKey) {
-            throw new Error('Chave de API da OpenAI não configurada');
-        }
+    this.client = new OpenAI({
+      apiKey: this.apiKey,
+    });
 
-        this.client = new OpenAI({
-            apiKey: this.apiKey
-        });
+    return this;
+  }
 
-        return this;
-    }
+  async analyzeCommand(commandData) {
+    try {
+      const {
+        command: executedCommand,
+        exitCode,
+        stdout,
+        stderr,
+        duration,
+        systemContext,
+      } = commandData;
 
-    async analyzeCommand(commandData) {
-        try {
-            const { command: executedCommand, exitCode, stdout, stderr, duration, systemContext } = commandData;
-
-            const prompt = `Você é um especialista em Linux que analisa comandos que falharam.
+      const prompt = `Você é um especialista em Linux que analisa comandos que falharam.
 
 SISTEMA:
 - OS: ${systemContext.os}
@@ -61,38 +68,43 @@ FORMATO DA RESPOSTA:
 
 Seja conciso e específico para o sistema detectado.`;
 
-            const response = await this.client.chat.completions.create({
-                model: this.modelName,
-                messages: [
-                    { role: 'system', content: 'Você é um assistente especializado em terminal Linux que analisa erros e sugere soluções.' },
-                    { role: 'user', content: prompt }
-                ],
-                max_tokens: 1500
-            });
+      const response = await this.client.chat.completions.create({
+        model: this.modelName,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Você é um assistente especializado em terminal Linux que analisa erros e sugere soluções.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 1500,
+      });
 
-            const analysis = response.choices[0].message.content;
+      const analysis = response.choices[0].message.content;
 
-            // Extrai comando sugerido da resposta
-            const commandMatch = analysis.match(/💻 COMANDO: (.+?)(?:\n|$)/);
-            const suggestedCommand = commandMatch ? commandMatch[1].replace(/`/g, '').trim() : null;
+      // Extrai comando sugerido da resposta
+      const commandMatch = analysis.match(/💻 COMANDO: (.+?)(?:\n|$)/);
+      const suggestedCommand = commandMatch
+        ? commandMatch[1].replace(/`/g, '').trim()
+        : null;
 
-            return {
-                description: analysis,
-                command: suggestedCommand,
-                confidence: 0.8,
-                category: 'llm_analysis',
-                source: 'openai_gpt'
-            };
-
-        } catch (error) {
-            console.error('Erro na análise com OpenAI:', error);
-            return null;
-        }
+      return {
+        description: analysis,
+        command: suggestedCommand,
+        confidence: 0.8,
+        category: 'llm_analysis',
+        source: 'openai_gpt',
+      };
+    } catch (error) {
+      console.error('Erro na análise com OpenAI:', error);
+      return null;
     }
+  }
 
-    async askCommand(question, systemContext) {
-        try {
-            const prompt = `Você é um assistente especializado em Linux/Unix que ajuda usuários a encontrar o comando correto para suas tarefas.
+  async askCommand(question, systemContext) {
+    try {
+      const prompt = `Você é um assistente especializado em Linux/Unix que ajuda usuários a encontrar o comando correto para suas tarefas.
 
 INFORMAÇÕES DO SISTEMA:
 - OS: ${systemContext.os}
@@ -132,45 +144,47 @@ FORMATO DA RESPOSTA:
 
 Responda de forma direta e prática.`;
 
-            const response = await this.client.chat.completions.create({
-                model: this.modelName,
-                messages: [
-                    { role: 'system', content: 'Você é um assistente especializado em terminal Linux que fornece comandos precisos e explicações claras.' },
-                    { role: 'user', content: prompt }
-                ],
-                max_tokens: 2000
-            });
+      const response = await this.client.chat.completions.create({
+        model: this.modelName,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Você é um assistente especializado em terminal Linux que fornece comandos precisos e explicações claras.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 2000,
+      });
 
-            return response.choices[0].message.content;
-        } catch (error) {
-            console.error('Erro ao consultar OpenAI:', error);
-            return `❌ Erro ao conectar com o assistente GPT. Verifique sua configuração da API OpenAI.`;
-        }
+      return response.choices[0].message.content;
+    } catch (error) {
+      console.error('Erro ao consultar OpenAI:', error);
+      return `❌ Erro ao conectar com o assistente GPT. Verifique sua configuração da API OpenAI.`;
     }
+  }
 
-    getProviderName() {
-        return 'GPT (OpenAI)';
+  getProviderName() {
+    return 'GPT (OpenAI)';
+  }
+
+  getModelName() {
+    return this.modelName;
+  }
+
+  async validateApiKey() {
+    try {
+      // Tenta fazer uma chamada simples para validar a API key
+      const response = await this.client.chat.completions.create({
+        model: this.modelName,
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 10,
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Erro ao validar API key da OpenAI:', error);
+      return false;
     }
-
-    getModelName() {
-        return this.modelName;
-    }
-
-    async validateApiKey() {
-        try {
-            // Tenta fazer uma chamada simples para validar a API key
-            const response = await this.client.chat.completions.create({
-                model: this.modelName,
-                messages: [
-                    { role: 'user', content: 'Hello' }
-                ],
-                max_tokens: 10
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Erro ao validar API key da OpenAI:', error);
-            return false;
-        }
-    }
+  }
 }

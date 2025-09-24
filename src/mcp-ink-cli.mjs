@@ -190,6 +190,9 @@ const MCPInkApp = () => {
     const { exit } = useApp();
     const { stdout } = useStdout();
     const orchestrator = useRef(null);
+
+    // Get terminal width for separator lines
+    const terminalWidth = stdout?.columns || 80;
     const patternMatcher = useRef(null);
     const tursoAdapter = useRef(null);
     // Separate abort controllers for different operations
@@ -1349,8 +1352,8 @@ Config: ${config ? 'Loaded' : 'Default'}`);
             ),
 
             // Elegant divider line
-            React.createElement(Box, { paddingLeft: 1, paddingRight: 1, marginTop: 1 },
-                React.createElement(Text, { dimColor: true }, '─'.repeat(60))
+            React.createElement(Box, { marginTop: 1 },
+                React.createElement(Text, { dimColor: true }, '─'.repeat(terminalWidth))
             ),
 
             // Conversation history
@@ -1431,8 +1434,8 @@ Config: ${config ? 'Loaded' : 'Default'}`);
             flexDirection: 'column'
         },
             // Top separator line
-            React.createElement(Box, { paddingLeft: 1, paddingRight: 1 },
-                React.createElement(Text, { dimColor: true }, '─'.repeat(60))
+            React.createElement(Box, null,
+                React.createElement(Text, { dimColor: true }, '─'.repeat(terminalWidth))
             ),
 
             // Input prompt
@@ -1454,8 +1457,8 @@ Config: ${config ? 'Loaded' : 'Default'}`);
             ),
 
             // Bottom separator line
-            React.createElement(Box, { paddingLeft: 1, paddingRight: 1 },
-                React.createElement(Text, { dimColor: true }, '─'.repeat(60))
+            React.createElement(Box, null,
+                React.createElement(Text, { dimColor: true }, '─'.repeat(terminalWidth))
             ),
 
             // Clean footer

@@ -13,7 +13,7 @@ import fs from 'fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import chalk from 'node:chalk';
+import chalk from 'chalk';
 import { spawn } from 'node:child_process';
 
 const program = new Command();

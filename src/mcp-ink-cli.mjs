@@ -20,10 +20,6 @@ import { fileURLToPath } from 'node:url';
 import fs from 'fs/promises';
 import { appendFileSync, writeFileSync } from 'node:fs';
 
-// Import markdown processing modules
-import { marked } from 'marked';
-import TerminalRenderer from 'marked-terminal';
-
 // Import backend modules
 import AICommandOrchestratorBash from './ai_orchestrator_bash.js';
 import PatternMatcher from './libs/pattern_matcher.js';
@@ -33,144 +29,15 @@ import TursoAdapter from './bridges/adapters/TursoAdapter.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Force chalk to use colors even when not in TTY
-// This is needed for marked-terminal to generate ANSI codes
-import { Chalk } from 'chalk';
-const chalkInstance = new Chalk({ level: 3 }); // Force 256 colors
+// Note: Removed marked-terminal processing as it was causing text wrapping issues
+// Using simplified text rendering instead
 
-// Configure marked with TerminalRenderer for markdown processing
-marked.setOptions({
-  renderer: new TerminalRenderer({
-    // Text formatting
-    strong: chalkInstance.bold,
-    em: chalkInstance.italic,
-    del: chalkInstance.strikethrough,
-
-    // Code formatting
-    code: chalkInstance.yellow,
-    blockquote: chalkInstance.gray.italic,
-
-    // Headings
-    heading: chalkInstance.green.bold,
-    firstHeading: chalkInstance.green.underline.bold,
-
-    // Links
-    link: chalkInstance.blue.underline,
-    href: chalkInstance.blue.underline,
-
-    // Layout options
-    paragraph: true,
-    reflowText: true,
-    width: 80,
-    showSectionPrefix: false,
-    unescape: true,
-  }),
-});
-
-// Parser de markdown para elementos React do Ink - versão melhorada
+// Simplified markdown parser - avoid complex processing that breaks layout
 const parseMarkdownToElements = (text, baseKey) => {
   if (!text) return [React.createElement(Text, { key: baseKey }, '')];
 
-  // Don't duplicate bullet if it's already there
-  // (formatResponse already converts - to •)
-
-  const elements = [];
-  // Updated regex to better handle markdown patterns
-  const regex = /(\*\*(.*?)\*\*|\*(.*?)\*|`(.*?)`|__(.*?)__)/g;
-  let lastIndex = 0;
-  let elementIndex = 0;
-  let match;
-
-  while ((match = regex.exec(text)) !== null) {
-    // Adiciona texto antes do match
-    if (match.index > lastIndex) {
-      const plainText = text.substring(lastIndex, match.index);
-      if (plainText) {
-        elements.push(
-          React.createElement(
-            Text,
-            {
-              key: `${baseKey}-txt-${elementIndex++}`,
-            },
-            plainText,
-          ),
-        );
-      }
-    }
-
-    // Adiciona elemento formatado
-    if (match[2]) {
-      // Bold with **
-      elements.push(
-        React.createElement(
-          Text,
-          {
-            key: `${baseKey}-b-${elementIndex++}`,
-            bold: true,
-          },
-          match[2],
-        ),
-      );
-    } else if (match[3]) {
-      // Italic with *
-      elements.push(
-        React.createElement(
-          Text,
-          {
-            key: `${baseKey}-i-${elementIndex++}`,
-            italic: true,
-          },
-          match[3],
-        ),
-      );
-    } else if (match[4]) {
-      // Code with `
-      elements.push(
-        React.createElement(
-          Text,
-          {
-            key: `${baseKey}-c-${elementIndex++}`,
-            color: 'yellow',
-          },
-          match[4],
-        ),
-      );
-    } else if (match[5]) {
-      // Bold with __ (alternative)
-      elements.push(
-        React.createElement(
-          Text,
-          {
-            key: `${baseKey}-b2-${elementIndex++}`,
-            bold: true,
-          },
-          match[5],
-        ),
-      );
-    }
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  // Adiciona texto restante
-  if (lastIndex < text.length) {
-    const remainingText = text.substring(lastIndex);
-    if (remainingText) {
-      elements.push(
-        React.createElement(
-          Text,
-          {
-            key: `${baseKey}-end`,
-          },
-          remainingText,
-        ),
-      );
-    }
-  }
-
-  return elements.length > 0
-    ? elements
-    : [React.createElement(Text, { key: baseKey }, text)];
+  // Return plain text with wrap disabled to prevent breaking lines
+  return [React.createElement(Text, { key: baseKey, wrap: 'truncate-end' }, text)];
 };
 
 // Module-level variables
@@ -417,13 +284,12 @@ const MCPInkApp = () => {
   // Load command history from file or Turso if user is set
   const loadCommandHistory = async () => {
     try {
-      // Check if we have a Turso adapter with user
+      // Check if we have a Turso adapter
       if (
         tursoAdapter.current &&
-        tursoAdapter.current.isConnected() &&
-        user !== 'default'
+        tursoAdapter.current.isConnected()
       ) {
-        // Load from Turso for the user
+        // Load from Turso (user history if user is set, machine history if default)
         const userHistory = await tursoAdapter.current.getHistory(100); // Get last 100 commands
         const commands = [];
 
@@ -749,8 +615,7 @@ const MCPInkApp = () => {
 
     if (
       tursoAdapter.current &&
-      tursoAdapter.current.isConnected() &&
-      user !== 'default'
+      tursoAdapter.current.isConnected()
     ) {
       currentTursoEntryId.current =
         await tursoAdapter.current.saveQuestionWithStatusAndRequestId(
@@ -1179,14 +1044,13 @@ const MCPInkApp = () => {
     );
   };
 
-  // Format response for display - fix markdown list formatting while preserving structure
+  // Format response for display - minimal processing to avoid breaking text
   const formatResponse = text => {
     if (!text) return '';
 
     // Ensure text is a string
     const textStr = typeof text === 'string' ? text : String(text);
 
-    // Log para arquivo sem interferir no terminal - apenas se debug ativo
     if (isDebug) {
       appendFileSync(
         '/tmp/mcp-debug.log',
@@ -1194,29 +1058,10 @@ const MCPInkApp = () => {
       );
     }
 
-    // Fix list items with bold text to prevent line breaks
-    // But preserve the original paragraph structure
+    // Minimal formatting - just clean up excessive newlines
+    // Don't try to reformat or wrap text as that causes issues
     const formatted = textStr
-      .split('\n')
-      .map(line => {
-        // If it's a list item with bold text
-        if (line.match(/^[\s-]*[-*]\s+\*\*/)) {
-          // Replace list marker with bullet and keep everything on same line
-          const fixed = line.replace(/^[\s-]*[-*]\s+/, '• ');
-          if (isDebug) {
-            appendFileSync(
-              '/tmp/mcp-debug.log',
-              `FIXED LINE: "${line}" -> "${fixed}"\n`,
-            );
-          }
-          return fixed;
-        }
-        // Preserve empty lines and other content as-is
-        return line;
-      })
-      .join('\n')
-      // Don't remove double newlines - they're intentional paragraph breaks
-      // Only clean up triple or more newlines
+      // Clean up excessive newlines but preserve structure
       .replace(/\n{4,}/g, '\n\n\n')
       .trim();
 

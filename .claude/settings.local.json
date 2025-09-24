@@ -105,7 +105,14 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(npx eslint:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(MCP_USER=default timeout 10 node src/mcp-ink-cli.mjs --debug)",
+      "Bash(./test-default-user.sh:*)",
+      "Read(//private/tmp/**)",
+      "Bash(./test-default-debug.sh:*)",
+      "Bash(MCP_USER=testuser timeout 8 node src/mcp-ink-cli.mjs --debug)",
+      "Bash(./test-interactive.sh)",
+      "Bash(./test-fixes.sh:*)"
     ],
     "deny": [],
     "ask": []

@@ -312,12 +312,38 @@ class TursoAdapter {
     }
 
     try {
-      const entryId = await this.tursoClient.saveToUser(command, null, {
-        status,
-        request_id: requestId,
-        session_id: this.tursoClient.sessionId,
-        source: 'ink-interface',
-      });
+      let entryId;
+
+      // If we have a userId (not default), save to user table
+      // Otherwise, use saveCommand which respects the mode (will save to machine/global)
+      if (this.userId && this.userId !== 'default') {
+        entryId = await this.tursoClient.saveToUser(command, null, {
+          status,
+          request_id: requestId,
+          session_id: this.tursoClient.sessionId,
+          source: 'ink-interface',
+        });
+      } else {
+        // For default users, set mode to hybrid to save to machine and global
+        const originalMode = this.tursoClient.mode;
+        this.tursoClient.mode = 'hybrid';
+
+        if (this.debug) {
+          console.log(
+            `[TursoAdapter] Saving for default user in hybrid mode. Machine ID: ${this.tursoClient.machineId}`,
+          );
+        }
+
+        entryId = await this.tursoClient.saveCommand(command, null, {
+          status,
+          request_id: requestId,
+          session_id: this.tursoClient.sessionId,
+          source: 'ink-interface',
+        });
+
+        // Restore original mode
+        this.tursoClient.mode = originalMode;
+      }
 
       if (this.debug) {
         console.log(
@@ -401,13 +427,39 @@ class TursoAdapter {
     }
 
     try {
-      const result = await this.tursoClient.client.execute({
-        sql: 'UPDATE history_user SET status = ?, updated_at = ? WHERE request_id = ?',
-        args: [status, Math.floor(Date.now() / 1000), requestId],
-      });
+      const updateTime = Math.floor(Date.now() / 1000);
+      const updates = [];
+
+      // Update all tables that might have this request_id
+      if (this.userId && this.userId !== 'default') {
+        // If we have a user, update user table
+        updates.push(
+          this.tursoClient.client.execute({
+            sql: 'UPDATE history_user SET status = ?, updated_at = ? WHERE request_id = ?',
+            args: [status, updateTime, requestId],
+          })
+        );
+      }
+
+      // Always update global and machine tables for default users
+      updates.push(
+        this.tursoClient.client.execute({
+          sql: 'UPDATE history_global SET status = ?, updated_at = ? WHERE request_id = ?',
+          args: [status, updateTime, requestId],
+        })
+      );
+
+      updates.push(
+        this.tursoClient.client.execute({
+          sql: 'UPDATE history_machine SET status = ?, updated_at = ? WHERE request_id = ?',
+          args: [status, updateTime, requestId],
+        })
+      );
+
+      const results = await Promise.all(updates);
 
       // Return true only if at least one row was updated
-      const success = result.rowsAffected > 0;
+      const success = results.some(r => r.rowsAffected > 0);
 
       if (this.debug && !success) {
         console.log(
@@ -440,11 +492,47 @@ class TursoAdapter {
     }
 
     try {
-      await this.tursoClient.updateUserEntry(entryId, {
-        response,
-        status,
-        completed_at: Math.floor(Date.now() / 1000),
-      });
+      const updateTime = Math.floor(Date.now() / 1000);
+
+      // For default users, we need to update multiple tables
+      if (this.userId && this.userId !== 'default') {
+        // Update user table for registered users
+        await this.tursoClient.updateUserEntry(entryId, {
+          response,
+          status,
+          completed_at: updateTime,
+        });
+      } else {
+        // For default users, update global and machine tables
+        // The entryId returned from hybrid mode is the global table ID
+        const updates = [];
+
+        // Update global table by ID
+        updates.push(
+          this.tursoClient.client.execute({
+            sql: 'UPDATE history_global SET response = ?, status = ?, completed_at = ?, updated_at = ? WHERE id = ?',
+            args: [response, status, updateTime, updateTime, entryId],
+          })
+        );
+
+        // Update machine table by session_id and recent timestamp
+        // Since entries are created at the same time, we can find the matching entry
+        updates.push(
+          this.tursoClient.client.execute({
+            sql: 'UPDATE history_machine SET response = ?, status = ?, completed_at = ?, updated_at = ? WHERE machine_id = ? AND status = ? AND response IS NULL ORDER BY timestamp DESC LIMIT 1',
+            args: [response, status, updateTime, updateTime, this.tursoClient.machineId, 'pending'],
+          })
+        );
+
+        await Promise.all(updates);
+
+        if (this.debug) {
+          console.log(
+            `[TursoAdapter] Updated response for default user in global and machine tables`,
+          );
+        }
+      }
+
       return true;
     } catch (error) {
       if (this.debug) {

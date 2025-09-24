@@ -379,6 +379,11 @@ class MCPSetup {
                     console.log(`  ⚠ Adicionando dependência faltante: ${dep}`);
                     packageJson.dependencies[dep] = version;
                     needsUpdate = true;
+                } else if ((dep === 'marked' || dep === 'marked-terminal') && packageJson.dependencies[dep] !== version) {
+                    // Corrigir versões incorretas de marked e marked-terminal
+                    console.log(`  ⚠ Corrigindo versão de ${dep}: ${packageJson.dependencies[dep]} → ${version}`);
+                    packageJson.dependencies[dep] = version;
+                    needsUpdate = true;
                 }
             }
 
@@ -403,13 +408,24 @@ class MCPSetup {
         // Instalar dependências
         console.log('  📦 Instalando dependências npm...');
         try {
+            // Tentar primeiro sem flags
             execSync('npm install', {
                 cwd: this.mcpDir,
                 stdio: 'inherit'
             });
             console.log('  ✓ Dependências instaladas');
         } catch (error) {
-            throw new Error('Falha ao instalar dependências npm');
+            // Se falhar, tentar com --legacy-peer-deps
+            console.log('  ⚠ Tentando instalação com --legacy-peer-deps...');
+            try {
+                execSync('npm install --legacy-peer-deps', {
+                    cwd: this.mcpDir,
+                    stdio: 'inherit'
+                });
+                console.log('  ✓ Dependências instaladas com --legacy-peer-deps');
+            } catch (error2) {
+                throw new Error('Falha ao instalar dependências npm');
+            }
         }
 
         // Copiar arquivos de modelos de IA

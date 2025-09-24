@@ -355,7 +355,7 @@ class MCPSetup {
             "react": "^18.2.0",
             "ink": "^4.4.1",
             "ink-spinner": "^5.0.0",
-            "marked": "^16.0.0",
+            "marked": "^14.1.2",
             "marked-terminal": "^7.3.0"
         };
 

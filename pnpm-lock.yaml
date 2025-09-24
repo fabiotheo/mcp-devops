@@ -51,11 +51,11 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0(ink@6.3.0(@types/react@19.1.13)(react@19.1.1))(react@19.1.1)
       marked:
-        specifier: ^16.3.0
-        version: 16.3.0
+        specifier: ^14.1.2
+        version: 14.1.4
       marked-terminal:
         specifier: ^7.3.0
-        version: 7.3.0(marked@16.3.0)
+        version: 7.3.0(marked@14.1.4)
       minimist:
         specifier: ^1.2.8
         version: 1.2.8
@@ -686,9 +686,9 @@ packages:
     peerDependencies:
       marked: '>=1 <16'
 
-  marked@16.3.0:
-    resolution: {integrity: sha512-K3UxuKu6l6bmA5FUwYho8CfJBlsUWAooKtdGgMcERSpF7gcBUrCGsLH7wDaaNOzwq18JzSUDyoEb/YsrqMac3w==}
-    engines: {node: '>= 20'}
+  marked@14.1.4:
+    resolution: {integrity: sha512-vkVZ8ONmUdPnjCKc5uTRvmkRbx4EAi2OkTOXmfTDhZz3OFqMNBM1oTTWwTr4HY4uAEojhzPf+Fy8F1DWa3Sndg==}
+    engines: {node: '>= 18'}
     hasBin: true
 
   math-intrinsics@1.1.0:
@@ -1750,18 +1750,18 @@ snapshots:
       '@libsql/linux-x64-musl': 0.5.22
       '@libsql/win32-x64-msvc': 0.5.22
 
-  marked-terminal@7.3.0(marked@16.3.0):
+  marked-terminal@7.3.0(marked@14.1.4):
     dependencies:
       ansi-escapes: 7.1.0
       ansi-regex: 6.2.2
       chalk: 5.6.0
       cli-highlight: 2.1.11
       cli-table3: 0.6.5
-      marked: 16.3.0
+      marked: 14.1.4
       node-emoji: 2.2.0
       supports-hyperlinks: 3.2.0
 
-  marked@16.3.0: {}
+  marked@14.1.4: {}
 
   math-intrinsics@1.1.0: {}
 

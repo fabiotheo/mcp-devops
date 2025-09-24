@@ -33,11 +33,7 @@
     "ipcom-chat": "./ipcom-chat",
     "mcp": "./ipcom-chat"
   },
-  "scripts": {
-    "test:ink": "node src/tests/test-ink-basic.js",
-    "test:ink-advanced": "node src/tests/test-ink-advanced.js",
-    "test:integration": "node src/tests/test-integration.js"
-  },
+  "scripts": {},
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@types/react": "^19.1.13",

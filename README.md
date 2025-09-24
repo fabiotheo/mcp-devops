@@ -535,7 +535,7 @@ ipcom-chat --test-providers
 │   --test-providers  Testa conexões         │
 │                                             │
 │ Debug e Análise:                           │
-│   --debug           Modo verbose           │
+│   --debug           Modo verbose com log   │
 │   --dry-run         Simula sem executar    │
 │   --explain         Explica comando        │
 │                                             │
@@ -728,6 +728,33 @@ ipcom-chat config set features.auto_execute true
 ipcom-chat config backup > config.backup.json
 ipcom-chat config restore < config.backup.json
 ```
+
+### Modo Debug
+
+O modo debug fornece informações detalhadas para diagnóstico:
+
+```bash
+# Ativar modo debug
+ipcom-chat --user fabio --debug
+
+# Features do modo debug:
+# - Mostra [DEBUG] no header do terminal
+# - Grava log detalhado em /tmp/mcp-debug.log
+# - Registra respostas brutas da IA
+# - Rastreia processamento de formatação
+# - Útil para diagnóstico de problemas
+
+# Ver log em tempo real (em outro terminal)
+tail -f /tmp/mcp-debug.log
+
+# Estrutura do log:
+# - Resposta bruta da IA (JSON completo)
+# - Texto extraído
+# - Processamento de formatação (entrada/saída)
+# - Linhas modificadas (listas, bold, etc)
+```
+
+**Nota:** O log só é criado quando `--debug` é usado. Em modo normal, nenhum log é gravado para máxima performance.
 
 ## 📚 Documentação Antiga (Referência)
 

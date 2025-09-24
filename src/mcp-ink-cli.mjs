@@ -18,6 +18,7 @@ import MultilineInput from './components/MultilineInput.js';
 import path from 'path';
 import {fileURLToPath} from 'url';
 import fs from 'fs/promises';
+import { appendFileSync, writeFileSync } from 'fs';
 
 // Import markdown processing modules
 import { marked } from 'marked';
@@ -67,12 +68,16 @@ marked.setOptions({
     })
 });
 
-// Parser de markdown para elementos React do Ink
+// Parser de markdown para elementos React do Ink - versão melhorada
 const parseMarkdownToElements = (text, baseKey) => {
     if (!text) return [React.createElement(Text, {key: baseKey}, '')];
 
+    // Don't duplicate bullet if it's already there
+    // (formatResponse already converts - to •)
+
     const elements = [];
-    const regex = /(\*\*(.*?)\*\*|\*(.*?)\*|`(.*?)`)/g;
+    // Updated regex to better handle markdown patterns
+    const regex = /(\*\*(.*?)\*\*|\*(.*?)\*|`(.*?)`|__(.*?)__)/g;
     let lastIndex = 0;
     let elementIndex = 0;
     let match;
@@ -80,34 +85,44 @@ const parseMarkdownToElements = (text, baseKey) => {
     while ((match = regex.exec(text)) !== null) {
         // Adiciona texto antes do match
         if (match.index > lastIndex) {
-            elements.push(
-                React.createElement(Text, {
-                    key: `${baseKey}-txt-${elementIndex++}`
-                }, text.substring(lastIndex, match.index))
-            );
+            const plainText = text.substring(lastIndex, match.index);
+            if (plainText) {
+                elements.push(
+                    React.createElement(Text, {
+                        key: `${baseKey}-txt-${elementIndex++}`
+                    }, plainText)
+                );
+            }
         }
 
         // Adiciona elemento formatado
-        if (match[2]) { // Bold
+        if (match[2]) { // Bold with **
             elements.push(
                 React.createElement(Text, {
                     key: `${baseKey}-b-${elementIndex++}`,
                     bold: true
                 }, match[2])
             );
-        } else if (match[3]) { // Italic
+        } else if (match[3]) { // Italic with *
             elements.push(
                 React.createElement(Text, {
                     key: `${baseKey}-i-${elementIndex++}`,
                     italic: true
                 }, match[3])
             );
-        } else if (match[4]) { // Code
+        } else if (match[4]) { // Code with `
             elements.push(
                 React.createElement(Text, {
                     key: `${baseKey}-c-${elementIndex++}`,
                     color: 'yellow'
                 }, match[4])
+            );
+        } else if (match[5]) { // Bold with __ (alternative)
+            elements.push(
+                React.createElement(Text, {
+                    key: `${baseKey}-b2-${elementIndex++}`,
+                    bold: true
+                }, match[5])
             );
         }
 
@@ -116,11 +131,14 @@ const parseMarkdownToElements = (text, baseKey) => {
 
     // Adiciona texto restante
     if (lastIndex < text.length) {
-        elements.push(
-            React.createElement(Text, {
-                key: `${baseKey}-end`
-            }, text.substring(lastIndex))
-        );
+        const remainingText = text.substring(lastIndex);
+        if (remainingText) {
+            elements.push(
+                React.createElement(Text, {
+                    key: `${baseKey}-end`
+                }, remainingText)
+            );
+        }
     }
 
     return elements.length > 0 ? elements :
@@ -185,6 +203,17 @@ const MCPInkApp = () => {
     useEffect(() => {
         const initBackend = async () => {
             try {
+                // Clear debug log if debug mode is active
+                if (isDebug) {
+                    try {
+                        const debugHeader = `===== MCP DEBUG LOG =====\nStarted: ${new Date().toISOString()}\nUser: ${user}\n=========================\n`;
+                        writeFileSync('/tmp/mcp-debug.log', debugHeader);
+                        console.log('[Debug] Log file initialized at /tmp/mcp-debug.log');
+                    } catch (err) {
+                        console.log('[Debug] Could not initialize log file:', err.message);
+                    }
+                }
+
                 setStatus('loading-config');
 
                 // Load configuration
@@ -695,12 +724,22 @@ const MCPInkApp = () => {
                     signal: aiAbortControllerRef.current?.signal
                 });
 
+                // Log para arquivo temporário apenas se --debug ativo
+                const debugLog = (label, data) => {
+                    if (!isDebug) return; // Só loga se debug estiver ativo
+                    const logContent = `\n${label}\n${typeof data === 'object' ? JSON.stringify(data, null, 2) : data}\n${'='.repeat(60)}\n`;
+                    appendFileSync('/tmp/mcp-debug.log', logContent);
+                };
+
+                debugLog('==== RESPOSTA BRUTA DA IA ====', result);
+
                 // Extract text from result
                 if (typeof result === 'string') {
                     output = result;
                 } else if (result && typeof result === 'object') {
                     // Try to get the actual response text from various possible fields
                     output = result.directAnswer || result.response || result.message || result.output;
+                    debugLog('==== TEXTO EXTRAÍDO ====', output);
 
                     // If still no output but result has success and a response somewhere, try to extract it
                     if (!output && result.success === false && result.error) {
@@ -912,18 +951,70 @@ const MCPInkApp = () => {
         }
     };
 
-    // Format response for display - keep markdown for parser to handle
+    // Pre-process markdown to fix known formatting issues
+    const preprocessMarkdown = (text) => {
+        if (!text) return '';
+
+        // Fix patterns that cause issues with marked-terminal
+        return text
+            // Prevent line breaks after bold in lists
+            .replace(/^(\s*-\s+)\*\*([^*]+)\*\*/gm, '$1__BOLD__$2__/BOLD__')
+            // Prevent line breaks in bold:colon patterns
+            .replace(/\*\*([^*]+)\*\*\s*:/g, '__BOLD__$1__/BOLD__:')
+            // Clean up spacing
+            .replace(/\n{3,}/g, '\n\n');
+    };
+
+    // Post-process after marked to restore bold formatting
+    const postprocessMarkdown = (text) => {
+        if (!text) return '';
+
+        return text
+            // Restore bold markers
+            .replace(/__BOLD__/g, '**')
+            .replace(/__\/BOLD__/g, '**');
+    };
+
+    // Format response for display - fix markdown list formatting while preserving structure
     const formatResponse = (text) => {
         if (!text) return '';
 
         // Ensure text is a string
         const textStr = typeof text === 'string' ? text : String(text);
 
-        // Keep markdown syntax - it will be processed by parseMarkdownToElements
-        // Just clean up excessive newlines
-        return textStr
-            .replace(/\n{3,}/g, '\n\n')       // Clean up excessive newlines
+        // Log para arquivo sem interferir no terminal - apenas se debug ativo
+        if (isDebug) {
+            appendFileSync('/tmp/mcp-debug.log', `\n==== formatResponse INPUT ====\n${textStr}\n${'='.repeat(60)}\n`);
+        }
+
+        // Fix list items with bold text to prevent line breaks
+        // But preserve the original paragraph structure
+        const formatted = textStr
+            .split('\n')
+            .map(line => {
+                // If it's a list item with bold text
+                if (line.match(/^[\s-]*[-*]\s+\*\*/)) {
+                    // Replace list marker with bullet and keep everything on same line
+                    const fixed = line.replace(/^[\s-]*[-*]\s+/, '• ');
+                    if (isDebug) {
+                        appendFileSync('/tmp/mcp-debug.log', `FIXED LINE: "${line}" -> "${fixed}"\n`);
+                    }
+                    return fixed;
+                }
+                // Preserve empty lines and other content as-is
+                return line;
+            })
+            .join('\n')
+            // Don't remove double newlines - they're intentional paragraph breaks
+            // Only clean up triple or more newlines
+            .replace(/\n{4,}/g, '\n\n\n')
             .trim();
+
+        if (isDebug) {
+            appendFileSync('/tmp/mcp-debug.log', `\n==== formatResponse OUTPUT ====\n${formatted}\n${'='.repeat(60)}\n`);
+        }
+
+        return formatted;
     };
 
     // Handle special commands
@@ -1302,9 +1393,31 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                                     }, subline)
                                 );
                             } else {
-                                // Para respostas da IA, aplicar parser de markdown
-                                const markdownElements = parseMarkdownToElements(subline, lineKey);
-                                elements.push(...markdownElements);
+                                // Para linhas vazias, adicionar um espaço para garantir que renderize
+                                if (subline.trim() === '') {
+                                    elements.push(
+                                        React.createElement(Text, {
+                                            key: lineKey
+                                        }, ' ')  // Espaço para garantir que a linha vazia apareça
+                                    );
+                                } else {
+                                    // Para respostas da IA, aplicar parser de markdown diretamente
+                                    // Sem usar marked-terminal para evitar quebras de linha
+                                    const markdownElements = parseMarkdownToElements(subline, lineKey);
+
+                                    // Agrupar elementos em um Box com flexDirection row
+                                    // para manter tudo na mesma linha
+                                    if (markdownElements.length > 1) {
+                                        elements.push(
+                                            React.createElement(Box, {
+                                                key: lineKey,
+                                                flexDirection: 'row'
+                                            }, ...markdownElements)
+                                        );
+                                    } else {
+                                        elements.push(...markdownElements);
+                                    }
+                                }
                             }
                         });
                         return elements;

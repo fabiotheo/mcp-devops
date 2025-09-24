@@ -98,7 +98,8 @@
       "Bash(./test-markdown-production.sh:*)",
       "Bash(FORCE_COLOR=3 node -e \"\nimport chalk from ''chalk'';\nconsole.log(''With FORCE_COLOR:'', chalk.bold(''test''));\nconsole.log(''Bytes:'', Array.from(chalk.bold(''test'')).map(c => c.charCodeAt(0).toString(16)).join('' ''));\n\")",
       "Bash(/tmp/test-markdown-app.sh:*)",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "Bash(pnpm install:*)"
     ],
     "deny": [],
     "ask": []

@@ -5,30 +5,31 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import BaseAIModel from './base_model.js';
 
 export default class GeminiModel extends BaseAIModel {
-    constructor(config) {
-        super(config);
-        this.apiKey = config.gemini_api_key;
-        this.modelName = config.gemini_model || 'gemini-pro';
-        this.client = null;
-        this.model = null;
+  constructor(config) {
+    super(config);
+    this.apiKey = config.gemini_api_key;
+    this.modelName = config.gemini_model || 'gemini-pro';
+    this.client = null;
+    this.model = null;
+  }
+
+  async initialize() {
+    if (!this.apiKey) {
+      throw new Error('Chave de API do Google Gemini não configurada');
     }
 
-    async initialize() {
-        if (!this.apiKey) {
-            throw new Error('Chave de API do Google Gemini não configurada');
-        }
+    this.client = new GoogleGenerativeAI(this.apiKey);
+    this.model = this.client.getGenerativeModel({ model: this.modelName });
 
-        this.client = new GoogleGenerativeAI(this.apiKey);
-        this.model = this.client.getGenerativeModel({ model: this.modelName });
-        
-        return this;
-    }
+    return this;
+  }
 
-    async analyzeCommand(commandData) {
-        try {
-            const { command, exitCode, stdout, stderr, duration, systemContext } = commandData;
+  async analyzeCommand(commandData) {
+    try {
+      const { command, exitCode, stdout, stderr, duration, systemContext } =
+        commandData;
 
-            const prompt = `Você é um especialista em Linux que analisa comandos que falharam.
+      const prompt = `Você é um especialista em Linux que analisa comandos que falharam.
 
 SISTEMA:
 - OS: ${systemContext.os}
@@ -61,30 +62,31 @@ FORMATO DA RESPOSTA:
 
 Seja conciso e específico para o sistema detectado.`;
 
-            const result = await this.model.generateContent(prompt);
-            const analysis = result.response.text();
-            
-            // Extrai comando sugerido da resposta
-            const commandMatch = analysis.match(/💻 COMANDO: (.+?)(?:\n|$)/);
-            const command = commandMatch ? commandMatch[1].replace(/`/g, '').trim() : null;
+      const result = await this.model.generateContent(prompt);
+      const analysis = result.response.text();
 
-            return {
-                description: analysis,
-                command: command,
-                confidence: 0.8,
-                category: 'llm_analysis',
-                source: 'google_gemini'
-            };
+      // Extrai comando sugerido da resposta
+      const commandMatch = analysis.match(/💻 COMANDO: (.+?)(?:\n|$)/);
+      const command = commandMatch
+        ? commandMatch[1].replace(/`/g, '').trim()
+        : null;
 
-        } catch (error) {
-            console.error('Erro na análise com Gemini:', error);
-            return null;
-        }
+      return {
+        description: analysis,
+        command: command,
+        confidence: 0.8,
+        category: 'llm_analysis',
+        source: 'google_gemini',
+      };
+    } catch (error) {
+      console.error('Erro na análise com Gemini:', error);
+      return null;
     }
+  }
 
-    async askCommand(question, systemContext) {
-        try {
-            const prompt = `Você é um assistente especializado em Linux/Unix que ajuda usuários a encontrar o comando correto para suas tarefas.
+  async askCommand(question, systemContext) {
+    try {
+      const prompt = `Você é um assistente especializado em Linux/Unix que ajuda usuários a encontrar o comando correto para suas tarefas.
 
 INFORMAÇÕES DO SISTEMA:
 - OS: ${systemContext.os}
@@ -124,30 +126,30 @@ FORMATO DA RESPOSTA:
 
 Responda de forma direta e prática.`;
 
-            const result = await this.model.generateContent(prompt);
-            return result.response.text();
-        } catch (error) {
-            console.error('Erro ao consultar Gemini:', error);
-            return `❌ Erro ao conectar com o assistente Gemini. Verifique sua configuração da API Google.`;
-        }
+      const result = await this.model.generateContent(prompt);
+      return result.response.text();
+    } catch (error) {
+      console.error('Erro ao consultar Gemini:', error);
+      return `❌ Erro ao conectar com o assistente Gemini. Verifique sua configuração da API Google.`;
     }
+  }
 
-    getProviderName() {
-        return 'Gemini (Google)';
-    }
+  getProviderName() {
+    return 'Gemini (Google)';
+  }
 
-    getModelName() {
-        return this.modelName;
-    }
+  getModelName() {
+    return this.modelName;
+  }
 
-    async validateApiKey() {
-        try {
-            // Tenta fazer uma chamada simples para validar a API key
-            const result = await this.model.generateContent('Hello');
-            return true;
-        } catch (error) {
-            console.error('Erro ao validar API key do Gemini:', error);
-            return false;
-        }
+  async validateApiKey() {
+    try {
+      // Tenta fazer uma chamada simples para validar a API key
+      const result = await this.model.generateContent('Hello');
+      return true;
+    } catch (error) {
+      console.error('Erro ao validar API key do Gemini:', error);
+      return false;
     }
+  }
 }

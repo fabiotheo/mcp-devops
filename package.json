@@ -33,13 +33,15 @@
     "ipcom-chat": "./ipcom-chat",
     "mcp": "./ipcom-chat"
   },
-  "scripts": {
-    "test:ink": "node src/tests/test-ink-basic.js",
-    "test:ink-advanced": "node src/tests/test-ink-advanced.js",
-    "test:integration": "node src/tests/test-integration.js"
-  },
+  "scripts": {},
   "devDependencies": {
+    "@eslint/js": "^9.36.0",
     "@types/react": "^19.1.13",
-    "fuse.js": "^7.1.0"
+    "eslint": "^9.36.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "fuse.js": "^7.1.0",
+    "globals": "^16.4.0",
+    "prettier": "3.6.2"
   }
 }

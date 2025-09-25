@@ -112,7 +112,8 @@
       "Bash(./test-default-debug.sh:*)",
       "Bash(MCP_USER=testuser timeout 8 node src/mcp-ink-cli.mjs --debug)",
       "Bash(./test-interactive.sh)",
-      "Bash(./test-fixes.sh:*)"
+      "Bash(./test-fixes.sh:*)",
+      "Bash(./test-real-output.sh:*)"
     ],
     "deny": [],
     "ask": []

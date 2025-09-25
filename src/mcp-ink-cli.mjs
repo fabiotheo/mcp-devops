@@ -25,20 +25,13 @@ import AICommandOrchestratorBash from './ai_orchestrator_bash.js';
 import PatternMatcher from './libs/pattern_matcher.js';
 import ModelFactory from './ai_models/model_factory.js';
 import TursoAdapter from './bridges/adapters/TursoAdapter.js';
+import { parseMarkdownToElements } from './components/MarkdownParser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Note: Removed marked-terminal processing as it was causing text wrapping issues
-// Using simplified text rendering instead
-
-// Simplified markdown parser - avoid complex processing that breaks layout
-const parseMarkdownToElements = (text, baseKey) => {
-  if (!text) return [React.createElement(Text, { key: baseKey }, '')];
-
-  // Return plain text with wrap disabled to prevent breaking lines
-  return [React.createElement(Text, { key: baseKey, wrap: 'truncate-end' }, text)];
-};
+// Note: Using custom MarkdownParser for proper markdown rendering
+// The parser handles bold, code, lists and other markdown elements
 
 // Module-level variables
 const isDebug = process.argv.includes('--debug');
@@ -1591,28 +1584,14 @@ Config: ${config ? 'Loaded' : 'Default'}`);
                         );
                       } else {
                         // Para respostas da IA, aplicar parser de markdown diretamente
-                        // Sem usar marked-terminal para evitar quebras de linha
+                        // O novo parser já retorna elementos prontos do Ink
                         const markdownElements = parseMarkdownToElements(
                           subline,
                           lineKey,
                         );
 
-                        // Agrupar elementos em um Box com flexDirection row
-                        // para manter tudo na mesma linha
-                        if (markdownElements.length > 1) {
-                          elements.push(
-                            React.createElement(
-                              Box,
-                              {
-                                key: lineKey,
-                                flexDirection: 'row',
-                              },
-                              ...markdownElements,
-                            ),
-                          );
-                        } else {
-                          elements.push(...markdownElements);
-                        }
+                        // Adicionar elementos diretamente (o parser já gerencia Box quando necessário)
+                        elements.push(...markdownElements);
                       }
                     }
                   });

@@ -1071,10 +1071,11 @@ const MCPInkApp = () => {
   // Handle special commands
   const handleSpecialCommand = command => {
     const cmd = command.slice(1).toLowerCase();
+    let response = '';
 
     switch (cmd) {
       case 'help':
-        setResponse(`MCP Terminal Assistant - Commands:
+        response = `MCP Terminal Assistant - Commands:
 /help     - Show this help
 /clear    - Clear screen
 /history  - Show command history
@@ -1082,7 +1083,10 @@ const MCPInkApp = () => {
 /debug    - Toggle debug mode
 /exit     - Exit application
 
-For Linux/Unix help, just type your question!`);
+For Linux/Unix help, just type your question!`;
+        setResponse(response);
+        // Add to display history so it shows up
+        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response)]);
         return true;
 
       case 'clear':
@@ -1091,15 +1095,19 @@ For Linux/Unix help, just type your question!`);
         return true;
 
       case 'history':
-        setResponse(commandHistory.slice(-20).join('\n'));
+        response = commandHistory.slice(-20).join('\n');
+        setResponse(response);
+        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response)]);
         return true;
 
       case 'status':
-        setResponse(`Status: ${status}
+        response = `Status: ${status}
 AI Backend: ${orchestrator.current ? 'Connected' : 'Disconnected'}
 Pattern Matcher: ${patternMatcher.current ? 'Loaded' : 'Not loaded'}
 Debug Mode: ${isDebug ? 'ON' : 'OFF'}
-Config: ${config ? 'Loaded' : 'Default'}`);
+Config: ${config ? 'Loaded' : 'Default'}`;
+        setResponse(response);
+        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response)]);
         return true;
 
       case 'exit':
@@ -1108,7 +1116,9 @@ Config: ${config ? 'Loaded' : 'Default'}`);
         return true;
 
       default:
-        setResponse(`Unknown command: /${cmd}`);
+        response = `Unknown command: /${cmd}`;
+        setResponse(response);
+        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response)]);
         return true;
     }
   };

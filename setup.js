@@ -1088,13 +1088,12 @@ export default class ModelFactory {
     console.log('\n🔧 Copiando e configurando scripts...');
 
     // Lista de arquivos a serem copiados
-    // MIGRAÇÃO V2: src/mcp-ink-cli.mjs agora é a interface principal
     const filesToCopy = [
-      // Interface principal V2
-      { src: 'src/mcp-ink-cli.mjs', dest: 'ipcom-chat-cli.js' },
+      // CLI principal com comandos
+      { src: 'src/ipcom-chat-cli.js', dest: 'ipcom-chat-cli.js' },
 
-      // Backup da v1 (se existir)
-      { src: 'src/ipcom-chat-cli.js', dest: 'ipcom-chat-cli-v1.backup.js' },
+      // Interface Ink
+      { src: 'src/mcp-ink-cli.mjs', dest: 'mcp-ink-cli.mjs' },
 
       // Orquestradores e libs essenciais
       { src: 'src/ai_orchestrator.js', dest: 'ai_orchestrator.js' },

@@ -200,8 +200,33 @@ export default class AICommandOrchestratorBash {
 
   // Define ferramenta bash seguindo formato da documentação
   getBashTool() {
+    // Para modelos Haiku e outros que não suportam ferramentas nativas,
+    // retornamos uma ferramenta customizada com schema completo
+    const modelName = this.ai?.modelName || this.ai?.getModelName?.() || '';
+    const isHaikuOrOlder = modelName.includes('haiku') ||
+                           modelName.includes('claude-3-') ||
+                           !modelName.includes('claude-4') && !modelName.includes('sonnet-3.7');
+
+    if (isHaikuOrOlder) {
+      // Ferramenta customizada para Haiku e modelos antigos
+      return {
+        name: 'bash',
+        description: 'Execute a bash command and return its output',
+        input_schema: {
+          type: 'object',
+          properties: {
+            command: {
+              type: 'string',
+              description: 'The bash command to execute'
+            }
+          },
+          required: ['command']
+        }
+      };
+    }
+
+    // Para Claude 4 e Sonnet 3.7, usar ferramenta nativa (sem type por enquanto)
     return {
-      type: 'bash_20250124',
       name: 'bash',
     };
   }

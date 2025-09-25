@@ -15,6 +15,11 @@ import path from 'node:path';
 import os from 'node:os';
 import chalk from 'chalk';
 import { spawn } from 'node:child_process';
+import AIConfigurator from './configure-ai.js';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const program = new Command();
 
@@ -487,9 +492,22 @@ program
   .option('--user <username>', 'Usar perfil de usuário específico')
   .option('--local', 'Usar apenas histórico local da máquina')
   .option('--hybrid', 'Usar modo híbrido (todos os históricos)')
+  .option('--configure', 'Configurar provedor de IA, modelo e API key')
   .action(async options => {
+    // Se --configure foi passado, executar configurador
+    if (options.configure) {
+      const configurator = new AIConfigurator();
+      try {
+        await configurator.run();
+        process.exit(0);
+      } catch (error) {
+        console.error(chalk.red(`❌ Erro na configuração: ${error.message}`));
+        process.exit(1);
+      }
+    }
+
     // Se nenhum comando ou opção foi especificado, inicia modo interativo
-    const args = ['mcp-interactive.js'];
+    const args = [path.join(__dirname, 'mcp-ink-cli.mjs')];
 
     if (options.user) args.push(`--user=${options.user}`);
     if (options.local) args.push('--local');
@@ -512,5 +530,16 @@ program
     });
   });
 
-// Parse dos argumentos
-program.parse();
+// Verificar se --configure foi passado antes de processar comandos
+if (process.argv.includes('--configure')) {
+  const configurator = new AIConfigurator();
+  configurator.run().then(() => {
+    process.exit(0);
+  }).catch(error => {
+    console.error(chalk.red(`❌ Erro na configuração: ${error.message}`));
+    process.exit(1);
+  });
+} else {
+  // Parse dos argumentos normalmente
+  program.parse();
+}

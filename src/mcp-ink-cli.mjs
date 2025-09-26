@@ -36,6 +36,8 @@ import {
   cleanPastedContent,
   processPastedInput
 } from './utils/pasteDetection.js';
+import { useRequestManager } from './hooks/useRequestManager.js';
+import { CANCELLATION_MARKER } from './constants.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,10 +47,6 @@ const __dirname = path.dirname(__filename);
 
 // Module-level variables
 const isDebug = process.argv.includes('--debug');
-
-// Constant for cancellation marker
-const CANCELLATION_MARKER =
-  '[A mensagem anterior foi cancelada pelo usuário com ESC antes de ser respondida]';
 
 // Process --user argument or use environment variable
 const getUserFromArgs = () => {
@@ -81,10 +79,6 @@ const MCPInkApp = () => {
   // New state for enhanced controls
   const [lastCtrlC, setLastCtrlC] = useState(0);
   const [lastEsc, setLastEsc] = useState(0);
-  const [isCancelled, setIsCancelled] = useState(false);
-  const currentRequestId = useRef(null);
-  const currentTursoEntryId = useRef(null); // Track current Turso entry ID
-  const activeRequests = useRef(new Map()); // Track active requests
 
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -94,11 +88,30 @@ const MCPInkApp = () => {
   const terminalWidth = stdout?.columns || 80;
   const patternMatcher = useRef(null);
   const tursoAdapter = useRef(null);
-  // Separate abort controllers for different operations
-  const aiAbortControllerRef = useRef(null); // For AI API calls (cancellable)
-  const dbAbortControllerRef = useRef(null); // For database operations (protected)
 
   const isTTY = process.stdin.isTTY;
+
+  // Use the request manager hook
+  const {
+    currentRequestId,
+    currentTursoEntryId,
+    activeRequests,
+    aiAbortControllerRef,
+    dbAbortControllerRef,
+    cleanupRequest,
+    isCancelled,
+    setIsCancelled
+  } = useRequestManager({
+    setFullHistory,
+    setInput,
+    setIsProcessing,
+    setStatus,
+    setError,
+    tursoAdapter,
+    isDebug,
+    isTTY,
+    enableBracketedPasteMode
+  });
 
   // Initialize backend services
   useEffect(() => {
@@ -413,154 +426,6 @@ const MCPInkApp = () => {
   // - Database updates are secondary and may lag behind local state
   // - This ensures immediate UI responsiveness at the cost of potential DB inconsistency
   // - The Map-first approach prevents race conditions between cancellation and API responses
-  const cleanupRequest = async (requestId, reason, clearInput = false) => {
-    if (isDebug) {
-      console.log(`[Debug] Cleaning up request ${requestId}: ${reason}`);
-    }
-
-    // Get request data before any modifications
-    const request = activeRequests.current.get(requestId);
-
-    // 1. Mark as cancelled in Map (but don't delete yet)
-    if (request) {
-      request.status = 'cancelled';
-    }
-
-    // 2. Abort ONLY the AI controller (DB operations should continue)
-    if (aiAbortControllerRef.current) {
-      aiAbortControllerRef.current.abort();
-      aiAbortControllerRef.current = null;
-    }
-    // Note: We intentionally don't abort dbAbortControllerRef here
-
-    // 3. Reset UI state to ready
-    setIsProcessing(false);
-    setStatus('ready');
-    setError(null);
-
-    // 3.5. Clear input if requested (e.g., when ESC is pressed during processing)
-    if (clearInput) {
-      setInput('');
-      if (isDebug) {
-        console.log('[Debug] Input cleared due to cancellation');
-      }
-    }
-
-    // 4. Restore bracketed paste mode if TTY (always restore when cleaning up)
-    enableBracketedPasteMode(isTTY, isDebug);
-
-    // 5. CRITICAL: Add cancelled message to fullHistory IMMEDIATELY
-    if (reason.includes('cancel') && request?.command) {
-      if (isDebug) {
-        console.log('[Debug] Adding cancelled message to fullHistory');
-      }
-
-      // Add the user's cancelled message and cancellation marker to fullHistory
-      setFullHistory(prev => {
-        const updated = [...prev];
-
-        // Check if the user message is already in history
-        const lastMessage = updated[updated.length - 1];
-        const secondLastMessage = updated[updated.length - 2];
-        const userMessageExists =
-          (lastMessage?.role === 'user' &&
-            lastMessage?.content === request.command) ||
-          (secondLastMessage?.role === 'user' &&
-            secondLastMessage?.content === request.command);
-
-        // Check if cancellation marker already exists
-        const hasMarker =
-          lastMessage?.role === 'assistant' &&
-          lastMessage?.content === CANCELLATION_MARKER;
-
-        // Add user message if it doesn't exist
-        if (!userMessageExists) {
-          updated.push({
-            role: 'user',
-            content: request.command,
-          });
-          if (isDebug) {
-            console.log('[Debug] Added user message to fullHistory');
-          }
-        }
-
-        // Add cancellation marker if it doesn't exist
-        if (!hasMarker) {
-          updated.push({
-            role: 'assistant',
-            content: CANCELLATION_MARKER,
-          });
-          if (isDebug) {
-            console.log('[Debug] Added cancellation marker to history');
-          }
-        }
-
-        if (isDebug) {
-          console.log(
-            '[Debug] fullHistory now has',
-            updated.length,
-            'messages',
-          );
-        }
-
-        return updated;
-      });
-    }
-
-    // 6. Update Turso if this was a cancellation (not protected by abort)
-    if (isDebug) {
-      console.log(`[Debug] Cleanup - checking Turso update conditions:`);
-      console.log(`  - reason: "${reason}"`);
-      console.log(
-        `  - reason.includes('cancel'): ${reason.includes('cancel')}`,
-      );
-      console.log(`  - request exists: ${!!request}`);
-      console.log(`  - request?.tursoId: ${request?.tursoId}`);
-      console.log(
-        `  - tursoAdapter connected: ${tursoAdapter.current?.isConnected()}`,
-      );
-    }
-
-    if (
-      reason.includes('cancel') &&
-      request?.tursoId &&
-      tursoAdapter.current?.isConnected()
-    ) {
-      try {
-        if (isDebug) {
-          console.log(
-            `[Debug] Updating Turso entry ${request.tursoId} to cancelled status`,
-          );
-        }
-        // Update the message status to 'cancelled' in Turso
-        await tursoAdapter.current.updateStatusByRequestId(
-          requestId,
-          'cancelled',
-        );
-        if (isDebug) {
-          console.log(`[Debug] Turso entry marked as cancelled`);
-        }
-      } catch (err) {
-        console.warn(
-          `[Warning] Failed to update Turso status to cancelled: ${err.message}`,
-        );
-      }
-    }
-
-    // 7. Clear references
-    if (currentRequestId.current === requestId) {
-      currentRequestId.current = null;
-    }
-    if (aiAbortControllerRef.current) {
-      aiAbortControllerRef.current = null;
-    }
-    if (dbAbortControllerRef.current) {
-      dbAbortControllerRef.current = null;
-    }
-
-    // 8. Finally remove from Map (do this LAST to ensure all operations can access request data)
-    activeRequests.current.delete(requestId);
-  };
 
   // Process command through backend
   const processCommand = async command => {

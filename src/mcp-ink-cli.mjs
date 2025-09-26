@@ -27,6 +27,7 @@ import ModelFactory from './ai_models/model_factory.js';
 import TursoAdapter from './bridges/adapters/TursoAdapter.js';
 import { parseMarkdownToElements } from './components/MarkdownParser.js';
 import { formatResponse } from './utils/responseFormatter.js';
+import { handleSpecialCommand } from './utils/specialCommands.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1039,60 +1040,6 @@ const MCPInkApp = () => {
   };
 
 
-  // Handle special commands
-  const handleSpecialCommand = command => {
-    const cmd = command.slice(1).toLowerCase();
-    let response = '';
-
-    switch (cmd) {
-      case 'help':
-        response = `MCP Terminal Assistant - Commands:
-/help     - Show this help
-/clear    - Clear screen
-/history  - Show command history
-/status   - Show system status
-/debug    - Toggle debug mode
-/exit     - Exit application
-
-For Linux/Unix help, just type your question!`;
-        setResponse(response);
-        // Add to display history so it shows up
-        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response, isDebug)]);
-        return true;
-
-      case 'clear':
-        setHistory([]);
-        setResponse('');
-        return true;
-
-      case 'history':
-        response = commandHistory.slice(-20).join('\n');
-        setResponse(response);
-        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response, isDebug)]);
-        return true;
-
-      case 'status':
-        response = `Status: ${status}
-AI Backend: ${orchestrator.current ? 'Connected' : 'Disconnected'}
-Pattern Matcher: ${patternMatcher.current ? 'Loaded' : 'Not loaded'}
-Debug Mode: ${isDebug ? 'ON' : 'OFF'}
-Config: ${config ? 'Loaded' : 'Default'}`;
-        setResponse(response);
-        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response, isDebug)]);
-        return true;
-
-      case 'exit':
-      case 'quit':
-        exit();
-        return true;
-
-      default:
-        response = `Unknown command: /${cmd}`;
-        setResponse(response);
-        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response, isDebug)]);
-        return true;
-    }
-  };
 
   // Enable bracketed paste mode
   useEffect(() => {
@@ -1275,7 +1222,19 @@ Config: ${config ? 'Loaded' : 'Default'}`;
         const command = input.trim();
 
         if (command.startsWith('/')) {
-          if (!handleSpecialCommand(command)) {
+          const specialCommandContext = {
+            setResponse,
+            setHistory,
+            commandHistory,
+            status,
+            orchestrator,
+            patternMatcher,
+            isDebug,
+            config,
+            exit,
+            formatResponse
+          };
+          if (!handleSpecialCommand(command, specialCommandContext)) {
             await processCommand(command);
           }
         } else if (command) {

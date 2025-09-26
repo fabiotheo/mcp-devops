@@ -26,6 +26,7 @@ import PatternMatcher from './libs/pattern_matcher.js';
 import ModelFactory from './ai_models/model_factory.js';
 import TursoAdapter from './bridges/adapters/TursoAdapter.js';
 import { parseMarkdownToElements } from './components/MarkdownParser.js';
+import { formatResponse } from './utils/responseFormatter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -732,7 +733,7 @@ const MCPInkApp = () => {
         }
 
         setResponse(output);
-        setHistory(prev => [...prev, formatResponse(output)]);
+        setHistory(prev => [...prev, formatResponse(output, isDebug)]);
 
         // Add response to full history
         setFullHistory(prev => [
@@ -1037,36 +1038,6 @@ const MCPInkApp = () => {
     );
   };
 
-  // Format response for display - minimal processing to avoid breaking text
-  const formatResponse = text => {
-    if (!text) return '';
-
-    // Ensure text is a string
-    const textStr = typeof text === 'string' ? text : String(text);
-
-    if (isDebug) {
-      appendFileSync(
-        '/tmp/mcp-debug.log',
-        `\n==== formatResponse INPUT ====\n${textStr}\n${'='.repeat(60)}\n`,
-      );
-    }
-
-    // Minimal formatting - just clean up excessive newlines
-    // Don't try to reformat or wrap text as that causes issues
-    const formatted = textStr
-      // Clean up excessive newlines but preserve structure
-      .replace(/\n{4,}/g, '\n\n\n')
-      .trim();
-
-    if (isDebug) {
-      appendFileSync(
-        '/tmp/mcp-debug.log',
-        `\n==== formatResponse OUTPUT ====\n${formatted}\n${'='.repeat(60)}\n`,
-      );
-    }
-
-    return formatted;
-  };
 
   // Handle special commands
   const handleSpecialCommand = command => {
@@ -1086,7 +1057,7 @@ const MCPInkApp = () => {
 For Linux/Unix help, just type your question!`;
         setResponse(response);
         // Add to display history so it shows up
-        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response)]);
+        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response, isDebug)]);
         return true;
 
       case 'clear':
@@ -1097,7 +1068,7 @@ For Linux/Unix help, just type your question!`;
       case 'history':
         response = commandHistory.slice(-20).join('\n');
         setResponse(response);
-        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response)]);
+        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response, isDebug)]);
         return true;
 
       case 'status':
@@ -1107,7 +1078,7 @@ Pattern Matcher: ${patternMatcher.current ? 'Loaded' : 'Not loaded'}
 Debug Mode: ${isDebug ? 'ON' : 'OFF'}
 Config: ${config ? 'Loaded' : 'Default'}`;
         setResponse(response);
-        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response)]);
+        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response, isDebug)]);
         return true;
 
       case 'exit':
@@ -1118,7 +1089,7 @@ Config: ${config ? 'Loaded' : 'Default'}`;
       default:
         response = `Unknown command: /${cmd}`;
         setResponse(response);
-        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response)]);
+        setHistory(prev => [...prev, `❯ ${command}`, formatResponse(response, isDebug)]);
         return true;
     }
   };

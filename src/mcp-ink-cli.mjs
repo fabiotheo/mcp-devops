@@ -37,6 +37,7 @@ import {
   processPastedInput
 } from './utils/pasteDetection.js';
 import { useRequestManager } from './hooks/useRequestManager.js';
+import { useCommandProcessor } from './hooks/useCommandProcessor.js';
 import { CANCELLATION_MARKER } from './constants.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -71,9 +72,6 @@ const MCPInkApp = () => {
   const [fullHistory, setFullHistory] = useState([]); // Full conversation with responses
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [status, setStatus] = useState('initializing');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [response, setResponse] = useState('');
-  const [error, setError] = useState(null);
   const [config, setConfig] = useState(null);
 
   // New state for enhanced controls
@@ -91,17 +89,13 @@ const MCPInkApp = () => {
 
   const isTTY = process.stdin.isTTY;
 
+  // First create state for command processor
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [response, setResponse] = useState('');
+  const [error, setError] = useState(null);
+
   // Use the request manager hook
-  const {
-    currentRequestId,
-    currentTursoEntryId,
-    activeRequests,
-    aiAbortControllerRef,
-    dbAbortControllerRef,
-    cleanupRequest,
-    isCancelled,
-    setIsCancelled
-  } = useRequestManager({
+  const requestManager = useRequestManager({
     setFullHistory,
     setInput,
     setIsProcessing,
@@ -111,6 +105,40 @@ const MCPInkApp = () => {
     isDebug,
     isTTY,
     enableBracketedPasteMode
+  });
+
+  const {
+    currentRequestId,
+    currentTursoEntryId,
+    activeRequests,
+    aiAbortControllerRef,
+    dbAbortControllerRef,
+    cleanupRequest,
+    isCancelled,
+    setIsCancelled
+  } = requestManager;
+
+  // Use the command processor hook
+  const { processCommand } = useCommandProcessor({
+    orchestrator,
+    patternMatcher,
+    tursoAdapter,
+    fullHistory,
+    setFullHistory,
+    setHistory,
+    setCommandHistory,
+    requestManager,
+    user,
+    isDebug,
+    formatResponse,
+    isProcessing,
+    setIsProcessing,
+    response,
+    setResponse,
+    error,
+    setError,
+    status,
+    setStatus
   });
 
   // Initialize backend services
@@ -427,453 +455,6 @@ const MCPInkApp = () => {
   // - This ensures immediate UI responsiveness at the cost of potential DB inconsistency
   // - The Map-first approach prevents race conditions between cancellation and API responses
 
-  // Process command through backend
-  const processCommand = async command => {
-    if (isDebug) {
-      console.log(`[Debug] processCommand called with: "${command}"`);
-    }
-    if (!command.trim()) return;
-
-    // Generate unique request_id (timestamp + random for uniqueness)
-    const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-    currentRequestId.current = requestId;
-
-    // Cancel any previous AI request (but not DB operations)
-    if (aiAbortControllerRef.current) {
-      aiAbortControllerRef.current.abort();
-    }
-
-    setIsProcessing(true);
-    setResponse('');
-    setError(null);
-    setIsCancelled(false);
-
-    // Create separate controllers for AI and DB operations
-    const aiController = new AbortController();
-    const dbController = new AbortController();
-    aiAbortControllerRef.current = aiController;
-    dbAbortControllerRef.current = dbController;
-
-    activeRequests.current.set(requestId, {
-      status: 'pending',
-      aiController: aiController,
-      dbController: dbController,
-      command: command,
-      tursoId: null,
-    });
-
-    // Save question to Turso immediately with status 'pending' and request_id
-    currentTursoEntryId.current = null;
-    if (isDebug) {
-      console.log(`[Debug] Checking Turso save conditions:`);
-      console.log(
-        `  - tursoAdapter.current: ${tursoAdapter.current ? 'exists' : 'null'}`,
-      );
-      console.log(
-        `  - isConnected: ${tursoAdapter.current?.isConnected() || false}`,
-      );
-      console.log(`  - user: ${user}`);
-      console.log(`  - user !== 'default': ${user !== 'default'}`);
-    }
-
-    if (
-      tursoAdapter.current &&
-      tursoAdapter.current.isConnected()
-    ) {
-      currentTursoEntryId.current =
-        await tursoAdapter.current.saveQuestionWithStatusAndRequestId(
-          command,
-          'pending',
-          requestId,
-        );
-
-      // Update Map with Turso ID
-      const request = activeRequests.current.get(requestId);
-      if (request) {
-        request.tursoId = currentTursoEntryId.current;
-      }
-
-      if (isDebug) {
-        console.log(
-          `[Turso] Question saved with ID: ${currentTursoEntryId.current}, request_id: ${requestId}, status: pending`,
-        );
-      }
-
-      // CRITICAL: Check if cancelled AFTER save completes
-      if (isCancelled || currentRequestId.current !== requestId) {
-        if (isDebug) {
-          console.log(
-            `[Debug] Request ${requestId} was cancelled during save. Updating status to cancelled.`,
-          );
-        }
-        // Update to cancelled status immediately
-        await tursoAdapter.current.updateStatusByRequestId(
-          requestId,
-          'cancelled',
-        );
-        await cleanupRequest(requestId, 'cancelled during save');
-        return;
-      }
-    }
-
-    if (isDebug) {
-      console.log(`[Debug] Starting request ${requestId}`);
-    }
-
-    // Add to display history (show complete command, including multi-line)
-    const displayCommand = `❯ ${command}`;
-    setHistory(prev => [...prev.slice(-200), displayCommand]);
-
-    // IMPORTANT: Add to command history immediately so it's available for context
-    // even if the request is cancelled
-    setCommandHistory(prev => {
-      const newHistory = [...prev, command].slice(-100);
-      if (isDebug) {
-        console.log(
-          `[Debug] Added to commandHistory: "${command.substring(0, 50)}..." (total: ${newHistory.length})`,
-        );
-      }
-      return newHistory;
-    });
-    setHistoryIndex(-1);
-
-    // Also add to full history as user message
-    setFullHistory(prev => [...prev, { role: 'user', content: command }]);
-
-    try {
-      let output = '';
-
-      // First, check if pattern matcher can handle it
-      const patternResult = patternMatcher.current.match(command);
-
-      if (patternResult && patternResult.pattern) {
-        // Pattern matcher recognized it - but we'll process through AI anyway
-        // The pattern info can be used to enhance the AI response
-        setStatus('processing');
-
-        // Use full history if available, otherwise convert command history
-        const formattedHistory =
-          fullHistory.length > 0
-            ? fullHistory.slice(-20) // Last 20 messages (10 exchanges)
-            : [];
-
-        const result = await orchestrator.current.askCommand(command, {
-          history: formattedHistory,
-          verbose: isDebug,
-          patternInfo: patternResult,
-          signal: aiAbortControllerRef.current?.signal,
-        });
-
-        // Create debug logger for this context
-        const debugLog = createDebugLogger(isDebug);
-
-        debugLog('==== RESPOSTA BRUTA DA IA ====', result);
-
-        // Extract text from result
-        if (typeof result === 'string') {
-          output = result;
-        } else if (result && typeof result === 'object') {
-          // Try to get the actual response text from various possible fields
-          output =
-            result.directAnswer ||
-            result.response ||
-            result.message ||
-            result.output;
-          debugLog('==== TEXTO EXTRAÍDO ====', output);
-
-          // If still no output but result has success and a response somewhere, try to extract it
-          if (!output && result.success === false && result.error) {
-            // Don't show error message for cancelled operations
-            if (result.error === 'CANCELLED') {
-              // Silently ignore - the cancellation is already handled
-              return;
-            }
-            output = `Erro: ${result.error}`;
-          } else if (!output) {
-            // Last resort - show JSON if we can't find the actual response
-            output = JSON.stringify(result, null, 2);
-          }
-        } else {
-          output = String(result);
-        }
-
-        setResponse(output);
-        setHistory(prev => [...prev, formatResponse(output, isDebug)]);
-
-        // Add response to full history
-        setFullHistory(prev => [
-          ...prev,
-          { role: 'assistant', content: output },
-        ]);
-
-        // Update Turso with response and status 'completed'
-        if (
-          currentTursoEntryId.current &&
-          tursoAdapter.current &&
-          tursoAdapter.current.isConnected()
-        ) {
-          if (isDebug) {
-            console.log(
-              `[Debug] About to update Turso entry ${currentTursoEntryId.current} to completed (should not happen for cancelled requests!)`,
-            );
-          }
-          await tursoAdapter.current.updateWithResponseAndStatus(
-            currentTursoEntryId.current,
-            output,
-            'completed',
-          );
-          if (isDebug) {
-            console.log(
-              `[Turso] Updated entry ${currentTursoEntryId.current} with response and status: completed`,
-            );
-          }
-        } else {
-          // Fallback to old method if no entry ID
-          if (requestId) {
-            await saveToHistory(command, output);
-          } else {
-            console.warn('[Warning] Cannot save to history: requestId is null');
-          }
-        }
-      } else {
-        // Process through AI orchestrator
-        setStatus('processing');
-
-        // Check if request was cancelled before starting
-        const request = activeRequests.current.get(requestId);
-        if (
-          !request ||
-          request.status === 'cancelled' ||
-          isCancelled ||
-          currentRequestId.current !== requestId
-        ) {
-          if (isDebug) {
-            console.log(
-              `[Debug] Request ${requestId} cancelled before AI call`,
-            );
-          }
-          await cleanupRequest(requestId, 'cancelled before AI call');
-          return;
-        }
-
-        // Check again if cancelled before updating status
-        if (isCancelled || currentRequestId.current !== requestId) {
-          if (isDebug) {
-            console.log(
-              `[Debug] Request ${requestId} cancelled before updating status`,
-            );
-          }
-          await cleanupRequest(requestId, 'cancelled before status update');
-          return;
-        }
-
-        // Update status to 'processing' in Turso
-        if (currentTursoEntryId.current && tursoAdapter.current) {
-          await tursoAdapter.current.updateStatus(
-            currentTursoEntryId.current,
-            'processing',
-          );
-          request.status = 'processing';
-        }
-
-        try {
-          // Use full history if available, otherwise empty
-          const formattedHistory =
-            fullHistory.length > 0
-              ? fullHistory.slice(-20) // Last 20 messages (10 exchanges)
-              : [];
-
-          // Final check before calling AI (prevent race condition)
-          const finalCheck = activeRequests.current.get(requestId);
-          if (!finalCheck || finalCheck.status === 'cancelled') {
-            if (isDebug) {
-              console.log(
-                `[Debug] Request ${requestId} cancelled just before AI call. Aborting.`,
-              );
-            }
-            await cleanupRequest(requestId, 'cancelled before AI call');
-            return;
-          }
-
-          if (isDebug) {
-            console.log(`[Debug] Calling AI for request ${requestId}`);
-            console.log(
-              `[Debug] Passing history with ${formattedHistory.length} formatted messages`,
-            );
-            console.log(`[Debug] Formatted history:`, formattedHistory);
-          }
-
-          const result = await orchestrator.current.askCommand(command, {
-            history: formattedHistory,
-            verbose: isDebug,
-            signal: aiAbortControllerRef.current?.signal,
-          });
-
-          if (isDebug) {
-            console.log(
-              `[Debug] AI responded for request ${requestId}, current: ${currentRequestId.current}`,
-            );
-          }
-
-          // CRITICAL: Use Map local as primary source of truth (no DB latency)
-          const currentRequest = activeRequests.current.get(requestId);
-          const isLocalCancelled =
-            !currentRequest ||
-            currentRequest.status === 'cancelled' ||
-            isCancelled ||
-            currentRequestId.current !== requestId;
-
-          if (isLocalCancelled) {
-            if (isDebug) {
-              console.log(
-                `[Debug] Request ${requestId} cancelled (local check). Ignoring response.`,
-              );
-            }
-            await cleanupRequest(requestId, 'response after cancellation');
-            return;
-          }
-
-          // Extract text from result
-          if (typeof result === 'string') {
-            output = result;
-          } else if (result && typeof result === 'object') {
-            // Try to get the actual response text from various possible fields
-            output =
-              result.directAnswer ||
-              result.response ||
-              result.message ||
-              result.output;
-
-            // If still no output but result has success and a response somewhere, try to extract it
-            if (!output && result.success === false && result.error) {
-              // Don't show error message for cancelled operations
-              if (result.error === 'CANCELLED') {
-                // Silently ignore - the cancellation is already handled
-                return;
-              }
-              output = `Erro: ${result.error}`;
-            } else if (!output) {
-              // Last resort - show JSON if we can't find the actual response
-              output = JSON.stringify(result, null, 2);
-            }
-          } else {
-            output = String(result);
-          }
-
-          // Final check before setting response
-          if (isCancelled || currentRequestId.current !== requestId) {
-            if (isDebug) {
-              console.log(
-                `[Debug] Request ${requestId} cancelled before setting response`,
-              );
-            }
-            await cleanupRequest(
-              requestId,
-              'cancelled before setting response',
-            );
-            return;
-          }
-
-          if (isDebug) {
-            console.log(`[Debug] Setting response for request ${requestId}`);
-          }
-
-          setResponse(output);
-          setHistory(prev => [...prev, formatResponse(output)]);
-
-          // Add response to full history
-          setFullHistory(prev => [
-            ...prev,
-            { role: 'assistant', content: output },
-          ]);
-
-          // Update Turso with response and status 'completed'
-          if (
-            currentTursoEntryId.current &&
-            tursoAdapter.current &&
-            tursoAdapter.current.isConnected()
-          ) {
-            if (isDebug) {
-              console.log(
-                `[Debug] About to update Turso entry ${currentTursoEntryId.current} to completed (should not happen for cancelled requests!)`,
-              );
-            }
-            await tursoAdapter.current.updateWithResponseAndStatus(
-              currentTursoEntryId.current,
-              output,
-              'completed',
-            );
-            if (isDebug) {
-              console.log(
-                `[Turso] Updated entry ${currentTursoEntryId.current} with response and status: completed`,
-              );
-            }
-          } else {
-            // Fallback to old method if no entry ID
-            if (requestId) {
-              await saveToHistory(command, output);
-            } else {
-              console.warn(
-                '[Warning] Cannot save to history: requestId is null',
-              );
-            }
-          }
-        } catch (abortErr) {
-          // If it's an abort error or was cancelled, just return silently
-          if (
-            isCancelled ||
-            abortErr.name === 'AbortError' ||
-            aiAbortControllerRef.current?.signal.aborted
-          ) {
-            await cleanupRequest(
-              currentRequestId.current || requestId,
-              'aborted',
-            );
-            return;
-          }
-          throw abortErr;
-        }
-      }
-
-      setStatus('ready');
-    } catch (err) {
-      setError(`Error: ${err.message}`);
-      setHistory(prev => [...prev, `✗ Error: ${err.message}`]);
-      setStatus('ready');
-
-      // Mark request as error in database
-      if (
-        tursoAdapter.current &&
-        tursoAdapter.current.isConnected() &&
-        currentRequestId.current
-      ) {
-        await tursoAdapter.current.updateStatusByRequestId(
-          currentRequestId.current,
-          'error',
-        );
-        if (isDebug) {
-          console.log(
-            `[Turso] Marked request ${currentRequestId.current} as error`,
-          );
-        }
-      }
-    } finally {
-      setIsProcessing(false);
-
-      // Clean up the request from activeRequests Map to prevent memory leak
-      if (
-        currentRequestId.current &&
-        activeRequests.current.has(currentRequestId.current)
-      ) {
-        activeRequests.current.delete(currentRequestId.current);
-        if (isDebug) {
-          console.log(
-            `[Debug] Cleaned up request ${currentRequestId.current} from activeRequests`,
-          );
-        }
-      }
-    }
-  };
 
   // Pre-process markdown to fix known formatting issues
   const preprocessMarkdown = text => {

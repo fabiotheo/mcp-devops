@@ -120,7 +120,8 @@
       "Bash(npm test:*)",
       "Bash(npm run test:cancellation:*)",
       "Bash(npm run test:snapshots:*)",
-      "Bash(npm run test:regression:*)"
+      "Bash(npm run test:regression:*)",
+      "Read(///**)"
     ],
     "deny": [],
     "ask": []

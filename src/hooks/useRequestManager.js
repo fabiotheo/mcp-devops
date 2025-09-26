@@ -220,4 +220,4 @@ export function useRequestManager({
   };
 }
 
-export default useRequestManager;
+// All functions are already exported as named exports above

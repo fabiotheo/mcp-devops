@@ -26,7 +26,7 @@ import PatternMatcher from './libs/pattern_matcher.js';
 import ModelFactory from './ai_models/model_factory.js';
 import TursoAdapter from './bridges/adapters/TursoAdapter.js';
 import { parseMarkdownToElements } from './components/MarkdownParser.js';
-import { formatResponse } from './utils/responseFormatter.js';
+import { formatResponse, preprocessMarkdown, postprocessMarkdown } from './utils/responseFormatter.js';
 import { handleSpecialCommand } from './utils/specialCommands.js';
 import { createDebugLogger } from './utils/debugLogger.js';
 import {
@@ -48,6 +48,7 @@ const __dirname = path.dirname(__filename);
 
 // Module-level variables
 const isDebug = process.argv.includes('--debug');
+const debug = createDebugLogger(isDebug);
 
 // Process --user argument or use environment variable
 const getUserFromArgs = () => {
@@ -59,10 +60,7 @@ const getUserFromArgs = () => {
 };
 
 const user = getUserFromArgs();
-
-if (isDebug) {
-  console.log(`[Debug] User: ${user}`);
-}
+debug('User', user);
 
 // Main MCP Ink Application Component
 const MCPInkApp = () => {
@@ -131,6 +129,7 @@ const MCPInkApp = () => {
     user,
     isDebug,
     formatResponse,
+    debug,
     isProcessing,
     setIsProcessing,
     response,
@@ -456,33 +455,6 @@ const MCPInkApp = () => {
   // - The Map-first approach prevents race conditions between cancellation and API responses
 
 
-  // Pre-process markdown to fix known formatting issues
-  const preprocessMarkdown = text => {
-    if (!text) return '';
-
-    // Fix patterns that cause issues with marked-terminal
-    return (
-      text
-        // Prevent line breaks after bold in lists
-        .replace(/^(\s*-\s+)\*\*([^*]+)\*\*/gm, '$1__BOLD__$2__/BOLD__')
-        // Prevent line breaks in bold:colon patterns
-        .replace(/\*\*([^*]+)\*\*\s*:/g, '__BOLD__$1__/BOLD__:')
-        // Clean up spacing
-        .replace(/\n{3,}/g, '\n\n')
-    );
-  };
-
-  // Post-process after marked to restore bold formatting
-  const postprocessMarkdown = text => {
-    if (!text) return '';
-
-    return (
-      text
-        // Restore bold markers
-        .replace(/__BOLD__/g, '**')
-        .replace(/__\/BOLD__/g, '**')
-    );
-  };
 
 
 

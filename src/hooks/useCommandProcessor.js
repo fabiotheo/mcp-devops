@@ -25,6 +25,7 @@ import { CANCELLATION_MARKER } from '../constants.js';
  * @param {string} params.user - Current user
  * @param {boolean} params.isDebug - Debug mode flag
  * @param {Function} params.formatResponse - Response formatter function
+ * @param {Function} params.debug - Debug logging function
  * @param {boolean} params.isProcessing - Processing state
  * @param {Function} params.setIsProcessing - Set processing state
  * @param {string} params.response - Current response
@@ -47,6 +48,7 @@ export function useCommandProcessor({
   user,
   isDebug,
   formatResponse,
+  debug,
   isProcessing,
   setIsProcessing,
   response,
@@ -259,14 +261,14 @@ export function useCommandProcessor({
       }
 
       if (result?.response) {
-        const formattedResponse = formatResponse(result.response, isDebug);
+        const formattedResponse = formatResponse(result.response, debug);
         setResponse(formattedResponse);
 
         // Update display history with formatted response
         setHistory(prev => [
           ...prev,
           `❯ ${command}`,
-          formatResponse(formattedResponse, isDebug),
+          formatResponse(formattedResponse, debug),
         ]);
 
         // Add AI response to fullHistory
@@ -381,7 +383,8 @@ export function useCommandProcessor({
     setStatus,
     user,
     isDebug,
-    formatResponse
+    formatResponse,
+    debug
   ]);
 
   return {
@@ -389,4 +392,4 @@ export function useCommandProcessor({
   };
 }
 
-export default useCommandProcessor;
+// All functions are already exported as named exports above

@@ -37,4 +37,4 @@ export function createDebugLogger(isDebug = false, logFile = '/tmp/mcp-debug.log
   return (label, data) => debugLog(label, data, isDebug, logFile);
 }
 
-export default debugLog;
+// All functions are already exported as named exports above

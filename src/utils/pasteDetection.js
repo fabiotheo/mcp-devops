@@ -95,10 +95,4 @@ export function processPastedInput(currentInput, pastedContent) {
   return currentInput + cleaned;
 }
 
-export default {
-  enableBracketedPasteMode,
-  disableBracketedPasteMode,
-  isPastedContent,
-  cleanPastedContent,
-  processPastedInput
-};
+// All functions are already exported as named exports above

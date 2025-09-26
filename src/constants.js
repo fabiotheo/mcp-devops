@@ -6,6 +6,4 @@
 export const CANCELLATION_MARKER =
   '[A mensagem anterior foi cancelada pelo usuário com ESC antes de ser respondida]';
 
-export default {
-  CANCELLATION_MARKER
-};
+// All constants are already exported as named exports above

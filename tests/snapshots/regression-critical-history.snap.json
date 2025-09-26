@@ -1,0 +1,30 @@
+{
+  "name": "regression-critical-history",
+  "created": "2025-09-26T01:24:32.929Z",
+  "updated": "2025-09-26T01:24:32.929Z",
+  "hash": "d5e9c3161b938b72e8f86c73e977f2402c923e50a99430dbba2eb6f649bb3043",
+  "data": [
+    {
+      "role": "user",
+      "content": "docker ps",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "assistant",
+      "content": "Showing running containers...",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "user",
+      "content": "cancelled command",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "system",
+      "content": "[A mensagem anterior foi cancelada pelo usuário com ESC antes de ser respondida]",
+      "timestamp": "[TIMESTAMP]"
+    }
+  ]
+}

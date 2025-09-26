@@ -1,0 +1,63 @@
+{
+  "name": "rapid-sequential-commands",
+  "created": "2025-09-26T01:10:56.577Z",
+  "updated": "2025-09-26T01:10:56.577Z",
+  "hash": "7a57bbc6fce4b24ac01826f062d92be5b7c422d571d2ca7f33ddc7746ffd8afe",
+  "data": [
+    {
+      "role": "user",
+      "content": "quick command 1",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "assistant",
+      "content": "Response to command 1",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "user",
+      "content": "quick command 2",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "system",
+      "content": "[A mensagem anterior foi cancelada pelo usuário com ESC antes de ser respondida]",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "user",
+      "content": "quick command 3",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "assistant",
+      "content": "Response to command 3",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "user",
+      "content": "quick command 4",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "system",
+      "content": "[A mensagem anterior foi cancelada pelo usuário com ESC antes de ser respondida]",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "user",
+      "content": "quick command 5",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "assistant",
+      "content": "Response to command 5",
+      "timestamp": "[TIMESTAMP]"
+    }
+  ]
+}

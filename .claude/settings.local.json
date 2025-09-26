@@ -114,7 +114,13 @@
       "Bash(./test-interactive.sh)",
       "Bash(./test-fixes.sh:*)",
       "Bash(./test-real-output.sh:*)",
-      "Bash(./test-help-command.sh:*)"
+      "Bash(./test-help-command.sh:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run test:example:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run test:cancellation:*)",
+      "Bash(npm run test:snapshots:*)",
+      "Bash(npm run test:regression:*)"
     ],
     "deny": [],
     "ask": []

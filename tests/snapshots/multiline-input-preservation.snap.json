@@ -1,0 +1,19 @@
+{
+  "name": "multiline-input-preservation",
+  "created": "2025-09-26T01:10:56.564Z",
+  "updated": "2025-09-26T01:10:56.564Z",
+  "hash": "85ed300c8500eff96c3bccab94c35ce75a6f559476d9cbc5f437143b77508e5d",
+  "data": [
+    {
+      "role": "user",
+      "content": "explain this error:\n```\nTypeError: Cannot read property of undefined\n  at line 42\n  at async processCommand\n```",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "assistant",
+      "content": "This TypeError indicates you're trying to access a property on an undefined variable...",
+      "timestamp": "[TIMESTAMP]"
+    }
+  ]
+}

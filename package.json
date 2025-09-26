@@ -33,7 +33,14 @@
     "ipcom-chat": "./ipcom-chat",
     "mcp": "./ipcom-chat"
   },
-  "scripts": {},
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:cancellation": "node --test tests/cancellation.test.js",
+    "test:snapshots": "node --test tests/fullHistory.snapshot.test.js",
+    "test:regression": "npm run test:cancellation && npm run test:snapshots",
+    "test:watch": "node --test --watch tests/*.test.js",
+    "test:example": "node --test tests/example.test.js"
+  },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@types/react": "^19.1.13",
@@ -42,6 +49,7 @@
     "eslint-plugin-prettier": "^5.5.4",
     "fuse.js": "^7.1.0",
     "globals": "^16.4.0",
+    "ink-testing-library": "^4.0.0",
     "prettier": "3.6.2"
   }
 }

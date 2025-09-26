@@ -29,6 +29,13 @@ import { parseMarkdownToElements } from './components/MarkdownParser.js';
 import { formatResponse } from './utils/responseFormatter.js';
 import { handleSpecialCommand } from './utils/specialCommands.js';
 import { createDebugLogger } from './utils/debugLogger.js';
+import {
+  enableBracketedPasteMode,
+  disableBracketedPasteMode,
+  isPastedContent,
+  cleanPastedContent,
+  processPastedInput
+} from './utils/pasteDetection.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -440,12 +447,7 @@ const MCPInkApp = () => {
     }
 
     // 4. Restore bracketed paste mode if TTY (always restore when cleaning up)
-    if (isTTY) {
-      process.stdout.write('\x1b[?2004h');
-      if (isDebug) {
-        console.log('[Debug] Bracketed paste mode restored');
-      }
-    }
+    enableBracketedPasteMode(isTTY, isDebug);
 
     // 5. CRITICAL: Add cancelled message to fullHistory IMMEDIATELY
     if (reason.includes('cancel') && request?.command) {
@@ -1041,19 +1043,10 @@ const MCPInkApp = () => {
   // Enable bracketed paste mode
   useEffect(() => {
     if (isTTY && status === 'ready') {
-      // Enable bracketed paste mode
-      process.stdout.write('\x1b[?2004h');
-
-      if (isDebug) {
-        console.log('[Debug] Bracketed paste mode enabled');
-      }
+      enableBracketedPasteMode(isTTY, isDebug);
 
       return () => {
-        process.stdout.write('\x1b[?2004l');
-        // Don't use isDebug in cleanup as it might not be available
-        if (process.argv.includes('--debug')) {
-          console.log('[Debug] Bracketed paste mode disabled');
-        }
+        disableBracketedPasteMode(isTTY, process.argv.includes('--debug'));
       };
     }
   }, [status, isTTY, isDebug]);
@@ -1099,7 +1092,7 @@ const MCPInkApp = () => {
       }
 
       // SIMPLE paste detection - if we get multiple chars at once, it's a paste
-      if (char && (char.length > 1 || char.includes('\n'))) {
+      if (isPastedContent(char)) {
         if (isDebug) {
           console.log(
             '[Debug] Paste detected! Length:',
@@ -1110,30 +1103,14 @@ const MCPInkApp = () => {
           console.log('[Debug] Raw paste content:', JSON.stringify(char));
         }
 
-        // Clean any bracketed paste markers if they leaked through
-        let cleanContent = char;
-        cleanContent = cleanContent.replace(/\x1b\[200~/g, '');
-        cleanContent = cleanContent.replace(/\x1b\[201~/g, '');
-        cleanContent = cleanContent.replace(/\[200~/g, '');
-        cleanContent = cleanContent.replace(/\[201~/g, '');
-
-        // Convert \r to \n for multi-line
-        cleanContent = cleanContent.replace(/\r/g, '\n');
-
-        // Update input with pasted content
-        setInput(prev => {
-          if (prev === '') {
-            // Empty input - just set the pasted content
-            return cleanContent;
-          }
-          // Otherwise append to existing input
-          return prev + cleanContent;
-        });
+        // Process the pasted content
+        const newInput = processPastedInput(input, char);
+        setInput(newInput);
 
         if (isDebug) {
           console.log(
             '[Debug] Clean pasted content:',
-            JSON.stringify(cleanContent),
+            JSON.stringify(cleanPastedContent(char)),
           );
         }
 
@@ -1240,9 +1217,7 @@ const MCPInkApp = () => {
 
         setInput('');
         // Force re-enable bracketed paste mode after clearing input
-        if (isTTY) {
-          process.stdout.write('\x1b[?2004h');
-        }
+        enableBracketedPasteMode(isTTY, false);
       } else if (key.upArrow) {
         // Navigate history up
         if (isDebug) {

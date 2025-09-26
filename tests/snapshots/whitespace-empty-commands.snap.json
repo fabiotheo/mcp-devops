@@ -1,0 +1,41 @@
+{
+  "name": "whitespace-empty-commands",
+  "created": "2025-09-26T01:10:56.583Z",
+  "updated": "2025-09-26T01:10:56.583Z",
+  "hash": "46dbf538c2cc02921022f47418c466fe29f4f7df4482c0ad7240e88c750f32ef",
+  "data": [
+    {
+      "role": "user",
+      "content": "   ",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "system",
+      "content": "[Command was empty or whitespace only]",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "user",
+      "content": "\n\n\n",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "system",
+      "content": "[Command was empty or whitespace only]",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "user",
+      "content": "actual command",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "assistant",
+      "content": "Processing actual command...",
+      "timestamp": "[TIMESTAMP]"
+    }
+  ]
+}

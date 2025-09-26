@@ -28,6 +28,7 @@ import TursoAdapter from './bridges/adapters/TursoAdapter.js';
 import { parseMarkdownToElements } from './components/MarkdownParser.js';
 import { formatResponse } from './utils/responseFormatter.js';
 import { handleSpecialCommand } from './utils/specialCommands.js';
+import { createDebugLogger } from './utils/debugLogger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -696,12 +697,8 @@ const MCPInkApp = () => {
           signal: aiAbortControllerRef.current?.signal,
         });
 
-        // Log para arquivo temporário apenas se --debug ativo
-        const debugLog = (label, data) => {
-          if (!isDebug) return; // Só loga se debug estiver ativo
-          const logContent = `\n${label}\n${typeof data === 'object' ? JSON.stringify(data, null, 2) : data}\n${'='.repeat(60)}\n`;
-          appendFileSync('/tmp/mcp-debug.log', logContent);
-        };
+        // Create debug logger for this context
+        const debugLog = createDebugLogger(isDebug);
 
         debugLog('==== RESPOSTA BRUTA DA IA ====', result);
 

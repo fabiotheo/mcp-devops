@@ -33,6 +33,7 @@ class TursoAdapter {
     try {
       // Check if Turso is configured
       const configExists = await this.checkConfig();
+
       if (!configExists) {
         if (this.debug) {
           console.log(
@@ -56,7 +57,16 @@ class TursoAdapter {
         debug: this.debug,
       });
 
+      // Simple initialization without timeout
+      if (this.debug) {
+        console.log('[TursoAdapter] Initializing TursoClient...');
+      }
+
       await this.tursoClient.initialize();
+
+      if (this.debug) {
+        console.log('[TursoAdapter] ✓ TursoClient initialized successfully');
+      }
 
       // Set the user using the proper method that maps username to ID
       if (this.userId && this.userId !== 'default') {

@@ -1,0 +1,538 @@
+#!/usr/bin/env node
+
+/**
+ * MCP Terminal Assistant - Ink Interface with Real Backend
+ * This is the production-ready interface that connects to the actual AI backend
+ *
+ * Features:
+ * - Multi-line input support with elegant rendering
+ * - Turso distributed history with user mapping
+ * - Clean loading screen during initialization
+ * - Bracketed paste mode support
+ */
+
+import React, { useEffect, useRef, useState } from 'react';
+import { Box, render, Text, useApp, useStdout } from 'ink';
+import Spinner from 'ink-spinner';
+import MultilineInput from './components/MultilineInput.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fs from 'fs/promises';
+import { appendFileSync } from 'node:fs';
+
+// Import backend modules for Turso adapter
+import TursoAdapter from './bridges/adapters/TursoAdapter.js';
+import { parseMarkdownToElements } from './components/MarkdownParser.js';
+import { formatResponse, preprocessMarkdown, postprocessMarkdown } from './utils/responseFormatter.js';
+import { createDebugLogger } from './utils/debugLogger.js';
+import {
+  enableBracketedPasteMode,
+  disableBracketedPasteMode
+} from './utils/pasteDetection.js';
+import { useRequestManager } from './hooks/useRequestManager.js';
+import { useCommandProcessor } from './hooks/useCommandProcessor.js';
+import { useInputHandler } from './hooks/useInputHandler.js';
+import { useBackendInitialization } from './hooks/useBackendInitialization.js';
+import { useHistoryManager } from './hooks/useHistoryManager.js';
+import { CANCELLATION_MARKER } from './constants.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Note: Using custom MarkdownParser for proper markdown rendering
+// The parser handles bold, code, lists and other markdown elements
+
+// Module-level variables
+const isDebug = process.argv.includes('--debug');
+const debug = createDebugLogger(isDebug);
+
+// Process --user argument or use environment variable
+const getUserFromArgs = () => {
+  const userArgIndex = process.argv.indexOf('--user');
+  if (userArgIndex !== -1 && process.argv[userArgIndex + 1]) {
+    return process.argv[userArgIndex + 1];
+  }
+  return process.env.MCP_USER || 'default';
+};
+
+const user = getUserFromArgs();
+debug('User', user);
+
+// Main MCP Ink Application Component
+const MCPInkApp = () => {
+  const [input, setInput] = useState('');
+  const [history, setHistory] = useState([]);
+  const [commandHistory, setCommandHistory] = useState([]);
+  const [fullHistory, setFullHistory] = useState([]); // Full conversation with responses
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [status, setStatus] = useState('initializing');
+  const [config, setConfig] = useState(null);
+
+  // New state for enhanced controls
+  const [lastCtrlC, setLastCtrlC] = useState(0);
+  const [lastEsc, setLastEsc] = useState(0);
+
+  const { exit } = useApp();
+  const { stdout } = useStdout();
+  const orchestrator = useRef(null);
+
+  // Get terminal width for separator lines
+  const terminalWidth = stdout?.columns || 80;
+  const patternMatcher = useRef(null);
+  const tursoAdapter = useRef(null);
+
+  const isTTY = process.stdin.isTTY;
+
+  // First create state for command processor
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [response, setResponse] = useState('');
+  const [error, setError] = useState(null);
+
+  // Use the request manager hook
+  const requestManager = useRequestManager({
+    setFullHistory,
+    setInput,
+    setIsProcessing,
+    setStatus,
+    setError,
+    tursoAdapter,
+    isDebug,
+    isTTY,
+    enableBracketedPasteMode
+  });
+
+  const {
+    currentRequestId,
+    currentTursoEntryId,
+    activeRequests,
+    aiAbortControllerRef,
+    dbAbortControllerRef,
+    cleanupRequest,
+    isCancelled,
+    setIsCancelled
+  } = requestManager;
+
+  // Use the command processor hook
+  const { processCommand } = useCommandProcessor({
+    orchestrator,
+    patternMatcher,
+    tursoAdapter,
+    fullHistory,
+    setFullHistory,
+    setHistory,
+    setCommandHistory,
+    requestManager,
+    user,
+    isDebug,
+    formatResponse,
+    debug,
+    isProcessing,
+    setIsProcessing,
+    response,
+    setResponse,
+    error,
+    setError,
+    status,
+    setStatus
+  });
+
+  // Initialize backend services
+  useBackendInitialization({
+    setConfig,
+    setStatus,
+    setError,
+    loadCommandHistory,
+    orchestrator,
+    patternMatcher,
+    tursoAdapter,
+    user,
+    isDebug
+  });
+
+  // Initialize history manager
+  const { loadCommandHistory, saveToHistory } = useHistoryManager({
+    tursoAdapter,
+    setCommandHistory,
+    setFullHistory,
+    commandHistory,
+    user,
+    isDebug
+  });
+
+  // Helper function to ensure consistent cleanup of requests
+  // IMPORTANT: This function is the single source of truth for request cleanup.
+  // It handles both UI state and request lifecycle management.
+  // Trade-offs:
+  // - We use a Map (activeRequests) as primary source of truth for cancellation state
+  // - Database updates are secondary and may lag behind local state
+  // - This ensures immediate UI responsiveness at the cost of potential DB inconsistency
+  // - The Map-first approach prevents race conditions between cancellation and API responses
+
+
+
+
+
+  // Enable bracketed paste mode
+  useEffect(() => {
+    if (isTTY && status === 'ready') {
+      enableBracketedPasteMode(isTTY, isDebug);
+
+      return () => {
+        disableBracketedPasteMode(isTTY, process.argv.includes('--debug'));
+      };
+    }
+  }, [status, isTTY, isDebug]);
+
+  // Clear Ctrl+C message after timeout
+  useEffect(() => {
+    if (response === 'Press Ctrl+C again to exit') {
+      const timer = setTimeout(() => {
+        setResponse('');
+        setLastCtrlC(0);
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [response]);
+
+
+  // Use the input handler hook
+  useInputHandler({
+    input,
+    setInput,
+    commandHistory,
+    historyIndex,
+    setHistoryIndex,
+    status,
+    isProcessing,
+    lastCtrlC,
+    setLastCtrlC,
+    lastEsc,
+    setLastEsc,
+    setResponse,
+    setHistory,
+    processCommand,
+    cleanupRequest,
+    currentRequestId,
+    activeRequests,
+    isCancelled,
+    setIsCancelled,
+    setCommandHistory,
+    exit,
+    orchestrator,
+    patternMatcher,
+    config,
+    formatResponse,
+    isTTY,
+    isDebug,
+    debug
+  });
+
+  // Show loading screen during initialization
+  if (status !== 'ready' && status !== 'error' && status !== 'processing') {
+    return React.createElement(
+      Box,
+      {
+        flexDirection: 'column',
+        padding: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: 20,
+      },
+      React.createElement(
+        Box,
+        { marginBottom: 2 },
+        React.createElement(
+          Text,
+          { color: 'green', bold: true },
+          '✨ MCP Terminal Assistant',
+        ),
+      ),
+      React.createElement(
+        Box,
+        { marginBottom: 1 },
+        React.createElement(Spinner, { type: 'dots' }),
+        React.createElement(Text, { color: 'cyan' }, ' Initializing...'),
+      ),
+      React.createElement(
+        Box,
+        { flexDirection: 'column', alignItems: 'center' },
+        status === 'loading-config' &&
+          React.createElement(
+            Text,
+            { color: 'gray' },
+            'Loading configuration...',
+          ),
+        status === 'initializing-ai' &&
+          React.createElement(Text, { color: 'gray' }, 'Connecting to AI...'),
+        status === 'initializing' &&
+          React.createElement(
+            Text,
+            { color: 'gray' },
+            'Setting up environment...',
+          ),
+      ),
+    );
+  }
+
+  // Render main UI - let terminal handle scrolling naturally
+  return React.createElement(
+    Box,
+    {
+      flexDirection: 'column',
+      minHeight: stdout ? stdout.rows : 24, // Use minHeight instead of height
+    },
+    // Top section: Header + History (grows to push input down)
+    React.createElement(
+      Box,
+      {
+        flexDirection: 'column',
+        flexGrow: 1, // This pushes the input to bottom
+      },
+      // Compact professional header
+      React.createElement(
+        Box,
+        {
+          flexDirection: 'column',
+          borderStyle: 'round',
+          borderColor: 'cyan',
+          paddingLeft: 1,
+          paddingRight: 1,
+          paddingTop: 0,
+          paddingBottom: 0,
+          marginTop: 1,
+          marginLeft: 1,
+          width: 55, // Fixed width for compact design
+        },
+        // Title line
+        React.createElement(
+          Text,
+          { color: 'cyan', bold: true },
+          '✻ Terminal Assistant IPCOM',
+        ),
+
+        // Version and status line
+        React.createElement(
+          Box,
+          null,
+          React.createElement(Text, { color: 'gray' }, '  Powered by AI • '),
+          React.createElement(
+            Text,
+            { color: 'green', bold: true },
+            'IPCOM TECNOLOGIA',
+          ),
+          React.createElement(Text, { color: 'gray' }, ' • v1.0'),
+          isDebug &&
+            React.createElement(
+              Text,
+              { color: 'magenta', bold: true },
+              ' [DEBUG]',
+            ),
+        ),
+
+        // Developer credits - elegant 3 lines
+        React.createElement(
+          Box,
+          { flexDirection: 'column', marginTop: 0 },
+          React.createElement(
+            Text,
+            { dimColor: true, italic: true },
+            '  Developed by Fábio F. Theodoro',
+          ),
+          React.createElement(
+            Text,
+            { dimColor: true, italic: true },
+            '  https://github.com/fabiotheo',
+          ),
+          React.createElement(
+            Text,
+            { dimColor: true, italic: true },
+            '  https://ipcom.com.br',
+          ),
+          // https://x.com/real_fftheodoro
+        ),
+      ),
+
+      // Conversation history
+      React.createElement(
+        Box,
+        {
+          paddingLeft: 1,
+          paddingRight: 1,
+          marginTop: 1,
+          flexDirection: 'column',
+        },
+        history.length === 0
+          ? React.createElement(
+              Box,
+              null,
+              React.createElement(
+                Text,
+                { color: 'gray', italic: true },
+                'Ready for your questions...',
+              ),
+            )
+          : React.createElement(
+              Box,
+              { flexDirection: 'column' },
+              // Show ALL history - no slicing, no truncation
+              ...history
+                .map((line, i) => {
+                  const elements = [];
+
+                  // Add spacing before ALL messages (both questions and answers)
+                  if (i > 0) {
+                    // Add an actual empty line (with a space to ensure it renders)
+                    elements.push(
+                      React.createElement(Text, { key: `space-${i}` }, ' '),
+                    );
+                  }
+
+                  // Handle multi-line content properly
+                  const lines = line.split('\n');
+                  const isUserMessage = line.startsWith('❯');
+                  const isErrorMessage = line.startsWith('✗');
+
+                  lines.forEach((subline, j) => {
+                    const lineKey = `${i}-${j}`;
+
+                    // Para mensagens do usuário e erros, manter comportamento atual
+                    if (isUserMessage || isErrorMessage) {
+                      elements.push(
+                        React.createElement(
+                          Text,
+                          {
+                            key: lineKey,
+                            color: isUserMessage ? 'cyan' : 'red',
+                            bold: j === 0 && isUserMessage,
+                          },
+                          subline,
+                        ),
+                      );
+                    } else {
+                      // Para linhas vazias, adicionar um espaço para garantir que renderize
+                      if (subline.trim() === '') {
+                        elements.push(
+                          React.createElement(
+                            Text,
+                            {
+                              key: lineKey,
+                            },
+                            ' ',
+                          ), // Espaço para garantir que a linha vazia apareça
+                        );
+                      } else {
+                        // Para respostas da IA, aplicar parser de markdown diretamente
+                        // O novo parser já retorna elementos prontos do Ink
+                        const markdownElements = parseMarkdownToElements(
+                          subline,
+                          lineKey,
+                        );
+
+                        // Adicionar elementos diretamente (o parser já gerencia Box quando necessário)
+                        elements.push(...markdownElements);
+                      }
+                    }
+                  });
+                  return elements;
+                })
+                .flat(),
+            ),
+      ),
+    ),
+
+    // Bottom section: Input area
+    React.createElement(
+      Box,
+      {
+        flexDirection: 'column',
+      },
+      // Top separator line
+      React.createElement(
+        Box,
+        null,
+        React.createElement(
+          Text,
+          { dimColor: true },
+          '─'.repeat(terminalWidth),
+        ),
+      ),
+
+      // Input prompt
+      React.createElement(
+        Box,
+        {
+          paddingLeft: 1,
+        },
+        isProcessing
+          ? React.createElement(
+              Box,
+              null,
+              React.createElement(Text, { color: 'yellow' }, '❯ Processing '),
+              React.createElement(Spinner, { type: 'dots' }),
+            )
+          : React.createElement(MultilineInput, {
+              value: input,
+              onChange: setInput,
+              placeholder: 'Type your question...',
+              showCursor: true,
+              isActive: status === 'ready',
+            }),
+      ),
+
+      // Bottom separator line
+      React.createElement(
+        Box,
+        null,
+        React.createElement(
+          Text,
+          { dimColor: true },
+          '─'.repeat(terminalWidth),
+        ),
+      ),
+
+      // Clean footer
+      React.createElement(
+        Box,
+        { paddingLeft: 1, marginTop: 1 },
+        React.createElement(
+          Text,
+          { dimColor: true, italic: true },
+          '/help for commands • ↑↓ for history • Ctrl+C to exit',
+        ),
+      ),
+    ),
+  );
+};
+
+// Main execution
+const main = async () => {
+  console.clear();
+
+  const { waitUntilExit } = render(React.createElement(MCPInkApp), {
+    exitOnCtrlC: false, // Disable default Ctrl+C exit to use our custom handler
+  });
+
+  try {
+    await waitUntilExit();
+    if (isDebug) {
+      console.log('[DEBUG] Application exiting normally');
+    }
+    if (!isDebug) {
+      console.log('\nThank you for using MCP Terminal Assistant! 👋');
+    }
+    process.exit(0);
+  } catch (error) {
+    if (isDebug) {
+      console.log('[DEBUG] Application exiting with error:', error);
+    }
+    console.error('\nError:', error.message);
+    process.exit(1);
+  }
+};
+
+// Run the application
+main().catch(error => {
+  console.error('Fatal error:', error);
+  process.exit(1);
+});

@@ -215,6 +215,102 @@ class AIConfigurator {
     return enable.toLowerCase() !== 'n';
   }
 
+  async configureTurso() {
+    console.log('\n💾 Configuração do Turso (Histórico Distribuído)\n');
+
+    // Check if Turso config already exists
+    const tursoConfigPath = path.join(process.env.HOME, '.mcp-terminal/turso-config.json');
+    let tursoConfig = {};
+
+    if (existsSync(tursoConfigPath)) {
+      try {
+        const configData = await fs.readFile(tursoConfigPath, 'utf8');
+        tursoConfig = JSON.parse(configData);
+        console.log('✅ Configuração do Turso existente encontrada.\n');
+      } catch (error) {
+        console.log('⚠️  Erro ao ler configuração do Turso.\n');
+      }
+    }
+
+    const enable = await this.question(
+      'Deseja configurar o Turso para salvar histórico de conversas? (S/n): ',
+    );
+
+    if (enable.toLowerCase() === 'n') {
+      console.log('⏭️  Pulando configuração do Turso.');
+      return null;
+    }
+
+    console.log('\n📝 Para configurar o Turso, você precisa:');
+    console.log('   1. Uma conta no Turso (https://turso.tech)');
+    console.log('   2. Um database criado');
+    console.log('   3. URL e token de autenticação do database\n');
+
+    // Get Turso URL
+    let tursoUrl = tursoConfig.turso_url || '';
+    if (tursoUrl) {
+      console.log(`URL atual: ${tursoUrl}`);
+      const keepUrl = await this.question('Manter URL atual? (S/n): ');
+      if (keepUrl.toLowerCase() === 'n') {
+        tursoUrl = '';
+      }
+    }
+
+    if (!tursoUrl) {
+      tursoUrl = await this.question('Digite a URL do seu database Turso: ');
+      if (!tursoUrl.startsWith('libsql://')) {
+        console.log('⚠️  URL deve começar com libsql://');
+        tursoUrl = `libsql://${tursoUrl}`;
+      }
+    }
+
+    // Get Turso Token
+    let tursoToken = tursoConfig.turso_token || '';
+    if (tursoToken) {
+      console.log(`Token atual: ${tursoToken.substring(0, 20)}...`);
+      const keepToken = await this.question('Manter token atual? (S/n): ');
+      if (keepToken.toLowerCase() === 'n') {
+        tursoToken = '';
+      }
+    }
+
+    if (!tursoToken) {
+      tursoToken = await this.question('Digite o token de autenticação do Turso: ');
+    }
+
+    // Configure sync settings
+    const syncUrl = tursoUrl; // Use same URL for sync
+    const syncInterval = 60; // Default 60 seconds
+
+    return {
+      turso_url: tursoUrl.trim(),
+      turso_token: tursoToken.trim(),
+      turso_sync_url: syncUrl,
+      turso_sync_interval: syncInterval,
+      history_mode: 'hybrid',
+      fallback_enabled: true,
+      cache_ttl: 3600,
+      max_retries: 5,
+      retry_interval: 60000
+    };
+  }
+
+  async saveTursoConfig(tursoConfig) {
+    if (!tursoConfig) return;
+
+    const tursoConfigPath = path.join(process.env.HOME, '.mcp-terminal/turso-config.json');
+    const configDir = path.dirname(tursoConfigPath);
+
+    // Ensure directory exists
+    if (!existsSync(configDir)) {
+      await fs.mkdir(configDir, { recursive: true });
+    }
+
+    // Save Turso configuration
+    await fs.writeFile(tursoConfigPath, JSON.stringify(tursoConfig, null, 2));
+    console.log(`✅ Configuração do Turso salva em: ${tursoConfigPath}`);
+  }
+
   async saveConfig() {
     // Ensure directory exists
     const configDir = path.dirname(CONFIG_PATH);
@@ -281,6 +377,9 @@ class AIConfigurator {
     // Configure web search
     const webSearchEnabled = await this.configureWebSearch();
 
+    // Configure Turso
+    const tursoConfig = await this.configureTurso();
+
     // Update configuration
     this.config.provider = provider;
 
@@ -317,6 +416,11 @@ class AIConfigurator {
     // Save configuration
     await this.saveConfig();
 
+    // Save Turso configuration if provided
+    if (tursoConfig) {
+      await this.saveTursoConfig(tursoConfig);
+    }
+
     // Test configuration
     await this.testConfiguration();
 
@@ -329,6 +433,9 @@ class AIConfigurator {
     console.log(`   • Modelo: ${model}`);
     console.log(
       `   • Web Search: ${webSearchEnabled ? 'Ativado' : 'Desativado'}`,
+    );
+    console.log(
+      `   • Turso: ${tursoConfig ? 'Configurado' : 'Não configurado'}`,
     );
     console.log('\n🚀 Comandos úteis:');
     console.log('   ask "sua pergunta"       # Fazer uma pergunta');

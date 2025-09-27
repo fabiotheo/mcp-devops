@@ -38,16 +38,20 @@ export default class TursoHistoryClient {
    * Inicializa o cliente Turso e registra a máquina
    */
   async initialize() {
+    console.log('[TursoClient] initialize() called');
     try {
       // Validar configuração
+      console.log('[TursoClient] Validating config...');
       if (!this.config.turso_url || !this.config.turso_token) {
         throw new Error(
           'Turso URL and token are required. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN',
         );
       }
 
+      console.log('[TursoClient] Creating client...');
       // Criar cliente Turso
       if (this.config.turso_sync_url) {
+        console.log('[TursoClient] Using sync mode');
         // Modo com embedded replica (suporte offline)
         this.client = createClient({
           url: this.config.turso_url,
@@ -56,24 +60,42 @@ export default class TursoHistoryClient {
           syncInterval: this.config.turso_sync_interval,
         });
       } else {
+        console.log('[TursoClient] Using online-only mode');
         // Modo online apenas
         this.client = createClient({
           url: this.config.turso_url,
           authToken: this.config.turso_token,
         });
       }
+      console.log('[TursoClient] Client created');
 
-      // Testar conexão
-      await this.client.execute('SELECT 1');
+      // Testar conexão com timeout
+      console.log('[TursoClient] Testing connection...');
+      const testPromise = this.client.execute('SELECT 1');
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Connection test timeout')), 5000)
+      );
+
+      try {
+        await Promise.race([testPromise, timeoutPromise]);
+        console.log('[TursoClient] Connection test successful');
+      } catch (err) {
+        console.error('[TursoClient] Connection test failed:', err.message);
+        throw err;
+      }
 
       // Obter ID da máquina
+      console.log('[TursoClient] Getting machine ID...');
       this.machineId = await this.machineManager.getMachineId();
+      console.log('[TursoClient] Machine ID:', this.machineId);
 
-      // Criar schema se necessário
-      await this.ensureSchema();
+      // SKIP SCHEMA CREATION - Tables are created via migrations
+      // await this.ensureSchema();
 
       // Registrar máquina
+      console.log('[TursoClient] Registering machine...');
       await this.registerMachine();
+      console.log('[TursoClient] Machine registered');
 
       // Gerar session ID
       this.sessionId = this.generateSessionId();
@@ -94,6 +116,21 @@ export default class TursoHistoryClient {
    * Garante que o schema existe no banco
    */
   async ensureSchema() {
+    // Check if tables already exist
+    try {
+      const result = await this.client.execute(`
+        SELECT name FROM sqlite_master
+        WHERE type='table' AND name='history_user'
+      `);
+
+      if (result.rows.length > 0) {
+        console.log('[TursoClient] Tables already exist, skipping schema creation');
+        return;
+      }
+    } catch (err) {
+      console.log('[TursoClient] Error checking tables:', err.message);
+    }
+
     const schema = `
             -- Usuários (sem senha)
             CREATE TABLE IF NOT EXISTS users (
@@ -223,13 +260,29 @@ export default class TursoHistoryClient {
             );
         `;
 
-    // Executar cada statement separadamente
+    // Executar cada statement separadamente com timeout
     const statements = schema.split(';').filter(s => s.trim());
-    for (const statement of statements) {
+    console.log(`[TursoClient] Executing ${statements.length} schema statements...`);
+
+    for (let i = 0; i < statements.length; i++) {
+      const statement = statements[i];
       if (statement.trim()) {
-        await this.client.execute(statement);
+        console.log(`[TursoClient] Executing statement ${i+1}/${statements.length}...`);
+
+        const execPromise = this.client.execute(statement);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Statement ${i+1} timeout`)), 3000)
+        );
+
+        try {
+          await Promise.race([execPromise, timeoutPromise]);
+        } catch (err) {
+          console.error(`[TursoClient] Statement ${i+1} failed:`, err.message);
+          // Continue with next statement instead of throwing
+        }
       }
     }
+    console.log('[TursoClient] Schema statements executed');
   }
 
   /**
@@ -290,9 +343,15 @@ export default class TursoHistoryClient {
    * Registra a máquina no banco de dados
    */
   async registerMachine() {
-    await this.machineManager.registerMachine(this.client);
-    // Executar migração após registrar máquina
-    await this.migrateExistingData();
+    try {
+      await this.machineManager.registerMachine(this.client);
+    } catch (err) {
+      console.log('[TursoClient] Machine registration failed:', err.message);
+      // Continue anyway - machine might already be registered
+    }
+
+    // SKIP MIGRATION - not needed for normal operation
+    // await this.migrateExistingData();
   }
 
   /**

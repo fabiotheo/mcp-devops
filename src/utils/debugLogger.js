@@ -19,11 +19,17 @@ import { appendFileSync } from 'fs';
 export function debugLog(label, data, isDebug = false, logFile = '/tmp/mcp-debug.log') {
   if (!isDebug) return; // Only log if debug is active
 
-  const logContent = `\n${label}\n${
+  const timestamp = new Date().toISOString();
+  const logContent = `\n[${timestamp}] ${label}\n${
     typeof data === 'object' ? JSON.stringify(data, null, 2) : data
   }\n${'='.repeat(60)}\n`;
 
-  appendFileSync(logFile, logContent);
+  try {
+    appendFileSync(logFile, logContent);
+  } catch (err) {
+    // If can't write to file, at least log to console
+    console.error('[DEBUG]', label, data);
+  }
 }
 
 /**

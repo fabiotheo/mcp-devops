@@ -63,7 +63,7 @@ export const parseMarkdownToElements = (text, baseKey = 'md') => {
       return;
     }
 
-    // Check for list item
+    // Check for list item (but not bullet point •)
     if (line.match(/^\s*[-*+]\s+/)) {
       const listMatch = line.match(/^(\s*)([-*+])\s+(.*)$/);
       if (listMatch) {
@@ -71,13 +71,15 @@ export const parseMarkdownToElements = (text, baseKey = 'md') => {
         const processedContent = processInlineMarkdown(content, `${lineKey}-list`);
 
         // Create a proper list item with bullet and content
+        // Use Text wrapper for inline content to avoid Box inside Text error
         elements.push(
           React.createElement(
             Box,
             { key: `${lineKey}-listbox` },
             React.createElement(Text, { key: `${lineKey}-indent` }, indent),
             React.createElement(Text, { key: `${lineKey}-bullet`, color: 'cyan', bold: true }, `${bullet} `),
-            React.createElement(Box, { key: `${lineKey}-content` }, ...processedContent)
+            // Wrap processed content in a single Text element instead of Box
+            React.createElement(Text, { key: `${lineKey}-content` }, processedContent)
           )
         );
         return;

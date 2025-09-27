@@ -23,7 +23,7 @@ import { CANCELLATION_MARKER } from '../constants.js';
  * @param {Function} params.setCommandHistory - Function to update command history
  * @param {Object} params.requestManager - Request manager from useRequestManager hook
  * @param {string} params.user - Current user
- * @param {boolean} params.isDebug - Debug mode flag
+ * @param {boolean} params.debug - Debug mode flag
  * @param {Function} params.formatResponse - Response formatter function
  * @param {Function} params.debug - Debug logging function
  * @param {boolean} params.isProcessing - Processing state
@@ -46,9 +46,8 @@ export function useCommandProcessor({
   setCommandHistory,
   requestManager,
   user,
-  isDebug,
-  formatResponse,
   debug,
+  formatResponse,
   isProcessing,
   setIsProcessing,
   response,
@@ -58,6 +57,10 @@ export function useCommandProcessor({
   status,
   setStatus
 }) {
+  // Debug: Log the user parameter received
+  if (debug) {
+    debug(`[useCommandProcessor] Hook initialized with user: ${user}`);
+  }
 
   // Extract needed functions from requestManager
   const {
@@ -75,8 +78,8 @@ export function useCommandProcessor({
    * Process a command through the backend services
    */
   const processCommand = useCallback(async (command) => {
-    if (isDebug) {
-      console.log(`[Debug] processCommand called with: "${command}"`);
+    if (debug) {
+      debug(`[Debug] processCommand called with: "${command}"`);
     }
     if (!command.trim()) return;
 
@@ -110,34 +113,36 @@ export function useCommandProcessor({
 
     // Save question to Turso immediately with status 'pending' and request_id
     currentTursoEntryId.current = null;
-    if (isDebug) {
-      console.log(`[Debug] Checking Turso save conditions:`);
-      console.log(
-        `  - tursoAdapter.current: ${tursoAdapter.current ? 'exists' : 'null'}`,
-      );
-      console.log(
-        `  - isConnected: ${tursoAdapter.current?.isConnected() || false}`,
-      );
-      console.log(`  - user: ${user}`);
-      console.log(`  - user !== 'default': ${user !== 'default'}`);
+
+    // Debug Turso save conditions - ALWAYS LOG THIS
+    if (debug) {
+      debug('[TURSO DEBUG] Checking save conditions:');
+      debug('  - tursoAdapter.current:', !!tursoAdapter.current);
+      debug('  - has isConnected method:', tursoAdapter.current ? !!tursoAdapter.current.isConnected : false);
+      debug('  - isConnected():', tursoAdapter.current?.isConnected ? tursoAdapter.current.isConnected() : false);
+      debug('  - user:', user);
+      debug('  - user !== default:', user !== 'default');
     }
 
-    if (
+    const canSaveToTurso =
       tursoAdapter.current &&
+      tursoAdapter.current.isConnected &&
       tursoAdapter.current.isConnected() &&
-      user !== 'default'
-    ) {
+      user !== 'default';
+
+    if (debug) {
+      debug('  - canSaveToTurso:', canSaveToTurso);
+    }
+
+    if (canSaveToTurso) {
       try {
-        if (isDebug) {
-          console.log(`[Debug] Saving question to Turso with request_id: ${requestId}`);
+        if (debug) {
+          debug(`[TURSO SAVE] Attempting to save message for user ${user} with request_id ${requestId}`);
         }
-        const entryId = await tursoAdapter.current.saveMessage(
-          user,
+        const entryId = await tursoAdapter.current.saveQuestionWithStatusAndRequestId(
           command,
-          null,
           'pending',
           requestId,
-          dbAbortControllerRef.current.signal,
         );
         currentTursoEntryId.current = entryId;
 
@@ -147,8 +152,8 @@ export function useCommandProcessor({
           req.tursoId = entryId;
         }
 
-        if (isDebug) {
-          console.log(`[Debug] Question saved to Turso with id: ${entryId}`);
+        if (debug) {
+          debug(`[TURSO SAVE] ✓ Question saved to Turso with id: ${entryId}`);
         }
       } catch (err) {
         if (err.name !== 'AbortError') {
@@ -160,8 +165,8 @@ export function useCommandProcessor({
     // Check if request was cancelled during DB save
     const requestAfterDb = activeRequests.current.get(requestId);
     if (!requestAfterDb || requestAfterDb.status === 'cancelled') {
-      if (isDebug) {
-        console.log('[Debug] Request cancelled before AI processing');
+      if (debug) {
+        debug('[Debug] Request cancelled before AI processing');
       }
       setIsProcessing(false);
       setStatus('ready');
@@ -183,58 +188,61 @@ export function useCommandProcessor({
     try {
       if (
         !orchestrator.current ||
-        !orchestrator.current.orchestrator ||
-        !orchestrator.current.patternMatcher
+        !patternMatcher.current
       ) {
         throw new Error('Backend services not initialized');
       }
 
-      if (isDebug) {
-        console.log(
-          `[Debug] Sending to orchestrator (request ${requestId}):`,
-          command,
-        );
+      if (debug) {
+        debug(`[Debug] Sending to orchestrator (request ${requestId}):`, command);
       }
 
       // Process through pattern matcher first
-      if (orchestrator.current.patternMatcher) {
-        const pattern = orchestrator.current.patternMatcher.detectPattern(command);
-        if (isDebug && pattern) {
-          console.log('[Debug] Pattern detected:', pattern.pattern);
+      if (patternMatcher.current) {
+        const pattern = patternMatcher.current.match(command);
+        if (debug && pattern) {
+          debug('[Debug] Pattern detected:', pattern.pattern);
         }
       }
 
       // Keep abort controller in scope for streaming
       const controller = aiAbortControllerRef.current;
       if (!controller) {
-        if (isDebug) {
-          console.log('[Debug] No abort controller available, request may have been cancelled');
+        if (debug) {
+          debug('[Debug] No abort controller available, request may have been cancelled');
         }
         return;
       }
 
-      const result = await orchestrator.current.orchestrator.askCommand(
+      // Limit history to last 10 messages to save tokens and avoid confusion
+      const recentHistory = fullHistory.slice(-10);
+
+      if (debug) {
+        debug('[CommandProcessor] Calling orchestrator', {
+          command,
+          historyLength: fullHistory.length,
+          recentHistoryLength: recentHistory.length,
+          requestId
+        });
+      }
+      const result = await orchestrator.current.askCommand(
         command,
-        fullHistory,
+        recentHistory,
         {
           abort: controller,
           onStream: chunk => {
             // Check if this request is still active
             const currentReq = activeRequests.current.get(requestId);
             if (!currentReq || currentReq.status === 'cancelled') {
-              if (isDebug) {
-                console.log(
-                  `[Debug] Ignoring stream chunk for cancelled request ${requestId}`,
-                );
+              if (debug) {
+                debug(`[Debug] Ignoring stream chunk for cancelled request ${requestId}`);
               }
               return;
             }
 
             if (currentRequestId.current !== requestId) {
-              if (isDebug) {
-                console.log(
-                  `[Debug] Ignoring stream chunk for old request ${requestId}`,
-                );
+              if (debug) {
+                debug(`[Debug] Ignoring stream chunk for old request ${requestId}`);
               }
               return;
             }
@@ -244,24 +252,57 @@ export function useCommandProcessor({
         },
       );
 
+      if (debug) {
+        debug('[CommandProcessor] Orchestrator returned', {
+          hasResult: !!result,
+          hasResponse: !!result?.response,
+          responseLength: result?.response?.length || 0
+        });
+      }
+
+      // Check if orchestrator returned an error
+      if (result && !result.success && result.error) {
+        if (debug) {
+          debug('[CommandProcessor] Orchestrator returned error', {
+            error: result.error
+          });
+        }
+        // Throw the error so it gets caught by the catch block
+        throw new Error(result.error);
+      }
+
       // Final check if request is still active
       const finalReq = activeRequests.current.get(requestId);
       if (!finalReq || finalReq.status === 'cancelled') {
-        if (isDebug) {
-          console.log(`[Debug] Request ${requestId} was cancelled, not updating response`);
+        if (debug) {
+          debug(`[Debug] Request ${requestId} was cancelled, not updating response`);
         }
         return;
       }
 
       if (currentRequestId.current !== requestId) {
-        if (isDebug) {
-          console.log(`[Debug] Request ${requestId} is no longer current, ignoring result`);
+        if (debug) {
+          debug(`[Debug] Request ${requestId} is no longer current, ignoring result`);
         }
         return;
       }
 
-      if (result?.response) {
-        const formattedResponse = formatResponse(result.response, debug);
+      // Check for response or directAnswer (from successful orchestrator calls)
+      const responseContent = result?.response || result?.directAnswer;
+
+      if (responseContent) {
+        if (debug) {
+          debug('[CommandProcessor] Processing response', {
+            responsePreview: responseContent?.substring(0, 200),
+            responseType: typeof responseContent
+          });
+        }
+        const formattedResponse = formatResponse(responseContent, debug);
+        if (debug) {
+          debug('[CommandProcessor] Setting formatted response', {
+            formattedPreview: formattedResponse?.substring(0, 200)
+          });
+        }
         setResponse(formattedResponse);
 
         // Update display history with formatted response
@@ -276,7 +317,7 @@ export function useCommandProcessor({
           ...prev,
           {
             role: 'assistant',
-            content: formattedResponse,
+            content: responseContent,
           },
         ]);
 
@@ -287,19 +328,16 @@ export function useCommandProcessor({
           user !== 'default'
         ) {
           try {
-            if (isDebug) {
-              console.log(
-                `[Debug] Updating Turso entry ${currentTursoEntryId.current} to completed`,
-              );
+            if (debug) {
+              debug(`[Debug] Updating Turso entry ${currentTursoEntryId.current} to completed`);
             }
-            await tursoAdapter.current.updateResponse(
+            await tursoAdapter.current.updateWithResponseAndStatus(
               currentTursoEntryId.current,
-              formattedResponse,
+              responseContent,
               'completed',
-              dbAbortControllerRef.current.signal,
             );
-            if (isDebug) {
-              console.log('[Debug] Turso entry updated with response');
+            if (debug) {
+              debug('[Debug] Turso entry updated with response');
             }
           } catch (err) {
             if (err.name !== 'AbortError') {
@@ -307,18 +345,40 @@ export function useCommandProcessor({
             }
           }
         }
+      } else {
+        if (debug) {
+          debug('[CommandProcessor] No response from orchestrator', {
+            result: result
+          });
+        }
+        // If no response and there's an error in the result, throw it
+        if (result && !result.success && result.error) {
+          throw new Error(result.error);
+        }
       }
     } catch (err) {
       if (err.name === 'AbortError') {
-        if (isDebug) {
-          console.log(`[Debug] Request ${requestId} was aborted`);
+        if (debug) {
+          debug(`[Debug] Request ${requestId} was aborted`);
         }
         // Don't update UI for aborted requests
         return;
       }
 
       console.error('[Error] Command processing failed:', err);
-      const errorMsg = `Error: ${err.message}`;
+
+      // Check for authentication error - use simple format to avoid markdown issues
+      let errorMsg;
+      if (err.message && err.message.includes('401') && err.message.includes('authentication_error')) {
+        errorMsg = `❌ Erro de Autenticação da API - Chave inválida ou não configurada. Execute: ipcom-chat --configure`;
+      } else if (err.message && err.message.includes('403')) {
+        errorMsg = `❌ Erro de Permissão da API - Verifique as permissões da sua chave. Execute: ipcom-chat --configure`;
+      } else if (err.message && err.message.includes('429')) {
+        errorMsg = `⏳ Limite de Taxa Excedido - Aguarde alguns minutos e tente novamente.`;
+      } else {
+        errorMsg = `Error: ${err.message}`;
+      }
+
       setError(errorMsg);
       setResponse(errorMsg);
 
@@ -332,11 +392,10 @@ export function useCommandProcessor({
         user !== 'default'
       ) {
         try {
-          await tursoAdapter.current.updateResponse(
+          await tursoAdapter.current.updateWithResponseAndStatus(
             currentTursoEntryId.current,
             errorMsg,
             'error',
-            dbAbortControllerRef.current.signal,
           );
         } catch (updateErr) {
           if (updateErr.name !== 'AbortError') {
@@ -382,7 +441,7 @@ export function useCommandProcessor({
     setError,
     setStatus,
     user,
-    isDebug,
+    debug,
     formatResponse,
     debug
   ]);

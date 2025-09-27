@@ -1093,7 +1093,7 @@ export default class ModelFactory {
       { src: 'src/ipcom-chat-cli.js', dest: 'ipcom-chat-cli.js' },
 
       // Interface Ink
-      { src: 'src/mcp-ink-cli.mjs', dest: 'mcp-ink-cli.mjs' },
+      { src: 'src/mcp-ink-cli.mjs', dest: 'src/mcp-ink-cli.mjs' },
 
       // Orquestradores e libs essenciais
       { src: 'src/ai_orchestrator.js', dest: 'ai_orchestrator.js' },

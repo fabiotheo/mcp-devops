@@ -203,7 +203,7 @@ if (key.upArrow) {
 ```
 
 ### Markdown Parser
-- **Arquivo:** `src/components/MarkdownParser.js`
+- **Arquivo:** `src/components/MarkdownParser.tsx`
 - **Função:** `parseMarkdownToElements(text, key)`
 - **Usado:** Para renderizar respostas da IA
 

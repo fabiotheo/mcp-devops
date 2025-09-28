@@ -201,12 +201,12 @@ class RegressionTester {
 
     const requiredFiles = [
       'src/mcp-ink-cli.mjs',
-      'src/components/MultilineInput.js',
-      'src/components/MarkdownParser.js',
-      'src/ai_orchestrator_bash.js',
-      'src/libs/pattern_matcher.js',
-      'src/ai_models/model_factory.js',
-      'src/bridges/adapters/TursoAdapter.js'
+      'src/components/MultilineInput.ts',
+      'src/components/MarkdownParser.tsx',
+      'src/ai_orchestrator_bash.ts',
+      'src/libs/pattern_matcher.ts',
+      'src/ai_models/model_factory.ts',
+      'src/bridges/adapters/TursoAdapter.ts'
     ];
 
     let allPresent = true;

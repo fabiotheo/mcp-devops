@@ -37,7 +37,7 @@ Substituição completa do sistema de delimitadores `"""` por uma solução mode
 ## 📁 Arquivos Criados/Modificados
 
 ### Novos Arquivos
-- **`libs/enhanced-paste-manager.js`**: Sistema principal com bracketed paste + modo manual
+- **`libs/enhanced-paste-manager.ts`**: Sistema principal com bracketed paste + modo manual
 - **`test-enhanced-paste.js`**: Script de teste interativo
 - **`docs/enhanced-paste-implementation.md`**: Esta documentação
 
@@ -47,7 +47,7 @@ Substituição completa do sistema de delimitadores `"""` por uma solução mode
   - Adicionado comando `/paste`
   - Integrado verificação no `processInput()`
   - Atualizado help e shortcuts
-- **`setup.js`**: Adicionado `enhanced-paste-manager.js` à lista de arquivos copiados
+- **`setup.js`**: Adicionado `enhanced-paste-manager.ts` à lista de arquivos copiados
 
 ## 🎮 Como Usar
 

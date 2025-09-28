@@ -60,7 +60,7 @@ error       → Erro durante processamento
 
 #### Fase 1: Atualizar Schema do Banco (FUNDAMENTAL)
 ```sql
--- libs/turso-client.js - Adicionar no ensureSchema()
+-- libs/turso-client.ts - Adicionar no ensureSchema()
 
 -- 1. Adicionar coluna status para controle de estado
 ALTER TABLE history_user ADD COLUMN status TEXT DEFAULT 'pending';
@@ -270,7 +270,7 @@ if (key.escape) {
 ## Novos Métodos Necessários no TursoAdapter
 
 ```javascript
-// interface-v2/bridges/adapters/TursoAdapter.js
+// interface-v2/bridges/adapters/TursoAdapter.ts
 
 // Salvar com status E request_id (NOVO)
 async saveQuestionWithStatusAndRequestId(command, status = 'pending', requestId) {

@@ -43,17 +43,17 @@ src/
 ├── mcp-ink-cli.mjs                    (250-300 linhas)
 │
 ├── hooks/                              [Preparados para TypeScript]
-│   ├── useBackendInitialization.js   (~200 linhas)
-│   ├── useHistoryManager.js           (~150 linhas)
-│   ├── useCommandProcessor.js         (~400 linhas)
-│   ├── useInputHandler.js             (~300 linhas)
-│   └── useRequestManager.js           (~250 linhas)
+│   ├── useBackendInitialization.ts   (~200 linhas)
+│   ├── useHistoryManager.ts           (~150 linhas)
+│   ├── useCommandProcessor.ts         (~400 linhas)
+│   ├── useInputHandler.ts             (~300 linhas)
+│   └── useRequestManager.ts           (~250 linhas)
 │
 ├── utils/
-│   ├── responseFormatter.js           (~100 linhas)
-│   ├── specialCommands.js             (~80 linhas)
+│   ├── responseFormatter.ts           (~100 linhas)
+│   ├── specialCommands.ts             (~80 linhas)
 │   ├── debugLogger.js                 (~50 linhas)
-│   └── pasteDetection.js              (~70 linhas)
+│   └── pasteDetection.ts              (~70 linhas)
 │
 ├── components/
 │   └── MainUI.js                      (~350 linhas)
@@ -234,18 +234,18 @@ src/
 
 ### FASE 2: Extração de Utilitários Puros (Baixo Risco)
 ```
-2.1 utils/responseFormatter.js
+2.1 utils/responseFormatter.ts
     - preprocessMarkdown()
     - postprocessMarkdown()
     - formatResponse()
 
-2.2 utils/specialCommands.js
+2.2 utils/specialCommands.ts
     - handleSpecialCommand() + todos os cases
 
 2.3 utils/debugLogger.js
     - Centralizar lógica de debug logging
 
-2.4 utils/pasteDetection.js
+2.4 utils/pasteDetection.ts
     - Lógica de detecção de paste
 
 VALIDAÇÃO: Testes passam 100%
@@ -290,7 +290,7 @@ Se >1 mês ou se prop drilling causar bugs, usar Opção A.
 ### Assinaturas e Dependências
 
 ```javascript
-// hooks/useBackendInitialization.js
+// hooks/useBackendInitialization.ts
 interface UseBackendInitializationProps {
   user: string;
   isDebug: boolean;
@@ -308,7 +308,7 @@ interface UseBackendInitializationReturn {
   tursoAdapter: TursoAdapter | null;
 }
 
-// hooks/useRequestManager.js (CRÍTICO - MANTER CONTROLLERS JUNTOS)
+// hooks/useRequestManager.ts (CRÍTICO - MANTER CONTROLLERS JUNTOS)
 interface UseRequestManagerProps {
   isDebug: boolean;
   tursoAdapter: TursoAdapter | null;
@@ -332,7 +332,7 @@ interface UseRequestManagerReturn {
   getActiveRequest: (requestId: string) => object | undefined;
 }
 
-// hooks/useHistoryManager.js
+// hooks/useHistoryManager.ts
 interface UseHistoryManagerProps {
   user: string;
   isDebug: boolean;
@@ -348,7 +348,7 @@ interface UseHistoryManagerReturn {
   saveToHistory: (command: string, response: string | null) => Promise<void>;
 }
 
-// hooks/useCommandProcessor.js
+// hooks/useCommandProcessor.ts
 interface UseCommandProcessorProps {
   orchestrator: AICommandOrchestratorBash | null;
   patternMatcher: PatternMatcher | null;
@@ -382,7 +382,7 @@ interface UseCommandProcessorReturn {
   setResponse: (value: string) => void;
 }
 
-// hooks/useInputHandler.js (MELHORADO - Hook Puro)
+// hooks/useInputHandler.ts (MELHORADO - Hook Puro)
 interface UseInputHandlerProps {
   commandHistory: string[];
   isProcessing: boolean;
@@ -414,7 +414,7 @@ interface UseInputHandlerReturn {
 
 ### FASE 3: Extração de useRequestManager (CRÍTICO - NOVA PRIORIDADE)
 ```
-3.1 hooks/useRequestManager.js (FAZER PRIMEIRO - MAIS CRÍTICO)
+3.1 hooks/useRequestManager.ts (FAZER PRIMEIRO - MAIS CRÍTICO)
     EXTRAIR:
     - currentRequestId.current
     - currentTursoEntryId.current
@@ -454,7 +454,7 @@ VALIDAÇÃO CRÍTICA:
 
 ### FASE 4: Extração de Hooks de Inicialização e História
 ```
-4.1 hooks/useBackendInitialization.js
+4.1 hooks/useBackendInitialization.ts
     EXTRAIR:
     - Todo useEffect de inicialização (L94-275)
     - Estados: config, error, orchestrator.current, etc
@@ -471,7 +471,7 @@ VALIDAÇÃO CRÍTICA:
       error
     }
 
-4.2 hooks/useHistoryManager.js
+4.2 hooks/useHistoryManager.ts
     EXTRAIR:
     - loadCommandHistory() (L278-362)
     - saveToHistory() (L364-402)
@@ -492,7 +492,7 @@ VALIDAÇÃO: Testes passam 100%
 
 ### FASE 5: Extração de Processamento de Comandos
 ```
-5.1 hooks/useCommandProcessor.js
+5.1 hooks/useCommandProcessor.ts
     EXTRAIR:
     - processCommand() (L560-1010)
     - Toda lógica de processamento
@@ -517,7 +517,7 @@ VALIDAÇÃO: Testes passam 100% - CRÍTICO
 
 ### FASE 6: Extração de UI e Finalização
 ```
-6.1 hooks/useInputHandler.js
+6.1 hooks/useInputHandler.ts
     EXTRAIR:
     - Todo useInput() (L1158-1400)
     - Manipulação de eventos
@@ -578,7 +578,7 @@ fullHistory marker → UI reset
 ### 3. Preservação dos AbortControllers (NOVO - CRÍTICO)
 ```javascript
 // REGRA ABSOLUTA: Manter TODOS os controllers no mesmo hook
-// hooks/useRequestManager.js
+// hooks/useRequestManager.ts
 const aiAbortControllerRef = useRef(null);
 const dbAbortControllerRef = useRef(null);
 
@@ -669,14 +669,14 @@ Cada sub-passo validado deve ter seu próprio commit:
 
 ```bash
 # Exemplo para Fase 2 (Utilitários):
-1. Extrair responseFormatter.js
+1. Extrair responseFormatter.ts
 2. npm test tests/cancellation.test.js  # Validar
-3. git add utils/responseFormatter.js src/mcp-ink-cli.mjs
+3. git add utils/responseFormatter.ts src/mcp-ink-cli.mjs
 4. git commit -m "refactor: Extract responseFormatter utility"
 
-5. Extrair specialCommands.js
+5. Extrair specialCommands.ts
 6. npm test tests/cancellation.test.js  # Validar
-7. git add utils/specialCommands.js src/mcp-ink-cli.mjs
+7. git add utils/specialCommands.ts src/mcp-ink-cli.mjs
 8. git commit -m "refactor: Extract specialCommands utility"
 
 # Repetir para cada extração
@@ -838,7 +838,7 @@ Após a conclusão bem-sucedida da refatoração modular, os seguintes passos ev
     - Adicionar @types para dependências
 
 7.2 Migração Gradual dos Hooks
-    - Converter hooks/useRequestManager.js → .ts (PRIMEIRO)
+    - Converter hooks/useRequestManager.ts → .ts (PRIMEIRO)
     - Migrar outros hooks incrementalmente
     - Manter retrocompatibilidade durante transição
 

@@ -303,8 +303,8 @@ class MCPSetup {
       console.log('   • mcp-assistant.js');
       console.log('   • mcp-client.js');
       console.log('   • mcp-interactive.js');
-      console.log('   • ai_orchestrator.js');
-      console.log('   • system_detector.js');
+      console.log('   • ai_orchestrator.ts');
+      console.log('   • system_detector.ts');
       console.log('   • Todos os outros arquivos do projeto\n');
 
       console.log('📋 Próximos passos:');
@@ -490,11 +490,11 @@ class MCPSetup {
         await fs.access(sourceDir);
 
         const sourceFiles = [
-          'base_model.js',
-          'claude_model.js',
+          'base_model.ts',
+          'claude_model.ts',
           'openai_model.js',
-          'gemini_model.js',
-          'model_factory.js',
+          'gemini_model.ts',
+          'model_factory.ts',
         ];
 
         for (const file of sourceFiles) {
@@ -517,9 +517,9 @@ class MCPSetup {
         // Criar arquivos de modelo padrão
         console.log('  📝 Criando arquivos de modelo padrão...');
 
-        // base_model.js
+        // base_model.ts
         await fs.writeFile(
-          path.join(aiModelsDir, 'base_model.js'),
+          path.join(aiModelsDir, 'base_model.ts'),
           `// ~/.mcp-terminal/ai_models/base_model.js
 // Classe base para todos os modelos de IA
 
@@ -560,14 +560,14 @@ export default class BaseAIModel {
 }`,
         );
 
-        // claude_model.js
+        // claude_model.ts
         await fs.writeFile(
-          path.join(aiModelsDir, 'claude_model.js'),
-          `// ~/.mcp-terminal/ai_models/claude_model.js
+          path.join(aiModelsDir, 'claude_model.ts'),
+          `// ~/.mcp-terminal/ai_models/claude_model.ts
 // Implementação do modelo Claude da Anthropic
 
 import { Anthropic } from '@anthropic-ai/sdk';
-import BaseAIModel from './base_model.js';
+import BaseAIModel from './base_model.ts';
 
 export default class ClaudeModel extends BaseAIModel {
     constructor(config) {
@@ -742,9 +742,9 @@ Responda de forma direta e prática.\`;
 }`,
         );
 
-        // model_factory.js
+        // model_factory.ts
         await fs.writeFile(
-          path.join(aiModelsDir, 'model_factory.js'),
+          path.join(aiModelsDir, 'model_factory.ts'),
           `// ~/.mcp-terminal/ai_models/model_factory.js
 // Factory para criar a instância do modelo de IA adequado
 
@@ -1048,19 +1048,19 @@ export default class ModelFactory {
 
     // Se o arquivo vem de src/, precisa ajustar os imports da v2
     if (sourceFile.includes('src/')) {
-      // ../ai_orchestrator_bash.js -> ./ai_orchestrator_bash.js
+      // ../ai_orchestrator_bash.ts -> ./ai_orchestrator_bash.ts
       adjustedContent = adjustedContent.replace(
         /from ['"]\.\.\/ai_orchestrator_bash\.js['"]/g,
-        "from './ai_orchestrator_bash.js'",
+        "from './ai_orchestrator_bash.ts'",
       );
       // libs agora está dentro de src, então ./libs/ já está correto
       // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
       // ai_models agora está dentro de src, então ./ai_models/ já está correto
       // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_models\//g, "from './ai_models/");
-      // ./bridges/adapters/TursoAdapter.js -> ./src/bridges/adapters/TursoAdapter.js
+      // ./bridges/adapters/TursoAdapter.ts -> ./src/bridges/adapters/TursoAdapter.ts
       adjustedContent = adjustedContent.replace(
         /from ['"]\.\/bridges\/adapters\/TursoAdapter\.js['"]/g,
-        "from './src/bridges/adapters/TursoAdapter.js'",
+        "from './src/bridges/adapters/TursoAdapter.ts'",
       );
     }
 
@@ -1096,11 +1096,11 @@ export default class ModelFactory {
       { src: 'src/mcp-ink-cli.mjs', dest: 'src/mcp-ink-cli.mjs' },
 
       // Orquestradores e libs essenciais
-      { src: 'src/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
-      { src: 'src/ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
+      { src: 'src/ai_orchestrator.ts', dest: 'ai_orchestrator.ts' },
+      { src: 'src/ai_orchestrator_bash.ts', dest: 'ai_orchestrator_bash.ts' },
 
       // Arquivos de configuração
-      { src: 'src/configure-ai.js', dest: 'configure-ai.js' },
+      { src: 'src/configure-ai.ts', dest: 'configure-ai.ts' },
 
       // Scripts shell
       { src: 'scripts/zsh_integration.sh', dest: 'zsh_integration.sh' },
@@ -1307,7 +1307,7 @@ configurator.run().catch(error => {
     const scripts = [
       'mcp-client.js',
       'mcp-assistant.js',
-      'configure-ai.js',
+      'configure-ai.ts',
       'mcp-configure',
       'mcp-interactive.js',
       'ipcom-chat',

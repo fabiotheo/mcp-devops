@@ -4,7 +4,7 @@ import {
   formatResponse,
   preprocessMarkdown,
   postprocessMarkdown
-} from '../../src/utils/responseFormatter.js';
+} from '../../src/utils/responseFormatter.ts';
 
 describe('responseFormatter', () => {
   describe('formatResponse', () => {

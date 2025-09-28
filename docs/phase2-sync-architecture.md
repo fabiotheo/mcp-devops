@@ -36,12 +36,12 @@ graph LR
 
 ## 📋 Componentes a Implementar
 
-### 1. LocalCache Manager (`libs/local-cache.js`)
+### 1. LocalCache Manager (`libs/local-cache.ts`)
 - SQLite para armazenamento local
 - Espelhamento das tabelas do Turso
 - Queue de sincronização para modo offline
 
-### 2. SyncManager (`libs/sync-manager.js`)
+### 2. SyncManager (`libs/sync-manager.ts`)
 - Sincronização bidirecional
 - Detecção de conflitos
 - Merge de históricos

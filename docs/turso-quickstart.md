@@ -67,13 +67,13 @@ O script irá:
 
 ```bash
 # Testar o cliente Turso
-node libs/turso-client.js
+node libs/turso-client.ts
 
 # Testar geração de ID da máquina
-node libs/machine-identity.js generate
+node libs/machine-identity.ts generate
 
 # Ver informações da máquina
-node libs/machine-identity.js info
+node libs/machine-identity.ts info
 ```
 
 ## 8. Configurar Variáveis de Ambiente (Opcional)

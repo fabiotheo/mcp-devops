@@ -4,7 +4,7 @@ import {
   parseSpecialCommand,
   formatStatusMessage,
   formatHistoryMessage
-} from '../../src/utils/specialCommands.js';
+} from '../../src/utils/specialCommands.ts';
 
 describe('specialCommands', () => {
   describe('parseSpecialCommand', () => {

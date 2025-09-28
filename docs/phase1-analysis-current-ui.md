@@ -11,7 +11,7 @@
 - `Spinner` - Loading indicator
 
 ### Custom Components:
-- `MultilineInput` - Custom input component at `./components/MultilineInput.js`
+- `MultilineInput` - Custom input component at `./components/MultilineInput.ts`
 
 ## Current UI Structure Analysis
 

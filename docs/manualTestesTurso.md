@@ -98,11 +98,11 @@ cat teste.json | head -20
 ls ~/.mcp-terminal/history.json
 
 # Executar migração
-node libs/migrate-history.js
+node libs/migrate-history.ts
 # Escolher opção 1 (global)
 
 # Verificar migração
-node libs/migrate-history.js verify
+node libs/migrate-history.ts verify
 
 # Ver estatísticas após migração
 ipcom-chat history stats
@@ -344,7 +344,7 @@ Erro de Conexão com Turso
 cat ~/.mcp-terminal/turso-config.json
 
 # Testar conexão
-node libs/turso-client.js test
+node libs/turso-client.ts test
 
   ---
 📝 RELATÓRIO DE TESTES

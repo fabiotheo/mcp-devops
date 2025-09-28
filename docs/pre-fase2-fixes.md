@@ -69,14 +69,14 @@ Cancellation Tests:
 ~/.mcp-terminal/src/
 ├── hooks/
 │   ├── test-hook.js (copiado ✅)
-│   └── useRequestManager.js (já existente)
+│   └── useRequestManager.ts (já existente)
 └── utils/
     ├── test-util.js (copiado ✅)
     ├── debugLogger.js (já existente)
     ├── historyManager.js (já existente)
-    ├── pasteDetection.js (já existente)
-    ├── responseFormatter.js (já existente)
-    └── specialCommands.js (já existente)
+    ├── pasteDetection.ts (já existente)
+    ├── responseFormatter.ts (já existente)
+    └── specialCommands.ts (já existente)
 ```
 
 ## 3. Status Final dos Testes
@@ -120,10 +120,10 @@ Skipped: 1 test
 Agora estamos **100% prontos** para iniciar a FASE 2:
 
 1. **Começar com utilitários** (ordem obrigatória):
-   - responseFormatter.js
-   - specialCommands.js
+   - responseFormatter.ts
+   - specialCommands.ts
    - debugLogger.js
-   - pasteDetection.js
+   - pasteDetection.ts
 
 2. **Commit atômico** para cada extração
 

@@ -264,6 +264,6 @@ if (fullHistory.length > 0) {
 ## Arquivos Afetados
 
 - `interface-v2/mcp-ink-cli.mjs` (principal)
-- `interface-v2/bridges/adapters/TursoAdapter.js` (se necessário)
-- `ai_orchestrator_bash.js` (já corrigido anteriormente)
-- `ai_models/claude_model.js` (já corrigido anteriormente)
+- `interface-v2/bridges/adapters/TursoAdapter.ts` (se necessário)
+- `ai_orchestrator_bash.ts` (já corrigido anteriormente)
+- `ai_models/claude_model.ts` (já corrigido anteriormente)

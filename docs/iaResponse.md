@@ -28,7 +28,7 @@ Sim, o sistema é Darwin (macOS ARM64).
 
 ### 1. Causa Raiz: Instruções Negativas Ineficazes
 
-**Local:** `src/ai_models/claude_model.js` (linhas 149-158)
+**Local:** `src/ai_models/claude_model.ts` (linhas 149-158)
 
 **Problema Atual:**
 ```javascript
@@ -48,7 +48,7 @@ REGRAS IMPORTANTES:
 ### 2. Problemas Secundários
 
 #### Prompts Fragmentados
-- **Locais:** 4 funções diferentes em `ai_orchestrator.js`
+- **Locais:** 4 funções diferentes em `ai_orchestrator.ts`
 - **Impacto:** Instruções inconsistentes entre chamadas
 
 #### Gerenciamento Manual de Contexto
@@ -61,7 +61,7 @@ REGRAS IMPORTANTES:
 
 #### 1.1 Reescrever System Prompt com Instruções POSITIVAS
 
-**Arquivo:** `src/ai_models/claude_model.js`
+**Arquivo:** `src/ai_models/claude_model.ts`
 **Linhas:** 149-158
 
 **Implementação:**
@@ -174,7 +174,7 @@ INSTRUÇÕES CRÍTICAS:
 
 #### 3.2 Atualizar Imports
 
-**Em `src/ai_models/claude_model.js`:**
+**Em `src/ai_models/claude_model.ts`:**
 ```javascript
 import { SYSTEM_PROMPT_TERMINAL } from './prompts.js';
 
@@ -182,7 +182,7 @@ import { SYSTEM_PROMPT_TERMINAL } from './prompts.js';
 system: SYSTEM_PROMPT_TERMINAL,
 ```
 
-**Em `src/ai_orchestrator.js`:**
+**Em `src/ai_orchestrator.ts`:**
 ```javascript
 import { ORCHESTRATOR_RULES } from '../ai_models/prompts.js';
 

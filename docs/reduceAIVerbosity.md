@@ -15,11 +15,11 @@ O contexto completo do histórico está sendo enviado para a IA em dois locais p
    - Envia `fullHistory` com últimas 20 mensagens
    - Inclui todas mensagens de usuário e assistente
 
-2. **ai_orchestrator.js** (linhas 216-228):
+2. **ai_orchestrator.ts** (linhas 216-228):
    - Adiciona contexto de conversa anterior em prompts
    - Formata mensagens como "Usuário disse:" e "Assistente respondeu:"
 
-3. **claude_model.js** (linhas 103-123 e 149-155):
+3. **claude_model.ts** (linhas 103-123 e 149-155):
    - Processa todo histórico de mensagens
    - System prompt menciona histórico e mensagens canceladas
 
@@ -27,7 +27,7 @@ O contexto completo do histórico está sendo enviado para a IA em dois locais p
 
 ### Fase 1: Ajustes no System Prompt (Rápido)
 
-**Arquivo:** `src/ai_models/claude_model.js`
+**Arquivo:** `src/ai_models/claude_model.ts`
 **Linhas:** 149-155
 
 **Alteração:**
@@ -75,7 +75,7 @@ const formattedHistory = needsHistory && fullHistory.length > 0
 
 ### Fase 3: Filtro de Meta-Observações (Avançado)
 
-**Arquivo:** `src/ai_models/claude_model.js`
+**Arquivo:** `src/ai_models/claude_model.ts`
 **Após linha 159:**
 
 **Adicionar filtro de resposta:**

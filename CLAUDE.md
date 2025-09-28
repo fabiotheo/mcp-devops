@@ -9,28 +9,28 @@ MCP Terminal Assistant is a command-line tool for Linux/Unix systems that provid
 ## Architecture
 
 ### Iterative Refinement System (NEW - 2025)
-- **AI Orchestrator**: Enhanced `ai_orchestrator.js` with iterative command execution loop
-- **Pattern Matcher**: `libs/pattern_matcher.js` recognizes common command patterns (fail2ban, docker, disk usage)
+- **AI Orchestrator**: Enhanced `ai_orchestrator.ts` with iterative command execution loop
+- **Pattern Matcher**: `libs/pattern_matcher.ts` recognizes common command patterns (fail2ban, docker, disk usage)
 - **Progressive Execution**: System continues executing commands until it has complete answer
 - **Data Extraction**: Extracts real data from command outputs instead of generic responses
 - **Goal Tracking**: Maintains context of what information is needed to answer the question
 
 ### AI Model System
-- **Model Factory Pattern**: `ai_models/model_factory.js` creates appropriate AI model instances based on configuration
-- **Base Model Interface**: `ai_models/base_model.js` defines the contract for all AI providers
-- **Provider Implementations**: Separate files for Claude (`claude_model.js`), OpenAI (`openai_model.js`), and Gemini (`gemini_model.js`)
+- **Model Factory Pattern**: `ai_models/model_factory.ts` creates appropriate AI model instances based on configuration
+- **Base Model Interface**: `ai_models/base_model.ts` defines the contract for all AI providers
+- **Provider Implementations**: Separate files for Claude (`claude_model.ts`), OpenAI (`openai_model.js`), and Gemini (`gemini_model.ts`)
 - **Multi-Provider Support**: Configuration-driven selection between Claude, GPT, and Gemini models
 
 ### Error Analysis Pipeline
 1. **Command Capture**: Zsh integration captures failed commands with exit codes
 2. **Pattern Matching**: Local JSON patterns in `patterns/` directory provide fast, offline error detection
-3. **System Detection**: `system_detector.js` identifies OS/distribution for tailored solutions
+3. **System Detection**: `system_detector.ts` identifies OS/distribution for tailored solutions
 4. **Web Enhancement**: Optional web search integration for real-time documentation and solutions
 5. **AI Analysis**: Complex errors are analyzed by selected AI provider with enhanced context
 
 ### Core Components
-- **Command Orchestrator** (`ai_orchestrator.js`): Orchestrates iterative command execution with goal tracking
-- **Pattern Matcher** (`libs/pattern_matcher.js`): Detects common patterns and executes predefined command sequences
+- **Command Orchestrator** (`ai_orchestrator.ts`): Orchestrates iterative command execution with goal tracking
+- **Pattern Matcher** (`libs/pattern_matcher.ts`): Detects common patterns and executes predefined command sequences
 - **Command Monitoring** (`mcp-client.js`): Captures and analyzes failed terminal commands
 - **Assistant Interface** (`mcp-assistant.js`): Handles natural language queries about Linux commands
 - **Web Search** (`web_search/`): Enhances responses with real-time information from the internet
@@ -122,8 +122,8 @@ The system previously would execute only the first command and stop, providing i
 4. **Progress Evaluation**: After each command, system evaluates if more information is needed
 
 ### Key Files Modified/Added
-- `ai_orchestrator.js`: Added iterative loop, progress evaluation, and data extraction
-- `libs/pattern_matcher.js`: New file for pattern recognition and command sequencing
+- `ai_orchestrator.ts`: Added iterative loop, progress evaluation, and data extraction
+- `libs/pattern_matcher.ts`: New file for pattern recognition and command sequencing
 - `docs/repairFlux.md`: Detailed plan for the improvement implementation
 
 ### Example Flow
@@ -170,7 +170,7 @@ try {
 ### Adding New AI Providers
 1. Create new provider class extending `BaseAIModel` in `ai_models/`
 2. Implement required methods: `initialize()`, `analyzeCommand()`, `askCommand()`
-3. Update `model_factory.js` to include the new provider
+3. Update `model_factory.ts` to include the new provider
 4. Add configuration options for API keys and model selection
 5. **Add the new file to `setup.js` for deployment**
 
@@ -187,7 +187,7 @@ try {
 - Firecrawl integration allows content extraction from websites in markdown format
 
 ### Adding Pattern Recognition
-To add new command patterns, edit `libs/pattern_matcher.js`:
+To add new command patterns, edit `libs/pattern_matcher.ts`:
 1. Add pattern to the `loadPatterns()` method
 2. Define matcher regex, command sequence, and data extraction logic
 3. Each pattern should include:
@@ -198,7 +198,7 @@ To add new command patterns, edit `libs/pattern_matcher.js`:
 4. Test with `node test-simple.js`
 
 ### Pattern Matcher Capabilities
-The Pattern Matcher (`libs/pattern_matcher.js`) supports:
+The Pattern Matcher (`libs/pattern_matcher.ts`) supports:
 - **Dynamic Commands**: Commands can be functions that generate based on previous results
 - **Data Extraction**: Each step can extract and store data for use in later steps
 - **Aggregation**: Combine results from multiple commands into a final answer

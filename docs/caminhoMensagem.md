@@ -3,9 +3,9 @@
 ## 📁 Arquivos Principais Envolvidos
 
 1. **`interface-v2/mcp-ink-cli.mjs`** - Interface principal React/Ink
-2. **`interface-v2/bridges/adapters/TursoAdapter.js`** - Adapter para comunicação com Turso
-3. **`libs/turso-client.js`** - Cliente direto do banco Turso
-4. **`ai_orchestrator.js`** - Orquestrador de IA
+2. **`interface-v2/bridges/adapters/TursoAdapter.ts`** - Adapter para comunicação com Turso
+3. **`libs/turso-client.ts`** - Cliente direto do banco Turso
+4. **`ai_orchestrator.ts`** - Orquestrador de IA
 
 ## 🚀 Início: Executando o Comando
 
@@ -221,7 +221,7 @@ if (dbStatus === 'cancelled' || currentRequest?.status === 'cancelled') {
 
 ## 🗄️ Fase 5: Interação com Turso
 
-### TursoAdapter.js - saveQuestionWithStatusAndRequestId (linha 300)
+### TursoAdapter.ts - saveQuestionWithStatusAndRequestId (linha 300)
 ```javascript
 async saveQuestionWithStatusAndRequestId(command, status = 'pending', requestId) {
     const entryId = await this.tursoClient.saveToUser(command, null, {
@@ -235,7 +235,7 @@ async saveQuestionWithStatusAndRequestId(command, status = 'pending', requestId)
 }
 ```
 
-### turso-client.js - saveToUser (linha 485)
+### turso-client.ts - saveToUser (linha 485)
 ```javascript
 async saveToUser(command, response = null, metadata = {}) {
     const id = this.generateId();
@@ -305,7 +305,7 @@ if (!updated && currentTursoEntryId.current) {
 }
 ```
 
-### 3. updateStatusByRequestId melhorado (TursoAdapter.js linha 387-399)
+### 3. updateStatusByRequestId melhorado (TursoAdapter.ts linha 387-399)
 ```javascript
 const result = await this.tursoClient.client.execute({
     sql: 'UPDATE history_user SET status = ?, updated_at = ? WHERE request_id = ?',
@@ -368,6 +368,6 @@ sequenceDiagram
 ## 📋 Arquivos para Análise
 
 - **`interface-v2/mcp-ink-cli.mjs`** - Linhas 315-611 (processCommand) e 781-877 (ESC handler)
-- **`interface-v2/bridges/adapters/TursoAdapter.js`** - Linhas 300-398
-- **`libs/turso-client.js`** - Linhas 485-550
-- **`ai_orchestrator.js`** - Método askCommand
+- **`interface-v2/bridges/adapters/TursoAdapter.ts`** - Linhas 300-398
+- **`libs/turso-client.ts`** - Linhas 485-550
+- **`ai_orchestrator.ts`** - Método askCommand

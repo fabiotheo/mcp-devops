@@ -26,17 +26,17 @@ The current setup.js copies the entire `src/` directory, but we need to ensure t
 ├── src/
 │   ├── mcp-ink-cli.mjs     (main file, will be <300 lines)
 │   ├── hooks/               (NEW - must be copied)
-│   │   ├── useRequestManager.js
+│   │   ├── useRequestManager.ts
 │   │   ├── useInitialization.js
 │   │   ├── useHistory.js
-│   │   ├── useCommandProcessor.js
-│   │   ├── useInputHandler.js
+│   │   ├── useCommandProcessor.ts
+│   │   ├── useInputHandler.ts
 │   │   └── useCancellation.js
 │   ├── utils/               (NEW - must be copied)
-│   │   ├── responseFormatter.js
-│   │   ├── specialCommands.js
+│   │   ├── responseFormatter.ts
+│   │   ├── specialCommands.ts
 │   │   ├── debugLogger.js
-│   │   └── pasteDetection.js
+│   │   └── pasteDetection.ts
 │   ├── components/
 │   │   └── MainUI.js        (refactored component)
 │   ├── ai_models/           (existing)
@@ -83,10 +83,10 @@ adjustImportsForInstallation(content, sourceFile) {
 
   // NEW: Adjust imports from hooks
   if (sourceFile.includes('src/')) {
-    // ./hooks/useRequestManager.js remains ./hooks/useRequestManager.js (already correct)
+    // ./hooks/useRequestManager.ts remains ./hooks/useRequestManager.ts (already correct)
     // No adjustment needed for hooks as they're relative to src/
 
-    // ./utils/responseFormatter.js remains ./utils/responseFormatter.js (already correct)
+    // ./utils/responseFormatter.ts remains ./utils/responseFormatter.ts (already correct)
     // No adjustment needed for utils as they're relative to src/
   }
 

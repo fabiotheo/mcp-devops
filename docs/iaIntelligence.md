@@ -86,7 +86,7 @@ Sistema de proteção contra comandos perigosos:
 ### Classe AICommandOrchestrator
 
 ```javascript
-// ai_orchestrator.js
+// ai_orchestrator.ts
 export default class AICommandOrchestrator {
     constructor(aiModel, commandExecutor, config = {}) {
         this.ai = aiModel;
@@ -591,7 +591,7 @@ export MCP_DISABLE_CACHE=true
 ## Próximos Passos de Implementação
 
 ### Fase 1 - Estrutura Base (4h)
-1. Criar arquivo `ai_orchestrator.js`
+1. Criar arquivo `ai_orchestrator.ts`
 2. Implementar classe `AICommandOrchestrator`
 3. Adicionar métodos básicos
 

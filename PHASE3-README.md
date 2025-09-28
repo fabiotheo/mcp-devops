@@ -73,7 +73,7 @@ node test-dashboard.js
 node libs/dashboard-server.js
 
 # Terminal 2: Assistant
-node mcp-claude.js
+node mcp-claude.ts
 
 # Terminal 3: Browser
 open http://localhost:3000

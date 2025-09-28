@@ -6,7 +6,7 @@ import {
   isPastedContent,
   cleanPastedContent,
   processPastedInput
-} from '../../src/utils/pasteDetection.js';
+} from '../../src/utils/pasteDetection.ts';
 
 describe('pasteDetection', () => {
   describe('isPastedContent', () => {

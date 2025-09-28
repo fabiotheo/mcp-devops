@@ -135,8 +135,8 @@ chmod 755 ~/.mcp-terminal
 
 2. **Criar estrutura de arquivos**
    - `libs/keybinding-manager.js` - Gerenciador de teclas
-   - `libs/persistent-history.js` - Histórico persistente
-   - `libs/multiline-input.js` - Input multi-linha
+   - `libs/persistent-history.ts` - Histórico persistente
+   - `libs/multiline-input.ts` - Input multi-linha
 
 ### FASE 2: Implementação Core
 
@@ -160,7 +160,7 @@ chmod 755 ~/.mcp-terminal
 - [ ] Sincronização entre sessões
 ```
 
-#### 2.3 MultiLineInput
+#### 2.3 MultilineInput
 ```javascript
 // Prioridade: MÉDIA
 - [ ] Detectar necessidade de multi-linha
@@ -261,7 +261,7 @@ class PersistentHistory {
 
 ### Multi-line Input System
 ```javascript
-class MultiLineInput {
+class MultilineInput {
     constructor() {
         this.mode = 'single';
         this.buffer = [];

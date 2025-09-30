@@ -36,10 +36,10 @@ import { useBackendInitialization } from './hooks/useBackendInitialization.js';
 import { useHistoryManager } from './hooks/useHistoryManager.js';
 
 // Import utilities
-import { parseMarkdownToElements } from './components/MarkdownParser.tsx';
 import { formatResponse } from './utils/responseFormatter.js';
 import { createDebugLogger } from './utils/debugLogger.js';
 import { enableBracketedPasteMode, disableBracketedPasteMode } from './utils/pasteDetection.js';
+import {parseMarkdownToElements} from "./components/MarkdownParser";
 
 // @ts-ignore - import.meta is available in ES modules
 const __filename: string = fileURLToPath(import.meta.url);

@@ -300,8 +300,6 @@ class MCPSetup {
 
       console.log('\n✅ Força atualização concluída com sucesso!\n');
       console.log('🔧 Arquivos atualizados:');
-      console.log('   • mcp-assistant.js');
-      console.log('   • mcp-client.js');
       console.log('   • mcp-interactive.js');
       console.log('   • ai_orchestrator.ts');
       console.log('   • system_detector.ts');
@@ -492,7 +490,6 @@ class MCPSetup {
         const sourceFiles = [
           'base_model.ts',
           'claude_model.ts',
-          'openai_model.js',
           'gemini_model.ts',
           'model_factory.ts',
         ];
@@ -1089,11 +1086,11 @@ export default class ModelFactory {
 
     // Lista de arquivos a serem copiados
     const filesToCopy = [
-      // CLI principal com comandos
-      { src: 'src/ipcom-chat-cli.js', dest: 'ipcom-chat-cli.js' },
+      // CLI principal com comandos (compilado de TypeScript)
+      { src: 'dist/src/ipcom-chat-cli.js', dest: 'src/ipcom-chat-cli.js' },
 
-      // Interface Ink
-      { src: 'src/mcp-ink-cli.mjs', dest: 'src/mcp-ink-cli.mjs' },
+      // Interface Ink (compilado de TypeScript)
+      { src: 'dist/src/mcp-ink-cli.js', dest: 'src/mcp-ink-cli.js' },
 
       // Orquestradores e libs essenciais
       { src: 'src/ai_orchestrator.ts', dest: 'ai_orchestrator.ts' },
@@ -1250,7 +1247,7 @@ export default class ModelFactory {
       const ipcomChatContent = `#!/usr/bin/env node
 
 // V2 Interface - Always use the new Ink interface
-await import('./ipcom-chat-cli.js');`;
+await import('./src/ipcom-chat-cli.js');`;
 
       const ipcomChatPath = path.join(this.mcpDir, 'ipcom-chat');
       await fs.writeFile(ipcomChatPath, ipcomChatContent);
@@ -1305,8 +1302,6 @@ configurator.run().catch(error => {
     }
 
     const scripts = [
-      'mcp-client.js',
-      'mcp-assistant.js',
       'configure-ai.ts',
       'mcp-configure',
       'mcp-interactive.js',
@@ -1337,14 +1332,6 @@ configurator.run().catch(error => {
       await fs.mkdir(binDir, { recursive: true });
 
       const links = [
-        {
-          from: path.join(this.mcpDir, 'mcp-assistant.js'),
-          to: path.join(binDir, 'ask'),
-        },
-        {
-          from: path.join(this.mcpDir, 'mcp-client.js'),
-          to: path.join(binDir, 'mcp-monitor'),
-        },
         {
           from: path.join(this.mcpDir, 'mcp-configure'),
           to: path.join(binDir, 'mcp-configure'),

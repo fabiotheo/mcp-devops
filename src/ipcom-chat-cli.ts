@@ -136,9 +136,7 @@ interface MachineInfo {
 const __filename: string = fileURLToPath(import.meta.url);
 const __dirname: string = path.dirname(__filename);
 
-const program = new Command();
-
-program
+const program = new Command()
   .name('ipcom-chat')
   .description('IPCOM Chat - Terminal Assistant with Distributed History')
   .version('2.0.0');
@@ -638,13 +636,15 @@ program
     }
 
     // Se nenhum comando ou opção foi especificado, inicia modo interativo
-    const args = [path.join(__dirname, 'src', 'mcp-ink-cli.mjs')];
+    const args = [path.join(__dirname, 'mcp-ink-cli.js')];
 
-    // Define a variável de ambiente MCP_USER se o usuário foi especificado
-    if (options.user) {
-      process.env.MCP_USER = options.user;
-      args.push(`--user=${options.user}`);
-    }
+    // Determine user: --user option > MCP_USER env > OS username
+    const effectiveUser = options.user || process.env.MCP_USER || os.userInfo().username || 'default';
+
+    // Always pass user to child process
+    process.env.MCP_USER = effectiveUser;
+    args.push(`--user=${effectiveUser}`);
+
     if (options.local) args.push('--local');
     if (options.hybrid) args.push('--hybrid');
     if (options.debug) args.push('--debug');

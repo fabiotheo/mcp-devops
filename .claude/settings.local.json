@@ -148,7 +148,10 @@
       "mcp__serena__replace_symbol_body",
       "mcp__serena__search_for_pattern",
       "mcp__serena__insert_before_symbol",
-      "mcp__serena__find_file"
+      "mcp__serena__find_file",
+      "Bash(npm run build:*)",
+      "Bash(MCP_USER=fabio timeout 8 node /Users/fabiotheodoro/.mcp-terminal/src/mcp-ink-cli.js --debug)",
+      "Bash(MCP_USER=fabio gtimeout 8 node /Users/fabiotheodoro/.mcp-terminal/src/mcp-ink-cli.js --debug)"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,56 @@
+{
+  "compilerOptions": {
+    // Configurações de Saída
+    "target": "ES2022",                     // JavaScript moderno
+    "module": "ES2022",                     // Para suportar ESM e import.meta
+    "lib": ["ES2022"],                      // Bibliotecas padrão disponíveis
+    "outDir": "./dist",                     // Diretório de saída
+    "rootDir": "./src",                     // Diretório raiz do código-fonte
+
+    // Configurações de Módulos
+    "moduleResolution": "bundler",             // Resolução de módulos Node.js
+    "resolveJsonModule": true,              // Permite importar JSONs
+    "allowSyntheticDefaultImports": true,   // Para imports default
+    "esModuleInterop": true,                // Interoperabilidade com CommonJS
+
+    // Migração Incremental - IMPORTANTE!
+    "allowJs": true,                        // Permite arquivos .js no projeto
+    "checkJs": false,                       // Não verifica tipos em .js (por enquanto)
+    "skipLibCheck": true,                   // Pula checagem de tipos em node_modules
+
+    // Configurações de Tipo
+    "strict": false,                        // Desativado inicialmente para migração gradual
+    "noImplicitAny": false,                 // Permite 'any' implícito inicialmente
+    "strictNullChecks": false,              // Desativado inicialmente
+    "noUnusedLocals": false,                // Desativado durante migração
+    "noUnusedParameters": false,            // Desativado durante migração
+    "noEmitOnError": false,                 // Permite compilação mesmo com erros
+
+    // Configurações de Emissão
+    "declaration": true,                    // Gera arquivos .d.ts
+    "declarationMap": true,                 // Source maps para declarations
+    "sourceMap": true,                      // Source maps para debugging
+    "removeComments": false,                // Mantém comentários
+
+    // Configurações Adicionais
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,                // Para compatibilidade com tsx
+    "jsx": "react"                          // Para componentes React/Ink
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "**/*.test.js",
+    "**/*.spec.js",
+    "tests/**/*",
+    "eslint.config.mjs"
+  ],
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
+  }
+}

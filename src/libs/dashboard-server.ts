@@ -439,7 +439,7 @@ class DashboardServer {
       }
 
       // Import SyncManager
-      const { default: SyncManager } = await import('./sync-manager.ts');
+      const { default: SyncManager } = await import('./sync-manager.js');
       const syncManager = new SyncManager({ debug: this.config.debug });
       await syncManager.initialize(this.tursoClient);
 

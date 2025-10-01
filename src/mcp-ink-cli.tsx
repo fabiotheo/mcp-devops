@@ -67,6 +67,7 @@ const getUserFromArgs = (): string => {
 
 const user: string = getUserFromArgs();
 debug('User', user);
+console.log(`[mcp-ink-cli] User from args: "${user}"`);
 
 /**
  * Inner component that uses the context and renders the main UI

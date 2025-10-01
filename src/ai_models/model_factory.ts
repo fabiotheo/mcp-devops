@@ -23,7 +23,7 @@ export interface ProviderInfo {
 }
 
 // Interface para configuração estendida com provider
-export interface ModelFactoryConfig extends AIModelConfig {
+export interface ModelFactoryConfig extends Omit<AIModelConfig, 'ai_provider'> {
   ai_provider?: string;
   anthropic_api_key?: string;
   gemini_api_key?: string;

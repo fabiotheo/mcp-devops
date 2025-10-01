@@ -8,14 +8,15 @@
  */
 
 import { useEffect, MutableRefObject } from 'react';
-import { initializeBackend } from '../services/backendService';
+import { initializeBackend } from '../services/backendService.js';
+import { debugLog } from '../utils/debugLogger.js';
 import type {
   BackendConfig,
   BackendInitResult,
   AIOrchestrator,
   PatternMatcher,
   TursoAdapter
-} from '../types/services';
+} from '../types/services.js';
 
 // ============== INTERFACES E TIPOS ==============
 
@@ -84,17 +85,23 @@ export function useBackendInitialization({
         });
 
         if (mounted) {
+          // Debug: Log the config before setting
+          debugLog('[useBackendInitialization] Config from initializeBackend', result.config, isDebug);
+
           // Update configuration
           setConfig(result.config);
-          
+
+          // Debug: Verify what was set
+          debugLog('[useBackendInitialization] Called setConfig with user', { user: result.config.user }, isDebug);
+
           // Set service references
           orchestrator.current = result.orchestrator;
           patternMatcher.current = result.patternMatcher;
           tursoAdapter.current = result.tursoAdapter;
-          
+
           // Load command history
           await loadCommandHistory();
-          
+
           setStatus('ready');
         }
       } catch (err) {

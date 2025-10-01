@@ -39,11 +39,13 @@
     "test:regression": "npm run test:cancellation && npm run test:snapshots",
     "test:watch": "node --test --watch tests/*.test.js",
     "test:example": "node --test tests/example.test.js",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/mcp-ink-cli.mjs",
-    "clean": "rm -rf dist"
+    "install-script": "npm run build; node setup.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

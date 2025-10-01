@@ -19,14 +19,7 @@ import * as path from 'node:path';
 
 // Import Context and Provider
 import { AppProvider, useAppContext } from './contexts/AppContext.js';
-
-// Type definitions for AppProvider config
-interface AppConfig {
-  isDebug?: boolean;
-  isTTY?: boolean;
-  user?: string;
-  [key: string]: unknown;
-}
+import type { BackendConfig } from './types/services.js';
 
 // Import hooks
 import { useRequestManager } from './hooks/useRequestManager.js';
@@ -296,7 +289,7 @@ const MCPInkApp: React.FC = () => {
   const isTTY: boolean = !!process.stdin.isTTY;
   const user: string = getUserFromArgs();
 
-  const config: AppConfig = {
+  const config: BackendConfig = {
     isDebug,
     isTTY,
     user

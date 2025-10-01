@@ -185,7 +185,7 @@ userCmd
   .requiredOption('--email <email>', 'Endereço de email')
   .action(async (options: CreateUserOptions) => {
     const client = await initTursoClient();
-    const userManager = new UserManager(client.client);
+    const userManager = new UserManager(client);
 
     try {
       await userManager.createUser(
@@ -206,7 +206,7 @@ userCmd
   .option('--all', 'Incluir usuários inativos')
   .action(async (options: ListUsersOptions) => {
     const client = await initTursoClient();
-    const userManager = new UserManager(client.client);
+    const userManager = new UserManager(client);
 
     try {
       const users = await userManager.listUsers(!options.all);
@@ -246,7 +246,7 @@ userCmd
     }
 
     const client = await initTursoClient();
-    const userManager = new UserManager(client.client);
+    const userManager = new UserManager(client);
 
     try {
       await userManager.updateUser(username, options);
@@ -262,7 +262,7 @@ userCmd
   .description('Deletar (desativar) usuário')
   .action(async (username: string) => {
     const client = await initTursoClient();
-    const userManager = new UserManager(client.client);
+    const userManager = new UserManager(client);
 
     try {
       await userManager.deleteUser(username);
@@ -278,7 +278,7 @@ userCmd
   .description('Mostrar estatísticas do usuário')
   .action(async (username: string) => {
     const client = await initTursoClient();
-    const userManager = new UserManager(client.client);
+    const userManager = new UserManager(client);
 
     try {
       const stats = await userManager.getUserStats(username);

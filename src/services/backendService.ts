@@ -13,6 +13,7 @@ import AICommandOrchestratorBash from '../ai_orchestrator_bash.js';
 import PatternMatcherImpl from '../libs/pattern_matcher.js';
 import ModelFactory from '../ai_models/model_factory.js';
 import TursoAdapterImpl from '../bridges/adapters/TursoAdapter.js';
+import { debugLog } from '../utils/debugLogger.js';
 import type {
   BackendConfig,
   BackendInitResult,
@@ -269,6 +270,8 @@ export async function createPatternMatcher(): Promise<PatternMatcher> {
  * @returns Turso adapter instance or null
  */
 export async function createTursoAdapter(user: string, isDebug: boolean = false): Promise<TursoAdapter> {
+  debugLog('[createTursoAdapter] Creating adapter', { user, isDebug }, isDebug);
+
   const tursoAdapter = new TursoAdapterImpl({
     debug: isDebug,
     userId: user,
@@ -306,8 +309,10 @@ export async function initializeBackend({
 }: InitializeBackendOptions): Promise<BackendInitResult> {
 
   try {
-    // Initialize debug log
+    // Initialize debug log FIRST so we can use it
     initializeDebugLog(isDebug, user);
+
+    debugLog('[initializeBackend] Starting initialization', { user, isDebug }, isDebug);
 
     // Load configuration
     onStatusChange('loading-config');
@@ -329,7 +334,11 @@ export async function initializeBackend({
     onStatusChange('ready');
 
     return {
-      config,
+      config: {
+        ...config,
+        user, // Preserve the user in the returned config
+        isDebug
+      },
       orchestrator,
       patternMatcher,
       tursoAdapter

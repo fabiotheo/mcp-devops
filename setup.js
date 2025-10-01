@@ -481,17 +481,17 @@ class MCPSetup {
     try {
       await fs.mkdir(aiModelsDir, { recursive: true });
 
-      const sourceDir = path.join(process.cwd(), 'src', 'ai_models');
+      const sourceDir = path.join(process.cwd(), 'dist', 'ai_models');
 
       // Verificar se o diretório de origem existe
       try {
         await fs.access(sourceDir);
 
         const sourceFiles = [
-          'base_model.ts',
-          'claude_model.ts',
-          'gemini_model.ts',
-          'model_factory.ts',
+          'base_model.js',
+          'claude_model.js',
+          'gemini_model.js',
+          'model_factory.js',
         ];
 
         for (const file of sourceFiles) {
@@ -1087,19 +1087,19 @@ export default class ModelFactory {
     // Lista de arquivos a serem copiados
     const filesToCopy = [
       // CLI principal com comandos (compilado de TypeScript)
-      { src: 'dist/src/ipcom-chat-cli.js', dest: 'src/ipcom-chat-cli.js' },
+      { src: 'dist/ipcom-chat-cli.js', dest: 'src/ipcom-chat-cli.js' },
 
       // Interface Ink (compilado de TypeScript)
-      { src: 'dist/src/mcp-ink-cli.js', dest: 'src/mcp-ink-cli.js' },
+      { src: 'dist/mcp-ink-cli.js', dest: 'src/mcp-ink-cli.js' },
 
-      // Orquestradores e libs essenciais
-      { src: 'src/ai_orchestrator.ts', dest: 'ai_orchestrator.ts' },
-      { src: 'src/ai_orchestrator_bash.ts', dest: 'ai_orchestrator_bash.ts' },
+      // Orquestradores e libs essenciais (agora de dist/)
+      { src: 'dist/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
+      { src: 'dist/ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
 
-      // Arquivos de configuração
-      { src: 'src/configure-ai.ts', dest: 'configure-ai.ts' },
+      // Arquivos de configuração (agora de dist/)
+      { src: 'dist/configure-ai.js', dest: 'configure-ai.js' },
 
-      // Scripts shell
+      // Scripts shell (não compilados, mantém original)
       { src: 'scripts/zsh_integration.sh', dest: 'zsh_integration.sh' },
 
       // Mantém deploy para Linux
@@ -1128,9 +1128,9 @@ export default class ModelFactory {
       }
     }
 
-    // Copiar libs
+    // Copiar libs (agora de dist/)
     try {
-      const libsDir = path.join(process.cwd(), 'src', 'libs');
+      const libsDir = path.join(process.cwd(), 'dist', 'libs');
       const destLibsDir = path.join(this.mcpDir, 'libs');
 
       // Criar diretório libs se não existir
@@ -1155,9 +1155,9 @@ export default class ModelFactory {
       // console.log(`  ⚠ Diretório libs não encontrado (normal em versões antigas)`);
     }
 
-    // Copiar components da src (necessário para a v2)
+    // Copiar components da dist (necessário para a v2)
     try {
-      const componentsDir = path.join(process.cwd(), 'src', 'components');
+      const componentsDir = path.join(process.cwd(), 'dist', 'components');
       const destComponentsDir = path.join(this.mcpDir, 'components');
 
       // Criar diretório components se não existir
@@ -1179,9 +1179,9 @@ export default class ModelFactory {
       console.log(`  ⚠ Erro ao copiar components: ${error.message}`);
     }
 
-    // Copiar src (Nova interface Ink)
+    // Copiar src (Nova interface Ink) - agora de dist/
     try {
-      const interfaceV2Dir = path.join(process.cwd(), 'src');
+      const interfaceV2Dir = path.join(process.cwd(), 'dist');
       const destInterfaceV2Dir = path.join(this.mcpDir, 'src');
 
       // Criar diretório src se não existir

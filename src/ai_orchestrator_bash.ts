@@ -4,6 +4,7 @@
 import chalk from 'chalk';
 import { spawn, ChildProcessWithoutNullStreams } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { debugLog } from './utils/debugLogger.js';
 
 // Type definitions
 interface BashSessionConfig {
@@ -514,7 +515,7 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
       context.metadata.iterations = iterations;
 
       if (Date.now() - this.startTime > this.config.maxExecutionTime) {
-        console.log(chalk.yellow('\n⚠️ Tempo limite excedido'));
+        debugLog('⚠️ Tempo limite excedido', { iterations, elapsed: Date.now() - this.startTime }, this.config.verboseLogging);
         break;
       }
 
@@ -527,8 +528,7 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
       });
 
       if (this.config.verboseLogging) {
-        console.log(chalk.blue(`\n🔄 Iteração ${iterations}`));
-        console.log(chalk.gray(`   Stop reason: ${response.stop_reason}`));
+        debugLog('🔄 Iteração', { iteration: iterations, stopReason: response.stop_reason }, this.config.verboseLogging);
       }
 
       if (response.stop_reason === 'tool_use') {
@@ -603,7 +603,7 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
         }
 
         if (this.config.verboseLogging) {
-          console.log(chalk.blue(`\n🔧 Bash: ${command}`));
+          debugLog('🔧 Bash', { command }, this.config.verboseLogging);
         }
 
         context.executedCommands.push(command);
@@ -614,7 +614,7 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
         const sanitized = this.bashSession!.sanitizeOutput(result.combined);
 
         if (this.config.verboseLogging && sanitized) {
-          console.log(chalk.gray(sanitized.substring(0, 200) + '...'));
+          debugLog('Bash output', { output: sanitized.substring(0, 200) + '...' }, this.config.verboseLogging);
         }
 
         context.results.push({

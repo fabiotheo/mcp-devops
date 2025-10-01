@@ -2,6 +2,7 @@
 // Sistema de Orquestração Inteligente de Comandos
 
 import chalk from 'chalk';
+import { debugLog } from './utils/debugLogger.js';
 
 // Type definitions
 interface OrchestratorConfig {
@@ -152,7 +153,7 @@ export default class AICommandOrchestrator {
 
     // Check if already aborted
     if (signal?.aborted) {
-      console.log(chalk.yellow('⚠️ [Orchestrator] Request already aborted'));
+      debugLog('⚠️ [Orchestrator] Request already aborted', {}, this.config.verboseLogging);
       throw new Error('Request aborted');
     }
 
@@ -166,11 +167,7 @@ export default class AICommandOrchestrator {
       // Check if we have history to reference
       const history = context.conversationHistory || context.history || [];
       if (history && history.length > 0) {
-        console.log(
-          '🔍 [Orchestrator] Detected history question with',
-          history.length,
-          'messages',
-        );
+        debugLog('🔍 [Orchestrator] Detected history question', { historyLength: history.length }, this.config.verboseLogging);
 
         // Find previous user messages
         const previousUserMessages = [];
@@ -203,16 +200,9 @@ export default class AICommandOrchestrator {
     // Debug logging
     if (context.verbose) {
       const history = context.conversationHistory || context.history || [];
-      console.log(
-        '🔍 [Orchestrator] Received context with history?',
-        history.length > 0,
-      );
+      debugLog('🔍 [Orchestrator] Received context', { hasHistory: history.length > 0 }, this.config.verboseLogging);
       if (history.length > 0) {
-        console.log(
-          '🔍 [Orchestrator] History length:',
-          history.length,
-        );
-        console.log('🔍 [Orchestrator] History content:', history);
+        debugLog('🔍 [Orchestrator] History', { length: history.length, content: history }, this.config.verboseLogging);
       }
     }
 
@@ -246,11 +236,7 @@ export default class AICommandOrchestrator {
 
       // Check before AI call
       if (signal?.aborted) {
-        console.log(
-          chalk.yellow(
-            '\n⚠️ [Orchestrator] Request aborted before initial planning',
-          ),
-        );
+        debugLog('⚠️ [Orchestrator] Request aborted before initial planning', {}, this.config.verboseLogging);
         throw new Error('Request aborted');
       }
 
@@ -264,14 +250,12 @@ export default class AICommandOrchestrator {
       ) {
         // Check if request was aborted
         if (signal?.aborted) {
-          console.log(
-            chalk.yellow('\n⚠️ [Orchestrator] Request aborted by user'),
-          );
+          debugLog('⚠️ [Orchestrator] Request aborted by user', {}, this.config.verboseLogging);
           throw new Error('Request aborted');
         }
 
         if (Date.now() - this.startTime > this.config.maxExecutionTime) {
-          console.log(chalk.yellow('\n⚠️ Tempo limite excedido'));
+          debugLog('⚠️ Tempo limite excedido', { elapsed: Date.now() - this.startTime }, this.config.verboseLogging);
           break;
         }
 
@@ -287,11 +271,7 @@ export default class AICommandOrchestrator {
 
         // Check before AI call
         if (signal?.aborted) {
-          console.log(
-            chalk.yellow(
-              '\n⚠️ [Orchestrator] Request aborted before completion check',
-            ),
-          );
+          debugLog('⚠️ [Orchestrator] Request aborted before completion check', {}, this.config.verboseLogging);
           throw new Error('Request aborted');
         }
 
@@ -303,16 +283,10 @@ export default class AICommandOrchestrator {
           break;
         } else {
           if (this.config.verboseLogging) {
-            console.log(
-              chalk.blue(
-                `\n🔄 Tarefa incompleta: ${completionCheck.reasoning}`,
-              ),
-            );
-            console.log(
-              chalk.gray(
-                `📝 Working Memory Lists: ${JSON.stringify(executionContext.workingMemory.discovered.lists)}`,
-              ),
-            );
+            debugLog('🔄 Tarefa incompleta', {
+              reasoning: completionCheck.reasoning,
+              workingMemoryLists: executionContext.workingMemory.discovered.lists
+            }, this.config.verboseLogging);
           }
 
           if (animator) {
@@ -321,11 +295,7 @@ export default class AICommandOrchestrator {
 
           // Check before AI call
           if (signal?.aborted) {
-            console.log(
-              chalk.yellow(
-                '\n⚠️ [Orchestrator] Request aborted before planning next commands',
-              ),
-            );
+            debugLog('⚠️ [Orchestrator] Request aborted before planning next commands', {}, this.config.verboseLogging);
             throw new Error('Request aborted');
           }
 
@@ -337,11 +307,7 @@ export default class AICommandOrchestrator {
 
           if (nextStep.commands && nextStep.commands.length > 0) {
             if (this.config.verboseLogging) {
-              console.log(
-                chalk.green(
-                  `✅ Próximos comandos: ${nextStep.commands.join(', ')}`,
-                ),
-              );
+              debugLog('✅ Próximos comandos', { commands: nextStep.commands }, this.config.verboseLogging);
             }
             executionContext.currentPlan.push(...nextStep.commands);
             if (animator) {
@@ -353,11 +319,7 @@ export default class AICommandOrchestrator {
             }
           } else {
             if (this.config.verboseLogging) {
-              console.log(
-                chalk.yellow(
-                  '⚠️ IA não conseguiu determinar o próximo passo. Encerrando.',
-                ),
-              );
+              debugLog('⚠️ IA não conseguiu determinar o próximo passo. Encerrando.', {}, this.config.verboseLogging);
             }
             break;
           }
@@ -370,11 +332,7 @@ export default class AICommandOrchestrator {
 
       // Check before final AI call
       if (signal?.aborted) {
-        console.log(
-          chalk.yellow(
-            '\n⚠️ [Orchestrator] Request aborted before final synthesis',
-          ),
-        );
+        debugLog('⚠️ [Orchestrator] Request aborted before final synthesis', {}, this.config.verboseLogging);
         throw new Error('Request aborted');
       }
 
@@ -383,7 +341,7 @@ export default class AICommandOrchestrator {
 
       return this.formatResults(executionContext);
     } catch (error) {
-      console.error(chalk.red('\n❌ Erro na orquestração: ' + error.message));
+      debugLog('❌ Erro na orquestração', { error: error.message }, this.config.verboseLogging);
       return {
         success: false,
         error: error.message,
@@ -510,10 +468,7 @@ Formato: {"isComplete": true} ou {"isComplete": false, "reasoning": "o que falta
 
       return JSON.parse(jsonStr);
     } catch (error) {
-      console.error(
-        chalk.red('❌ Erro ao avaliar completude da tarefa:'),
-        error.message,
-      );
+      debugLog('❌ Erro ao avaliar completude da tarefa', { error: error.message }, this.config.verboseLogging);
 
       // If we have all jail data, consider it complete
       if (hasAllJailData) {
@@ -622,10 +577,7 @@ Responda APENAS com JSON:
 
       return result;
     } catch (error) {
-      console.error(
-        chalk.red('❌ Erro ao planejar próximos comandos:'),
-        error.message,
-      );
+      debugLog('❌ Erro ao planejar próximos comandos', { error: error.message }, this.config.verboseLogging);
       return { commands: [] };
     }
   }
@@ -705,11 +657,7 @@ Responda APENAS: {"directAnswer": "resposta direta com dados reais"}`;
   ): Promise<boolean> {
     // Check if request was aborted before executing command
     if (context.signal?.aborted) {
-      console.log(
-        chalk.yellow(
-          '\n⚠️ [Orchestrator] Request aborted before command execution',
-        ),
-      );
+      debugLog('⚠️ [Orchestrator] Request aborted before command execution', {}, this.config.verboseLogging);
       throw new Error('Request aborted');
     }
 

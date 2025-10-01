@@ -8,6 +8,7 @@
 
 import * as React from 'react';
 import { createContext, useContext, useRef, useState, useMemo, MutableRefObject, ReactNode } from 'react';
+import { debugLog } from '../utils/debugLogger.js';
 import type { HistoryEntry, AIOrchestrator, PatternMatcher, TursoAdapter, BackendConfig } from '../types/services.js';
 import type { AppStatus } from '../hooks/useBackendInitialization.js';
 import type { RequestInfo } from '../hooks/useRequestManager.js';
@@ -133,6 +134,13 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
   // Config state
   const [configState, setConfigState] = useState<BackendConfig>(config);
 
+  // Wrapper for setConfigState with debug logging
+  const setConfigWithDebug = (value: BackendConfig | ((prev: BackendConfig) => BackendConfig)) => {
+    const newConfig = typeof value === 'function' ? value(configState) : value;
+    debugLog('[AppContext] setConfig called', { user: newConfig.user, isDebug: newConfig.isDebug }, config.isDebug || false);
+    setConfigState(newConfig);
+  };
+
   // ========== Service Refs ==========
   const orchestrator = useRef<AIOrchestrator | null>(null);
   const patternMatcher = useRef<PatternMatcher | null>(null);
@@ -150,12 +158,16 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
   };
 
   // ========== Configuration ==========
-  const appConfig = useMemo<BackendConfig>(() => ({
-    isDebug: configState.isDebug || false,
-    isTTY: configState.isTTY !== undefined ? configState.isTTY : process.stdout.isTTY,
-    user: configState.user || 'default',
-    ...configState
-  }), [configState]);
+  const appConfig = useMemo<BackendConfig>(() => {
+    const computed = {
+      isDebug: configState.isDebug || false,
+      isTTY: configState.isTTY !== undefined ? configState.isTTY : process.stdout.isTTY,
+      user: configState.user || 'default',
+      ...configState
+    };
+    debugLog('[AppContext] appConfig computed', { user: computed.user, configStateUser: configState.user }, config.isDebug || false);
+    return computed;
+  }, [configState, config.isDebug]);
 
   // ========== Context Value ==========
   // Memoize the context value to prevent unnecessary re-renders
@@ -191,7 +203,7 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
         setError,
         setIsProcessing,
         setIsCancelled,
-        setConfig: setConfigState
+        setConfig: setConfigWithDebug
       },
       history: {
         setCommandHistory,

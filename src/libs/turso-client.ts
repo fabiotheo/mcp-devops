@@ -42,6 +42,28 @@ interface HistoryEntry {
   [key: string]: any;
 }
 
+/**
+ * Result from COUNT queries
+ */
+interface CountResult {
+  count: number;
+}
+
+/**
+ * GlobalStats interface
+ */
+interface GlobalStats {
+  globalCommands: number;
+  userCommands?: number;
+  machineCommands: number;
+  activeMachines: number;
+  activeUsers: number;
+  topCommands?: Array<{
+    command: string;
+    usage_count: number;
+  }>;
+}
+
 export default class TursoHistoryClient {
   private config: TursoConfig;
   public client: Client | null;
@@ -432,7 +454,7 @@ export default class TursoHistoryClient {
   /**
    * Define o modo de operação
    */
-  setMode(mode) {
+  setMode(mode: string): void {
     const validModes = ['global', 'user', 'machine', 'hybrid'];
     if (!validModes.includes(mode)) {
       throw new Error(
@@ -785,10 +807,10 @@ export default class TursoHistoryClient {
    * @param {Object} additionalData - Dados adicionais (response, completedAt, etc)
    */
   async updateCommandStatus(requestId: string, status: string, additionalData: Record<string, unknown> = {}): Promise<boolean> {
-    if (!requestId) return;
+    if (!requestId) return false;
 
     const now = Math.floor(Date.now() / 1000);
-    const updates: any = {
+    const updates: Record<string, unknown> = {
       status,
       updated_at: now,
     };
@@ -807,16 +829,16 @@ export default class TursoHistoryClient {
     for (const table of tables) {
       try {
         let sql = `UPDATE ${table} SET status = ?, updated_at = ?`;
-        const args: any[] = [updates.status, updates.updated_at];
+        const args: InValue[] = [updates.status as InValue, updates.updated_at as InValue];
 
         if (updates.completed_at) {
           sql += ', completed_at = ?';
-          args.push(updates.completed_at);
+          args.push(updates.completed_at as InValue);
         }
 
         if (additionalData.response) {
           sql += ', response = ?';
-          args.push(additionalData.response);
+          args.push(additionalData.response as InValue);
         }
 
         sql += ' WHERE request_id = ?';
@@ -916,7 +938,7 @@ export default class TursoHistoryClient {
     }
 
     const result = await this.client!.execute(sql, args);
-    return result.rows as any[];
+    return result.rows as HistoryEntry[];
   }
 
   /**
@@ -976,7 +998,7 @@ export default class TursoHistoryClient {
     }
 
     const result = await this.client!.execute(sql, args);
-    return result.rows as any[];
+    return result.rows as HistoryEntry[];
   }
 
   /**
@@ -1058,7 +1080,7 @@ export default class TursoHistoryClient {
     }
 
     const result = await this.client!.execute(sql, args);
-    return result.rows as any[];
+    return result.rows as HistoryEntry[];
   }
 
   /**
@@ -1084,24 +1106,23 @@ export default class TursoHistoryClient {
   /**
    * Obtém estatísticas do histórico
    */
-  async getStats(days: number = 30): Promise<Record<string, unknown>> {
-    const stats: any = {};
-
+  async getStats(days: number = 30): Promise<GlobalStats> {
     // Total de comandos por modo
     const globalCount = await this.client!.execute(
       `SELECT COUNT(*) as count FROM history_global
                   WHERE timestamp > unixepoch('now', '-' || ? || ' days')`,
       [days]
     );
-    stats.globalCommands = (globalCount.rows[0] as any).count;
+    const globalCommands = (globalCount.rows[0] as unknown as CountResult).count;
 
+    let userCommands: number | undefined;
     if (this.userId) {
       const userCount = await this.client!.execute(
         `SELECT COUNT(*) as count FROM history_user
                       WHERE user_id = ? AND timestamp > unixepoch('now', '-' || ? || ' days')`,
         [this.userId, days]
       );
-      stats.userCommands = (userCount.rows[0] as any).count;
+      userCommands = (userCount.rows[0] as unknown as CountResult).count;
     }
 
     const machineCount = await this.client!.execute(
@@ -1109,7 +1130,7 @@ export default class TursoHistoryClient {
                   WHERE machine_id = ? AND timestamp > unixepoch('now', '-' || ? || ' days')`,
       [this.machineId, days]
     );
-    stats.machineCommands = (machineCount.rows[0] as any).count;
+    const machineCommands = (machineCount.rows[0] as unknown as CountResult).count;
 
     // Comandos mais usados
     const topCommands = await this.client!.execute(
@@ -1121,7 +1142,6 @@ export default class TursoHistoryClient {
                   LIMIT 10`,
       [days]
     );
-    stats.topCommands = topCommands.rows as any;
 
     // Máquinas ativas
     const activeMachines = await this.client!.execute(
@@ -1130,7 +1150,7 @@ export default class TursoHistoryClient {
                   WHERE timestamp > unixepoch('now', '-' || ? || ' days')`,
       [days]
     );
-    stats.activeMachines = (activeMachines.rows[0] as any).count;
+    const activeMachinesCount = (activeMachines.rows[0] as unknown as CountResult).count;
 
     // Usuários ativos
     const activeUsers = await this.client!.execute(
@@ -1140,22 +1160,29 @@ export default class TursoHistoryClient {
                     AND timestamp > unixepoch('now', '-' || ? || ' days')`,
       [days]
     );
-    stats.activeUsers = (activeUsers.rows[0] as any).count;
+    const activeUsersCount = (activeUsers.rows[0] as unknown as CountResult).count;
 
-    return stats;
+    return {
+      globalCommands,
+      userCommands,
+      machineCommands,
+      activeMachines: activeMachinesCount,
+      activeUsers: activeUsersCount,
+      topCommands: topCommands.rows as unknown as Array<{ command: string; usage_count: number }>,
+    };
   }
 
   /**
    * Gera hash SHA256 de um comando
    */
-  hashCommand(command) {
+  hashCommand(command: string): string {
     return crypto.createHash('sha256').update(command).digest('hex');
   }
 
   /**
    * Gera ID único para sessão
    */
-  generateSessionId() {
+  generateSessionId(): string {
     return `session-${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
   }
 

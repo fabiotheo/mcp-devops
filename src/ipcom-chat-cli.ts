@@ -222,7 +222,7 @@ userCmd
           Username: u.username,
           Nome: u.name,
           Email: u.email,
-          Criado: new Date((u.created_at as any) * 1000).toLocaleDateString('pt-BR'),
+          Criado: new Date(u.created_at * 1000).toLocaleDateString('pt-BR'),
         })),
       );
     } catch (error) {
@@ -303,9 +303,9 @@ userCmd
         console.log(`Total de tokens: ${stats.total_tokens}`);
       }
 
-      if (stats.top_commands && (stats.top_commands as any[]).length > 0) {
+      if (stats.top_commands && stats.top_commands.length > 0) {
         console.log(chalk.cyan('\nComandos mais usados:'));
-        (stats.top_commands as any[]).forEach((cmd: any, i: number) => {
+        stats.top_commands.forEach((cmd, i) => {
           console.log(`  ${i + 1}. ${cmd.command} (${cmd.usage_count}x)`);
         });
       }
@@ -435,9 +435,9 @@ historyCmd
       console.log(`Máquinas ativas: ${stats.activeMachines}`);
       console.log(`Usuários ativos: ${stats.activeUsers}`);
 
-      if (stats.topCommands && (stats.topCommands as any[]).length > 0) {
+      if (stats.topCommands && stats.topCommands.length > 0) {
         console.log(chalk.cyan('\nTop 10 Comandos:'));
-        (stats.topCommands as any[]).forEach((cmd: any, i: number) => {
+        stats.topCommands.forEach((cmd, i) => {
           console.log(`  ${i + 1}. ${cmd.command} (${cmd.usage_count}x)`);
         });
       }

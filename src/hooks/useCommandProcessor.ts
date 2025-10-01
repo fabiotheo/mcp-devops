@@ -7,7 +7,7 @@
  * Extracted from mcp-ink-cli.mjs as part of modularization effort.
  */
 
-import { useCallback } from 'react';
+import { useCallback, Dispatch, SetStateAction } from 'react';
 import { CANCELLATION_MARKER } from '../constants.js';
 import type {
   AIOrchestrator,
@@ -16,56 +16,92 @@ import type {
   HistoryEntry,
   OrchestratorResult,
   DebugFunction,
-  FormatResponseFunction
+  FormatResponseFunction,
+  ServiceRef
 } from '../types/services.js';
+import type { UseRequestManagerReturn } from './useRequestManager.js';
+
+// ============== INTERFACES E TIPOS ==============
+
+/**
+ * Parameters for useCommandProcessor hook
+ */
+export interface UseCommandProcessorParams {
+  // Services (refs)
+  orchestrator: ServiceRef<AIOrchestrator>;
+  patternMatcher: ServiceRef<PatternMatcher>;
+  tursoAdapter: ServiceRef<TursoAdapter>;
+
+  // State
+  input: string;
+  commandHistory: string[];
+  fullHistory: HistoryEntry[];
+  isProcessing: boolean;
+  response: string;
+  error: string | null;
+  status: string;
+
+  // State setters
+  setCommandHistory: Dispatch<SetStateAction<string[]>>;
+  setFullHistory: Dispatch<SetStateAction<HistoryEntry[]>>;
+  setHistory: Dispatch<SetStateAction<string[]>>;
+  setResponse: Dispatch<SetStateAction<string>>;
+  setIsProcessing: Dispatch<SetStateAction<boolean>>;
+  setStatus: Dispatch<SetStateAction<string>>;
+  setError: Dispatch<SetStateAction<string | null>>;
+
+  // Functions
+  saveToHistory: (command: string, response?: string | null) => Promise<void>;
+  formatResponse: FormatResponseFunction;
+  debug: DebugFunction;
+
+  // Request manager
+  requestManager: UseRequestManagerReturn;
+
+  // Config
+  user: string;
+  isDebug: boolean;
+}
+
+/**
+ * Return type for useCommandProcessor hook
+ */
+export interface UseCommandProcessorReturn {
+  processCommand: (command: string) => Promise<void>;
+}
 
 /**
  * Hook for processing commands through backend services
  *
- * @param {Object} params - Hook parameters
- * @param {Object} params.orchestrator - AI orchestrator ref
- * @param {Object} params.patternMatcher - Pattern matcher ref
- * @param {Object} params.tursoAdapter - Turso adapter ref
- * @param {Array} params.fullHistory - Full conversation history
- * @param {Function} params.setFullHistory - Function to update fullHistory
- * @param {Function} params.setHistory - Function to update visible history
- * @param {Function} params.setCommandHistory - Function to update command history
- * @param {Object} params.requestManager - Request manager from useRequestManager hook
- * @param {string} params.user - Current user
- * @param {boolean} params.debug - Debug mode flag
- * @param {Function} params.formatResponse - Response formatter function
- * @param {Function} params.debug - Debug logging function
- * @param {boolean} params.isProcessing - Processing state
- * @param {Function} params.setIsProcessing - Set processing state
- * @param {string} params.response - Current response
- * @param {Function} params.setResponse - Set response
- * @param {string} params.error - Current error
- * @param {Function} params.setError - Set error
- * @param {string} params.status - Current status
- * @param {Function} params.setStatus - Set status
- * @returns {Object} Command processor functions
+ * @param params - Hook parameters
+ * @returns Command processor functions
  */
-export function useCommandProcessor({
-  orchestrator,
-  patternMatcher,
-  tursoAdapter,
-  fullHistory,
-  setFullHistory,
-  setHistory,
-  setCommandHistory,
-  requestManager,
-  user,
-  debug,
-  formatResponse,
-  isProcessing,
-  setIsProcessing,
-  response,
-  setResponse,
-  error,
-  setError,
-  status,
-  setStatus
-}) {
+export function useCommandProcessor(
+  params: UseCommandProcessorParams
+): UseCommandProcessorReturn {
+  // Destructure params
+  const {
+    orchestrator,
+    patternMatcher,
+    tursoAdapter,
+    fullHistory,
+    setFullHistory,
+    setHistory,
+    setCommandHistory,
+    requestManager,
+    user,
+    debug,
+    formatResponse,
+    isProcessing,
+    setIsProcessing,
+    response,
+    setResponse,
+    error,
+    setError,
+    status,
+    setStatus,
+    saveToHistory
+  } = params;
   // Extract needed functions from requestManager
   const {
     currentRequestId,
@@ -219,8 +255,8 @@ export function useCommandProcessor({
         return;
       }
 
-      // Limit history to last 10 messages to save tokens and avoid confusion
-      const recentHistory = fullHistory.slice(-10);
+      // Limit history to last 20 messages (10 exchanges) to provide sufficient context
+      const recentHistory = fullHistory.slice(-20);
 
       if (debug) {
         debug('[CommandProcessor] Calling orchestrator', {
@@ -444,6 +480,7 @@ export function useCommandProcessor({
     activeRequests,
     aiAbortControllerRef,
     dbAbortControllerRef,
+    cleanupRequest,
     setIsCancelled,
     setIsProcessing,
     setResponse,
@@ -452,7 +489,7 @@ export function useCommandProcessor({
     user,
     debug,
     formatResponse,
-    debug
+    saveToHistory
   ]);
 
   return {

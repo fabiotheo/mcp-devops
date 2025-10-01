@@ -2,12 +2,11 @@
 // setup.ts - Entrada principal simplificada (~200 linhas vs 620+ do orchestrator)
 
 import { SetupOptions, SetupConfig, APIConfig } from './setup-types.js';
-import { loadConfig, saveConfig } from './setup-config.js';
+import { loadConfig, saveConfig } from './setup-config-functions.js';
 import { createDirectories, installFiles } from './setup-install.js';
 import { configureShell } from './setup-shell.js';
 import { validateInstallation } from './setup-validate.js';
 import { getUserHome, detectShell, detectPlatform } from './setup-system.js';
-import { ensureDir } from './setup-io.js';
 import * as path from 'path';
 
 /**
@@ -85,9 +84,10 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
     console.log('🎉 Setup completo com sucesso!');
 
   } catch (error) {
-    console.error('❌ Erro no setup:', error.message);
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('❌ Erro no setup:', err.message);
     if (config.verbose) {
-      console.error('Stack trace:', error.stack);
+      console.error('Stack trace:', err.stack);
     }
     process.exit(1);
   }

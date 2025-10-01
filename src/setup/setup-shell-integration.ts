@@ -72,6 +72,10 @@ export class ShellIntegration {
    */
   async configureZsh(options: ShellIntegrationOptions = {}): Promise<ShellConfigResult> {
     const { force = false, skipBackup = false, verbose = false } = options;
+
+    if (!this.config.zshrcPath) {
+      throw new Error('Zsh configuration path is not defined');
+    }
     const zshrcPath = this.config.zshrcPath;
 
     console.log('⚙️ Configuring Zsh integration...');
@@ -126,6 +130,10 @@ export class ShellIntegration {
    */
   async configureBash(options: ShellIntegrationOptions = {}): Promise<ShellConfigResult> {
     const { force = false, skipBackup = false, verbose = false } = options;
+
+    if (!this.config.bashrcPath) {
+      throw new Error('Bash configuration path is not defined');
+    }
     const bashrcPath = this.config.bashrcPath;
 
     console.log('⚙️ Configuring Bash integration...');
@@ -292,6 +300,11 @@ fi
     }
 
     const rcFile = shellType === 'zsh' ? this.config.zshrcPath : this.config.bashrcPath;
+
+    if (!rcFile) {
+      throw new Error(`${shellType} configuration path is not defined`);
+    }
+
     const marker = shellType === 'zsh' ? SHELL_HOOKS.zsh.marker : SHELL_HOOKS.bash.marker;
 
     console.log(`🗑️ Removing ${shellType} integration...`);
@@ -346,6 +359,12 @@ fi
       // Check if configuration exists in shell files
       const shellInfo = await system.detectShellInfo();
       const rcFile = shellInfo.type === 'zsh' ? this.config.zshrcPath : this.config.bashrcPath;
+
+      if (!rcFile) {
+        console.log('❌ Shell configuration path not defined');
+        return false;
+      }
+
       const marker = shellInfo.type === 'zsh' ? SHELL_HOOKS.zsh.marker : SHELL_HOOKS.bash.marker;
 
       const isConfigured = await this.isShellConfigured(rcFile, marker);
@@ -418,6 +437,17 @@ fi
   }> {
     const shellInfo = await system.detectShellInfo();
     const rcFile = shellInfo.type === 'zsh' ? this.config.zshrcPath : this.config.bashrcPath;
+
+    if (!rcFile) {
+      return {
+        configured: false,
+        active: false,
+        shellType: shellInfo.type,
+        configFile: '',
+        mcpHome: process.env.MCP_HOME
+      };
+    }
+
     const marker = shellInfo.type === 'zsh' ? SHELL_HOOKS.zsh.marker : SHELL_HOOKS.bash.marker;
 
     const configured = await this.isShellConfigured(rcFile, marker);

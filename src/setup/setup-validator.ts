@@ -294,6 +294,15 @@ export class SetupValidator {
     const startTime = Date.now();
 
     try {
+      if (!this.config.configPath) {
+        return {
+          name: 'Configuration',
+          passed: false,
+          message: 'Configuration path not defined',
+          duration: Date.now() - startTime
+        };
+      }
+
       const configPath = this.config.configPath;
 
       if (!await io.fileExists(configPath)) {

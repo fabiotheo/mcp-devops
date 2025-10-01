@@ -2,11 +2,35 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
 import fs from 'fs/promises';
+import type { Row, InValue } from '@libsql/client';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ============== INTERFACES E TIPOS ==============
+
+/**
+ * Resultado de salvar mensagem
+ */
+interface SaveMessageResult {
+  id: string;
+  timestamp: number;
+}
+
+/**
+ * Estatísticas do usuário
+ */
+interface UserStats {
+  totalCommands: number;
+  lastCommandTime?: number;
+}
+
+/**
+ * Resultado de limpar histórico
+ */
+interface ClearHistoryResult {
+  deletedCount: number;
+}
 
 /**
  * Opções de configuração para o TursoAdapter
@@ -31,7 +55,7 @@ export interface TursoConfig {
   /** Modo de operação */
   mode?: 'local' | 'remote' | 'hybrid';
   /** Outras configurações */
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**
@@ -51,7 +75,7 @@ export interface HistoryEntry {
   /** ID da requisição */
   request_id?: string;
   /** Metadados adicionais */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -73,7 +97,7 @@ export interface UserInfo {
  */
 interface SqlExecuteResult {
   /** Linhas retornadas */
-  rows: any[];
+  rows: Row[];
   /** Número de linhas afetadas */
   rowsAffected: number;
 }
@@ -82,7 +106,7 @@ interface SqlExecuteResult {
  * Interface do cliente SQL
  */
 interface SqlClient {
-  execute: (query: { sql: string; args: any[] }) => Promise<SqlExecuteResult>;
+  execute: (query: { sql: string; args: InValue[] }) => Promise<SqlExecuteResult>;
 }
 
 /**
@@ -91,12 +115,12 @@ interface SqlClient {
 interface TursoHistoryClientModule {
   initialize: () => Promise<void>;
   setUser: (userId: string) => Promise<UserInfo | null>;
-  saveCommand: (command: string, response: string | null, metadata?: any) => Promise<string>;
-  saveToUser: (command: string, response: string | null, metadata?: any) => Promise<string>;
-  updateEntry: (entryId: string, updates: any) => Promise<void>;
-  updateUserEntry: (entryId: string, updates: any) => Promise<void>;
+  saveCommand: (command: string, response: string | null, metadata?: Record<string, unknown>) => Promise<SaveMessageResult>;
+  saveToUser: (command: string, response: string | null, metadata?: Record<string, unknown>) => Promise<SaveMessageResult>;
+  updateEntry: (entryId: string, updates: Record<string, unknown>) => Promise<void>;
+  updateUserEntry: (entryId: string, updates: Record<string, unknown>) => Promise<void>;
   getHistory: (limit: number) => Promise<HistoryEntry[]>;
-  searchHistory: (query: string, options: any) => Promise<HistoryEntry[]>;
+  searchHistory: (query: string, options: Record<string, unknown>) => Promise<HistoryEntry[]>;
   close?: () => Promise<void>;
   sessionId?: string;
   machineId?: string;
@@ -164,14 +188,14 @@ class TursoAdapter {
       }
 
       // Load Turso client
-      const module = await import(this.tursoClientPath) as any;
+      const module = await import(this.tursoClientPath) as { default?: unknown; TursoHistoryClient?: unknown };
       const TursoHistoryClient = module.default || module.TursoHistoryClient;
 
       // Load configuration
       const config: TursoConfig = JSON.parse(await fs.readFile(this.configPath, 'utf8'));
 
       // Initialize client
-      this.tursoClient = new TursoHistoryClient({
+      this.tursoClient = new (TursoHistoryClient as unknown as new (config: TursoConfig) => TursoHistoryClientModule)({
         ...config,
         debug: this.debug,
       });
@@ -265,7 +289,7 @@ class TursoAdapter {
 
     try {
       // Save command without response (will be updated later)
-      const entryId = await this.tursoClient.saveCommand(
+      const result = await this.tursoClient.saveCommand(
         command,
         null, // No response yet
         {
@@ -273,6 +297,8 @@ class TursoAdapter {
           status: 'pending', // Mark as pending response
         },
       );
+
+      const entryId = typeof result === 'string' ? result : result.id;
 
       if (this.debug) {
         console.log(`[TursoAdapter] Question saved with ID: ${entryId}`);
@@ -354,7 +380,7 @@ class TursoAdapter {
    * @param metadata - Additional metadata
    * @returns Success status
    */
-  async saveCommand(command: string, metadata: Record<string, any> = {}): Promise<boolean> {
+  async saveCommand(command: string, metadata: Record<string, unknown> = {}): Promise<boolean> {
     if (!this.enabled || !this.tursoClient) {
       return false;
     }
@@ -362,9 +388,10 @@ class TursoAdapter {
     try {
       // Extract response from metadata if present
       const { response, ...otherMetadata } = metadata;
+      const responseStr = typeof response === 'string' ? response : null;
 
       // Use the TursoHistoryClient's saveCommand method
-      await this.tursoClient.saveCommand(command, response || null, {
+      await this.tursoClient.saveCommand(command, responseStr, {
         source: 'ink-interface',
         ...otherMetadata,
       });
@@ -536,7 +563,8 @@ class TursoAdapter {
         sql: 'SELECT status FROM history_user WHERE request_id = ? ORDER BY timestamp DESC LIMIT 1',
         args: [requestId],
       });
-      return result.rows[0]?.status || 'unknown';
+      const status = result.rows[0]?.status;
+      return typeof status === 'string' ? status : 'unknown';
     } catch (error) {
       if (this.debug) {
         console.error(

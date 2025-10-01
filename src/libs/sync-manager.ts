@@ -7,6 +7,7 @@ import LocalCache from './local-cache.js';
 import TursoHistoryClient from './turso-client.js';
 import chalk from 'chalk';
 import { v4 as uuidv4 } from 'uuid';
+import type { Client } from '@libsql/client';
 
 /**
  * Configuration options for SyncManager
@@ -60,6 +61,30 @@ interface RemoteItem {
 }
 
 /**
+ * Sync queue item from local cache
+ */
+interface SyncQueueItem {
+  id: number;
+  operation: string;
+  table_name: string;
+  record_id: string;
+  data: string;
+  priority: number;
+  retry_count: number;
+  created_at: number;
+}
+
+/**
+ * Options for getting history
+ */
+interface GetHistoryOptions {
+  user_id?: string | null;
+  machine_id?: string | null;
+  limit?: number;
+  offset?: number;
+}
+
+/**
  * Upload/Download result
  */
 interface SyncResult {
@@ -72,7 +97,7 @@ interface SyncResult {
  * Extended TursoHistoryClient interface
  */
 interface ExtendedTursoClient extends TursoHistoryClient {
-  client: any;
+  client: Client;
   userId: string | null;
   machineId: string | null;
 }
@@ -121,7 +146,12 @@ class SyncManager {
       this.tursoClient = tursoClient as ExtendedTursoClient;
 
       // Load last sync time
-      this.lastSyncTime = this.localCache.getMetadata('last_sync_time');
+      const lastSyncValue = this.localCache.getMetadata('last_sync_time');
+      this.lastSyncTime = typeof lastSyncValue === 'string'
+        ? parseInt(lastSyncValue, 10)
+        : typeof lastSyncValue === 'number'
+        ? lastSyncValue
+        : null;
 
       if (this.config.debug) {
         console.log(chalk.green('✅ SyncManager initialized'));
@@ -267,7 +297,7 @@ class SyncManager {
       // Get pending items from sync queue
       const pendingItems = this.localCache.getPendingSync(
         this.config.batchSize,
-      );
+      ) as SyncQueueItem[];
 
       if (pendingItems.length === 0) {
         return result;
@@ -279,8 +309,8 @@ class SyncManager {
         );
       }
 
-      const successIds = [];
-      const successUuids = [];
+      const successIds: number[] = [];
+      const successUuids: string[] = [];
 
       for (const item of pendingItems) {
         try {
@@ -469,14 +499,10 @@ class SyncManager {
    */
   async checkConflict(remoteItem: RemoteItem): Promise<{ local: CacheEntry; remote: RemoteItem } | null> {
     try {
-      const localItem = this.localCache.db
-        .prepare(
-          `
-                SELECT * FROM history_cache
-                WHERE command_uuid = ?
-            `,
-        )
-        .get(remoteItem.command_uuid || remoteItem.id) as CacheEntry | undefined;
+      const localItem = this.localCache.query<CacheEntry>(
+        `SELECT * FROM history_cache WHERE command_uuid = ?`,
+        remoteItem.command_uuid || remoteItem.id
+      );
 
       if (!localItem) {
         return null; // No conflict
@@ -504,22 +530,17 @@ class SyncManager {
     if (this.config.conflictStrategy === 'last-write-wins') {
       // Choose the item with the most recent timestamp
       const winner =
-        localItem.timestamp > remoteItem.timestamp ? localItem : remoteItem;
+        localItem.timestamp > (remoteItem.timestamp || 0) ? localItem : remoteItem;
 
       // Log conflict resolution
-      this.localCache.db
-        .prepare(
-          `
-                INSERT INTO conflict_log (command_uuid, local_data, remote_data, resolution)
-                VALUES (?, ?, ?, ?)
-            `,
-        )
-        .run(
-          localItem.command_uuid,
-          JSON.stringify(localItem),
-          JSON.stringify(remoteItem),
-          winner === localItem ? 'kept_local' : 'kept_remote',
-        );
+      this.localCache.execute(
+        `INSERT INTO conflict_log (command_uuid, local_data, remote_data, resolution)
+         VALUES (?, ?, ?, ?)`,
+        localItem.command_uuid,
+        JSON.stringify(localItem),
+        JSON.stringify(remoteItem),
+        winner === localItem ? 'kept_local' : 'kept_remote'
+      );
 
       if (this.config.debug) {
         console.log(
@@ -530,7 +551,7 @@ class SyncManager {
         );
       }
 
-      return winner as any as RemoteItem;
+      return winner === localItem ? (localItem as unknown as RemoteItem) : remoteItem;
     }
 
     // Default: keep remote (server wins)
@@ -543,14 +564,10 @@ class SyncManager {
   async cleanupSyncQueue(): Promise<void> {
     try {
       // Remove items that have been retried too many times
-      this.localCache.db
-        .prepare(
-          `
-                DELETE FROM sync_queue
-                WHERE retry_count >= ?
-            `,
-        )
-        .run(this.config.maxRetries);
+      this.localCache.execute(
+        `DELETE FROM sync_queue WHERE retry_count >= ?`,
+        this.config.maxRetries
+      );
 
       // Clean up old synced items from cache
       this.localCache.cleanup(30); // Keep 30 days
@@ -587,7 +604,7 @@ class SyncManager {
   /**
    * Save command with sync
    */
-  async saveCommand(command: string, response: string | null, metadata: Record<string, unknown> = {}): Promise<void> {
+  async saveCommand(command: string, response: string | null, metadata: Record<string, unknown> = {}): Promise<string> {
     // Save to local cache first
     const uuid = await this.localCache.saveCommand(command, response, metadata);
 
@@ -610,15 +627,15 @@ class SyncManager {
   /**
    * Get history with offline support
    */
-  async getHistory(options: Record<string, unknown> = {}): Promise<CacheEntry[]> {
+  async getHistory(options: GetHistoryOptions = {}): Promise<CacheEntry[]> {
     try {
       // Try to get from Turso if online
       if (this.tursoClient && this.tursoClient.client) {
         const tursoHistory = await this.tursoClient.getHistory(
-          Number((options as any).limit) || 100,
+          options.limit || 100,
         );
         // Import to cache for offline access
-        this.localCache.importHistory(tursoHistory as any);
+        this.localCache.importHistory(tursoHistory);
         return tursoHistory as CacheEntry[];
       }
     } catch (error) {

@@ -1,32 +1,14 @@
 // ~/.mcp-terminal/ai_models/base_model.ts
 // Classe base para todos os modelos de IA
 
-// Interface para configuração dos modelos de IA
-export interface AIModelConfig {
-  apiKey?: string;
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  [key: string]: any; // Permite propriedades adicionais específicas de cada provedor
-}
-
-// Interface para dados de comando
-export interface CommandData {
-  command: string;
-  exitCode: number;
-  output?: string;
-  error?: string;
-  systemInfo?: any;
-  [key: string]: any;
-}
-
-// Interface para contexto do sistema
-export interface SystemContext {
-  os?: string;
-  distribution?: string;
-  version?: string;
-  [key: string]: any;
-}
+// Import centralized types
+import type {
+  AIModelConfig,
+  CommandData,
+  SystemContext,
+  AICommandAnalysisResult,
+  AICommandResponse
+} from '../types/services.js';
 
 export default abstract class BaseAIModel {
   protected config: AIModelConfig;
@@ -39,10 +21,10 @@ export default abstract class BaseAIModel {
   abstract initialize(): Promise<void>;
 
   // Método para analisar comando com falha
-  abstract analyzeCommand(commandData: CommandData): Promise<any>;
+  abstract analyzeCommand(commandData: CommandData): Promise<AICommandAnalysisResult>;
 
   // Método para responder perguntas sobre comandos
-  abstract askCommand(question: string, systemContext?: SystemContext): Promise<any>;
+  abstract askCommand(question: string, systemContext?: SystemContext): Promise<AICommandResponse>;
 
   // Retorna o nome do provedor
   abstract getProviderName(): string;
@@ -61,3 +43,12 @@ export default abstract class BaseAIModel {
     };
   }
 }
+
+// Re-export types for backward compatibility
+export type {
+  AIModelConfig,
+  CommandData,
+  SystemContext,
+  AICommandAnalysisResult,
+  AICommandResponse
+};

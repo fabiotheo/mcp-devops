@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { existsSync } from 'node:fs';
 import ModelFactory from './src/ai_models/model_factory.js';
+import ClaudeModel from './src/ai_models/claude_model.js';
 import SystemDetector from './src/libs/system_detector.js';
 import AICommandOrchestratorBash from './src/ai_orchestrator_bash.js';
 import TursoHistoryClient from './src/libs/turso-client.js';
@@ -21,6 +22,8 @@ import { v4 as uuidv4 } from 'uuid';
 interface Config {
   ai_provider?: string;
   model?: string;
+  anthropic_api_key?: string;
+  claude_model?: string;
   streaming?: {
     enabled?: boolean;
     speed?: number;
@@ -29,7 +32,7 @@ interface Config {
     interval?: number;
   };
   debug?: boolean;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface User {
@@ -47,6 +50,15 @@ interface ConversationMessage {
   role: 'user' | 'assistant';
   content: string;
 }
+
+interface HistoryItem {
+  command: string;
+  timestamp?: number;
+  [key: string]: unknown;
+}
+
+// TursoHistoryClient já tem userId e machineId como propriedades públicas
+type TursoClientExtended = TursoHistoryClient;
 
 class ProcessingIndicator {
   private frames: string[];
@@ -135,8 +147,8 @@ class CharacterStreamer {
 
 class MCPClaudeFixedFinal {
   private config: Config;
-  private aiModel: any;
-  private orchestrator: any;
+  private aiModel: ClaudeModel | null;
+  private orchestrator: AICommandOrchestratorBash | null;
   private systemDetector: SystemDetector;
   private streamer: CharacterStreamer;
   private spinner: ProcessingIndicator;
@@ -145,7 +157,7 @@ class MCPClaudeFixedFinal {
   private commandHistory: string[];
 
   // Turso integration
-  private tursoClient: TursoHistoryClient | null;
+  private tursoClient: TursoClientExtended | null;
   private tursoEnabled: boolean;
   private currentUser: User | null;
   private currentQuery: string | null;
@@ -242,22 +254,35 @@ class MCPClaudeFixedFinal {
 
   async initializeAI(): Promise<void> {
     try {
-      this.aiModel = await ModelFactory.createModel(this.config);
-      this.orchestrator = new AICommandOrchestratorBash(this.aiModel, {
+      const model = await ModelFactory.createModel(this.config);
+      // Garantir que sempre usamos ClaudeModel
+      if (model instanceof ClaudeModel) {
+        this.aiModel = model;
+      } else {
+        // Se não for ClaudeModel, criar um novo ClaudeModel
+        this.aiModel = new ClaudeModel({
+          anthropic_api_key: this.config.anthropic_api_key,
+          claude_model: this.config.claude_model || 'claude-3-5-sonnet-20241022'
+        });
+        await this.aiModel.initialize();
+      }
+
+      this.orchestrator = new AICommandOrchestratorBash(this.aiModel as any, {
         verboseLogging: false,
         enableBash: false,
       });
       console.log(chalk.green('✓') + chalk.gray(' AI initialized'));
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
       console.error(
         chalk.red('✗') + chalk.gray(' Failed to initialize AI:'),
-        error.message,
+        errorMsg,
       );
-      this.aiModel = {
-        askCommand: async (prompt: string) => {
-          return 'AI service unavailable. Please check your configuration.';
-        },
-      };
+      // Fallback para um ClaudeModel básico
+      this.aiModel = new ClaudeModel({
+        anthropic_api_key: this.config.anthropic_api_key || '',
+        claude_model: 'claude-3-5-sonnet-20241022'
+      });
     }
   }
 
@@ -290,8 +315,9 @@ class MCPClaudeFixedFinal {
       await this.initializeSyncManager(this.tursoClient);
 
       console.log(chalk.green('✓ Turso conectado'));
-    } catch (error: any) {
-      console.log(chalk.yellow(`⚠️  Turso indisponível: ${error.message}`));
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.log(chalk.yellow(`⚠️  Turso indisponível: ${errorMsg}`));
       this.tursoEnabled = false;
 
       // Try to initialize SyncManager with local cache only
@@ -317,10 +343,11 @@ class MCPClaudeFixedFinal {
 
         // Initial sync
         setImmediate(() => {
-          this.syncManager!.sync().catch((err: any) => {
+          this.syncManager!.sync().catch((err: unknown) => {
             if (this.config.debug) {
+              const errorMsg = err instanceof Error ? err.message : String(err);
               console.log(
-                chalk.gray('[Sync] Initial sync failed:', err.message),
+                chalk.gray('[Sync] Initial sync failed:', errorMsg),
               );
             }
           });
@@ -328,9 +355,10 @@ class MCPClaudeFixedFinal {
       } else {
         console.log(chalk.yellow('⚠️  Modo offline (cache local)'));
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
       console.log(
-        chalk.yellow(`⚠️  SyncManager indisponível: ${error.message}`),
+        chalk.yellow(`⚠️  SyncManager indisponível: ${errorMsg}`),
       );
       this.syncEnabled = false;
     }
@@ -408,10 +436,11 @@ class MCPClaudeFixedFinal {
           const queryToCancel = this.currentQuery;
           setImmediate(() =>
             this.saveTursoConversation(queryToCancel, null, 'cancelled').catch(
-              (err: any) => {
+              (err: unknown) => {
                 if (this.config.debug) {
+                  const errorMsg = err instanceof Error ? err.message : String(err);
                   console.log(
-                    `[DEBUG] Background Turso save failed (cancelled): ${err.message}`,
+                    `[DEBUG] Background Turso save failed (cancelled): ${errorMsg}`,
                   );
                 }
               },
@@ -839,10 +868,14 @@ Shows as: [X lines, Y chars]
       }, 500);
 
       let response: string;
-      if (this.orchestrator && this.orchestrator.askCommand) {
-        response = await this.orchestrator.askCommand(query, context);
+      if (this.orchestrator) {
+        const result = await this.orchestrator.orchestrateExecution(query, context);
+        response = result.directAnswer || '';
+      } else if (this.aiModel) {
+        const result = await this.aiModel.askCommand(query, context);
+        response = typeof result === 'string' ? result : result.response || '';
       } else {
-        response = await this.aiModel.askCommand(query, context);
+        response = 'AI service unavailable';
       }
 
       // Check if interrupted before showing response
@@ -882,10 +915,11 @@ Shows as: [X lines, Y chars]
         // TURSO INTEGRATION: Save completed conversation
         setImmediate(() =>
           this.saveTursoConversation(query, response, 'completed').catch(
-            (err: any) => {
+            (err: unknown) => {
               if (this.config.debug) {
+                const errorMsg = err instanceof Error ? err.message : String(err);
                 console.log(
-                  `[DEBUG] Background Turso save failed (completed): ${err.message}`,
+                  `[DEBUG] Background Turso save failed (completed): ${errorMsg}`,
                 );
               }
             },
@@ -895,10 +929,11 @@ Shows as: [X lines, Y chars]
         console.log(chalk.yellow('No response received from AI'));
         console.log();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (this.isProcessing) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
         this.spinner.stop();
-        console.log(chalk.red(`\n❌ Error: ${error.message}`));
+        console.log(chalk.red(`\n❌ Error: ${errorMsg}`));
         console.log();
       }
     } finally {
@@ -912,24 +947,24 @@ Shows as: [X lines, Y chars]
       // Phase 2: Use SyncManager if available
       if (this.syncEnabled && this.syncManager) {
         const history = await this.syncManager.getHistory({
-          user_id: (this.tursoClient as any)?.userId || null,
+          user_id: (this.tursoClient as TursoClientExtended)?.userId || null,
           limit: 100,
         });
         this.commandHistory = history
-          .map((h: any) => h.command)
+          .map((h) => h.command)
           .filter((cmd: string) => cmd && cmd.trim())
           .reverse(); // Most recent last for easier navigation
         return;
       }
 
       // Phase 1: Direct Turso connection
-      if (this.tursoEnabled && this.tursoClient && (this.tursoClient as any).userId) {
+      if (this.tursoEnabled && this.tursoClient && (this.tursoClient as TursoClientExtended).userId) {
         const userHistory = await this.tursoClient.getHistoryFromTable(
           'user',
           100,
         );
         this.commandHistory = userHistory
-          .map((h: any) => h.command)
+          .map((h) => h.command)
           .filter((cmd: string) => cmd && cmd.trim())
           .reverse(); // Most recent last for easier navigation
         return;
@@ -1049,9 +1084,10 @@ Shows as: [X lines, Y chars]
           'cancelled',
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
       console.error(
-        chalk.red('[Cleanup] Error during cleanup:', error.message),
+        chalk.red('[Cleanup] Error during cleanup:', errorMsg),
       );
     }
   }
@@ -1066,8 +1102,8 @@ Shows as: [X lines, Y chars]
       try {
         const metadata = {
           status,
-          user_id: (this.tursoClient as any)?.userId || null,
-          machine_id: (this.tursoClient as any)?.machineId || null,
+          user_id: (this.tursoClient as TursoClientExtended)?.userId || null,
+          machine_id: (this.tursoClient as TursoClientExtended)?.machineId || null,
           session_id: this.sessionId,
           timestamp: Date.now(),
         };
@@ -1079,10 +1115,11 @@ Shows as: [X lines, Y chars]
           console.log(chalk.gray('[Sync] Command saved to cache and queued'));
         }
         return;
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (this.config.debug) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
           console.log(
-            chalk.yellow(`[Sync] Cache save failed: ${error.message}`),
+            chalk.yellow(`[Sync] Cache save failed: ${errorMsg}`),
           );
         }
         // Fall through to direct save
@@ -1113,10 +1150,11 @@ Shows as: [X lines, Y chars]
         timestamp: new Date().toISOString(),
         session_id: this.sessionId,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Use debug logging instead of console.error
       if (this.config.debug) {
-        console.log(`[DEBUG] Turso save failed: ${error.message}`);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.log(`[DEBUG] Turso save failed: ${errorMsg}`);
       }
     } finally {
       // Remove from pending saves when complete
@@ -1154,8 +1192,9 @@ process.on('uncaughtException', (error: Error) => {
   process.exit(1);
 });
 
-process.on('unhandledRejection', (error: any) => {
-  console.error(chalk.red('\nUnhandled rejection:'), error?.message || error);
+process.on('unhandledRejection', (error: unknown) => {
+  const errorMsg = error instanceof Error ? error.message : String(error);
+  console.error(chalk.red('\nUnhandled rejection:'), errorMsg);
   process.exit(1);
 });
 

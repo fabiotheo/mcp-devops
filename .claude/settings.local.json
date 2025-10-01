@@ -151,7 +151,10 @@
       "mcp__serena__find_file",
       "Bash(npm run build:*)",
       "Bash(MCP_USER=fabio timeout 8 node /Users/fabiotheodoro/.mcp-terminal/src/mcp-ink-cli.js --debug)",
-      "Bash(MCP_USER=fabio gtimeout 8 node /Users/fabiotheodoro/.mcp-terminal/src/mcp-ink-cli.js --debug)"
+      "Bash(MCP_USER=fabio gtimeout 8 node /Users/fabiotheodoro/.mcp-terminal/src/mcp-ink-cli.js --debug)",
+      "Bash(pnpm run:*)",
+      "Bash(MCP_USER=fabio timeout 15 node src/mcp-ink-cli.tsx --debug)",
+      "mcp__serena__insert_after_symbol"
     ],
     "deny": [],
     "ask": []

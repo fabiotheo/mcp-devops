@@ -1,9 +1,10 @@
 // ~/.mcp-terminal/ai_models/model_factory.ts
 // Factory para criar a instância do modelo de IA adequado
 
-import BaseAIModel, { AIModelConfig } from './base_model.ts';
-import ClaudeModel from './claude_model.ts';
-import GeminiModel from './gemini_model.ts';
+import BaseAIModel from './base_model.js';
+import type { AIModelConfig } from '../types/services.js';
+import ClaudeModel from './claude_model.js';
+import GeminiModel from './gemini_model.js';
 
 // Enum para providers suportados
 export enum AIProvider {

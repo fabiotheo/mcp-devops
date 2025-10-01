@@ -100,7 +100,7 @@ export class SetupOrchestrator {
 
       // Check if this is an upgrade
       const installedVersion = await this.configManager.getInstalledVersion();
-      const isUpgrade = installedVersion !== null || options.upgrade;
+      const isUpgrade = installedVersion !== null || options.upgrade === true;
 
       if (isUpgrade) {
         console.log(`📦 Current version: ${installedVersion || 'unknown'}`);
@@ -233,13 +233,9 @@ export class SetupOrchestrator {
       console.error('\n❌ Setup failed:', error);
 
       if (error instanceof SetupError) {
-        result.errors?.push(error);
+        result.errors?.push(error.message);
       } else {
-        result.errors?.push(new SetupError(
-          error instanceof Error ? error.message : 'Unknown error',
-          SetupErrorType.UNKNOWN,
-          error
-        ));
+        result.errors?.push(error instanceof Error ? error.message : 'Unknown error');
       }
 
       result.duration = Date.now() - startTime;
@@ -361,11 +357,7 @@ export class SetupOrchestrator {
       console.log('❌ Repair failed - some files still missing');
       return {
         success: false,
-        errors: [new SetupError(
-          'Repair failed',
-          SetupErrorType.UNKNOWN,
-          { missing: postRepair.missing }
-        )]
+        errors: ['Repair failed']
       };
     }
   }
@@ -406,10 +398,7 @@ export class SetupOrchestrator {
     } else {
       return {
         success: false,
-        errors: [new SetupError(
-          result.message || 'Shell integration failed',
-          SetupErrorType.UNKNOWN
-        )]
+        errors: [result.message || 'Shell integration failed']
       };
     }
   }

@@ -9,6 +9,36 @@ interface ExtractedData {
 }
 
 /**
+ * Banned IP information from fail2ban
+ */
+interface BannedIPInfo {
+  jail: string;
+  ips: string[];
+  count: number;
+}
+
+/**
+ * Aggregated fail2ban data
+ */
+interface Fail2BanAggregatedData {
+  totalBanned: number;
+  jailDetails: BannedIPInfo[];
+  allIPs: string[];
+}
+
+/**
+ * Filesystem information from df command
+ */
+interface FilesystemInfo {
+  filesystem: string;
+  size: string;
+  used: string;
+  available: string;
+  usePercent: string;
+  mountPoint: string;
+}
+
+/**
  * Context for pattern execution
  */
 interface PatternContext {
@@ -36,7 +66,7 @@ interface ExecutionPlan {
   intent: string;
   steps: PatternStep[];
   context: PatternContext;
-  aggregator?: (data: any) => unknown;
+  aggregator?: (data: ExtractedData) => unknown;
 }
 
 /**
@@ -60,14 +90,29 @@ interface PatternStep {
 }
 
 /**
+ * Extended pattern step with runtime properties
+ */
+interface ExtendedPatternStep extends PatternStep {
+  executed?: boolean;
+  result?: unknown;
+}
+
+/**
  * Pattern definition
  */
 interface Pattern {
   matcher: RegExp;
   intent: string;
   sequence?: PatternStep[];
-  aggregator?: (data: any) => unknown;
+  aggregator?: (data: ExtractedData) => unknown;
   suggestion?: string;
+}
+
+/**
+ * Extended execution plan with typed steps
+ */
+interface ExtendedExecutionPlan extends ExecutionPlan {
+  steps: ExtendedPatternStep[];
 }
 
 /**
@@ -124,10 +169,10 @@ export default class PatternMatcher {
             },
           },
         ],
-        aggregator: (data: any) => {
-          const details = data.bannedIPs || [];
-          const total = details.reduce((sum: number, jail: any) => sum + jail.count, 0);
-          const allIPs = details.flatMap((jail: any) => jail.ips);
+        aggregator: (data: ExtractedData): Fail2BanAggregatedData => {
+          const details = (data.bannedIPs as BannedIPInfo[]) || [];
+          const total = details.reduce((sum: number, jail: BannedIPInfo) => sum + jail.count, 0);
+          const allIPs = details.flatMap((jail: BannedIPInfo) => jail.ips);
           return {
             totalBanned: total,
             jailDetails: details,
@@ -168,9 +213,9 @@ export default class PatternMatcher {
           {
             id: 'large_dirs',
             command: (context: PatternContext) => {
-              const fs = (context.extracted?.filesystems as any[]) || [];
+              const fs = (context.extracted?.filesystems as FilesystemInfo[]) || [];
               // Se algum filesystem está > 80% usado, investiga
-              const critical = fs.find((f: any) => parseInt(f.usePercent) > 80);
+              const critical = fs.find((f: FilesystemInfo) => parseInt(f.usePercent) > 80);
               if (critical) {
                 return ['du -sh /* 2>/dev/null | sort -rh | head -10'];
               }
@@ -423,10 +468,10 @@ export default class PatternMatcher {
     return null;
   }
 
-  buildExecutionPlan(pattern: Pattern): ExecutionPlan {
+  buildExecutionPlan(pattern: Pattern): ExtendedExecutionPlan {
     return {
       intent: pattern.intent,
-      steps: pattern.sequence.map(step => ({
+      steps: (pattern.sequence || []).map(step => ({
         ...step,
         executed: false,
         result: null,
@@ -445,9 +490,9 @@ export default class PatternMatcher {
     return output;
   }
 
-  isComplete(plan: ExecutionPlan): boolean {
+  isComplete(plan: ExtendedExecutionPlan): boolean {
     // Verifica se todos os passos obrigatórios foram executados
-    return plan.steps.filter((s: any) => !s.optional).every((s: any) => s.executed);
+    return plan.steps.filter(s => !s.optional).every(s => s.executed);
   }
 
   aggregate(plan: ExecutionPlan): unknown {
@@ -493,17 +538,17 @@ export default class PatternMatcher {
         if (!Array.isArray(plan.context.extracted[step.extract])) {
           plan.context.extracted[step.extract] = [];
         }
-        (plan.context.extracted[step.extract] as any[]).push(extracted);
+        (plan.context.extracted[step.extract] as unknown[]).push(extracted);
       } else {
         plan.context.extracted[step.extract] = extracted;
       }
     }
   }
 
-  getNextCommands(plan: ExecutionPlan, context: PatternContext): string[] {
+  getNextCommands(plan: ExtendedExecutionPlan, context: PatternContext): string[] {
     const commands: string[] = [];
     for (const step of plan.steps) {
-      if (!(step as any).executed) {
+      if (!step.executed) {
         if (typeof step.command === 'function') {
           const result = step.command(context);
           if (Array.isArray(result)) {
@@ -515,7 +560,7 @@ export default class PatternMatcher {
           commands.push(step.command);
         }
         // Marca como executado para evitar duplicatas
-        (step as any).executed = true;
+        step.executed = true;
         // Retorna apenas o próximo conjunto de comandos
         break;
       }

@@ -2,17 +2,40 @@
 // Modelo Claude unificado com suporte a Tools nativas
 
 import Anthropic from '@anthropic-ai/sdk';
-import type {MessageCreateParams, Tool} from '@anthropic-ai/sdk/resources/messages';
-import BaseAIModel, {AIModelConfig, CommandData, SystemContext} from './base_model.js';
+import type {MessageCreateParams, Tool, Message} from '@anthropic-ai/sdk/resources/messages';
+import BaseAIModel from './base_model.js';
+import type {
+  AIModelConfig,
+  CommandData,
+  SystemContext,
+  AICommandResponse,
+  AICommandAnalysisResult
+} from '../types/services.js';
 
 // Use os tipos do próprio SDK quando possível
 type ClaudeMessage = MessageCreateParams['messages'][0];
+
+/**
+ * Mensagem no histórico de conversação
+ */
+interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/**
+ * Opções para tool_choice baseado na documentação Anthropic
+ */
+type ToolChoice =
+  | { type: 'auto' }
+  | { type: 'any' }
+  | { type: 'tool'; name: string };
 
 interface ClaudeToolParams {
   system: string;
   messages: MessageCreateParams['messages'];
   tools: Tool[];
-  tool_choice?: any; // O tipo ToolChoiceUnion não está exportado, usar any por enquanto
+  tool_choice?: ToolChoice;
   signal?: AbortSignal;
 }
 
@@ -71,7 +94,7 @@ export default class ClaudeModel extends BaseAIModel {
     tools,
     tool_choice = { type: 'auto' },
     signal,
-  }: ClaudeToolParams): Promise<any> {
+  }: ClaudeToolParams): Promise<Message> {
     if (!this.isInitialized) {
       await this.initialize();
     }
@@ -94,7 +117,7 @@ export default class ClaudeModel extends BaseAIModel {
       };
 
       // Prepare request options (signal goes here, not in messageParams)
-      const requestOptions: any = {};
+      const requestOptions: { signal?: AbortSignal } = {};
       if (signal) {
         requestOptions.signal = signal;
         console.log('🟢 AbortSignal passed to Anthropic SDK (ClaudeModel)');
@@ -120,7 +143,7 @@ export default class ClaudeModel extends BaseAIModel {
   }
 
   // Manter compatibilidade com o sistema antigo
-  async askCommand(prompt: string, context?: SystemContext & { conversationHistory?: any[]; history?: any[] }): Promise<string> {
+  async askCommand(prompt: string, context?: SystemContext & { conversationHistory?: ConversationMessage[]; history?: ConversationMessage[] }): Promise<AICommandResponse> {
     if (!this.isInitialized) {
       await this.initialize();
     }
@@ -218,27 +241,44 @@ COMPORTAMENTO: Você é uma ferramenta, não um assistente conversacional.`,
 
       // O content pode ser de diferentes tipos, vamos verificar
       const firstContent = response.content[0];
-      if ('text' in firstContent) {
-        return firstContent.text;
-      }
-      return JSON.stringify(firstContent);
+      const responseText = 'text' in firstContent ? firstContent.text : JSON.stringify(firstContent);
+
+      return {
+        response: responseText,
+        success: true,
+        usage: response.usage ? {
+          input_tokens: response.usage.input_tokens,
+          output_tokens: response.usage.output_tokens
+        } : undefined
+      };
     } catch (error) {
       console.error('Erro ao chamar Claude:', error);
-      throw error;
+      return {
+        response: `Error: ${error.message}`,
+        success: false,
+        error: error.message
+      };
     }
   }
 
-  async analyzeCommand(commandData: CommandData): Promise<string> {
+  async analyzeCommand(commandData: CommandData): Promise<AICommandAnalysisResult> {
     const error = commandData.error || commandData.output || 'Unknown error';
     const context = commandData.systemInfo || {};
     const prompt = `Analisar erro de comando Linux:
 Erro: ${error}
 Sistema: ${context.os || 'Linux'}
-Distribuição: ${context.distro || 'Unknown'}
+Distribuição: ${context.os || 'Unknown'}
 
 Forneça uma solução concisa.`;
 
-    return this.askCommand(prompt, context as any);
+    const result = await this.askCommand(prompt, context);
+
+    return {
+      analysis: result.response,
+      confidence: result.success ? 0.8 : 0.3,
+      suggestions: result.success ? [result.response] : undefined,
+      error: result.error
+    };
   }
 
   getProviderName(): string {

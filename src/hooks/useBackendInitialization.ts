@@ -22,7 +22,7 @@ import type {
 /**
  * Status types for the application
  */
-export type AppStatus = 'initializing' | 'ready' | 'error' | 'processing';
+export type AppStatus = 'initializing' | 'loading-config' | 'initializing-ai' | 'ready' | 'error' | 'processing';
 
 /**
  * Parameters for the backend initialization hook
@@ -67,7 +67,7 @@ export function useBackendInitialization({
   tursoAdapter,
   user,
   isDebug
-}) {
+}: UseBackendInitializationParams): void {
   useEffect(() => {
     let mounted = true;
     

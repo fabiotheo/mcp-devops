@@ -11,8 +11,8 @@ import path from 'path';
 import os from 'os';
 import chalk from 'chalk';
 import readline from 'readline/promises';
-import TursoHistoryClient from './turso-client.ts';
-import MachineIdentityManager from './machine-identity.ts';
+import TursoHistoryClient from "./turso-client";
+import MachineIdentityManager from "./machine-identity";
 
 // Type definitions for history entries and migration log
 interface HistoryEntry {

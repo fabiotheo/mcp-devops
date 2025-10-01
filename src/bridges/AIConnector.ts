@@ -8,6 +8,16 @@ const __dirname = path.dirname(__filename);
 // ============== INTERFACES E TIPOS ==============
 
 /**
+ * Mensagem no histórico de conversação
+ */
+export interface ConversationMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * Opções de configuração para o AIConnector
  */
 export interface AIConnectorOptions {
@@ -28,9 +38,9 @@ export interface CommandContext {
   /** ID do usuário */
   userId?: string;
   /** Histórico de conversação */
-  conversationHistory?: any[];
+  conversationHistory?: ConversationMessage[];
   /** Metadados adicionais */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -42,7 +52,7 @@ export interface CommandResult {
   /** Resposta do AI */
   response?: string;
   /** Dados estruturados da resposta */
-  data?: any;
+  data?: unknown;
   /** Mensagem de erro se falhou */
   error?: string;
   /** Sugestão para correção se falhou */
@@ -50,7 +60,7 @@ export interface CommandResult {
   /** Comandos executados */
   executedCommands?: string[];
   /** Metadados da resposta */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -75,10 +85,11 @@ export interface AIConnectorEvents {
   result: (result: CommandResult) => void;
   error: (error: Error) => void;
   'debug-mode': (enabled: boolean) => void;
+  [key: string]: (...args: never[]) => void;
 }
 
 // Tipo para EventEmitter tipado
-interface TypedEventEmitter<TEvents extends Record<string, any>> {
+interface TypedEventEmitter<TEvents extends Record<string, (...args: never[]) => void>> {
   on<TEventName extends keyof TEvents & string>(
     eventName: TEventName,
     handler: TEvents[TEventName]

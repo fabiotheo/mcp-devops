@@ -23,15 +23,15 @@ export interface PatternMatch {
   /** Nome do padrão encontrado */
   name: string;
   /** Sequência de comandos a executar */
-  sequence: Array<string | (() => Promise<any>)>;
+  sequence: Array<string | (() => Promise<unknown>)>;
   /** Confiança no match (0.0-1.0) */
   confidence?: number;
   /** Dados extraídos do padrão */
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
   /** Função para parsear output */
-  parseOutput?: (output: string) => any;
+  parseOutput?: (output: string) => unknown;
   /** Função para agregar resultados */
-  aggregator?: (results: any[]) => any;
+  aggregator?: (results: unknown[]) => unknown;
 }
 
 /**
@@ -43,7 +43,7 @@ export interface CommandResult {
   /** Indica se está pendente de execução */
   pending?: boolean;
   /** Resultado da execução */
-  result?: any;
+  result?: unknown;
   /** Erro se houver */
   error?: string;
 }
@@ -72,6 +72,7 @@ interface PatternMatcherModule {
   getSuggestions?: (partial: string) => Promise<string[]>;
   default?: PatternMatcherModule;
   PatternMatcher?: PatternMatcherModule;
+  (input: string): Promise<PatternMatch | null>;
 }
 
 // ============== CLASSE PRINCIPAL ==============
@@ -148,7 +149,7 @@ class PatternAdapter {
 
       // Check if the module itself is callable
       if (typeof this.patternMatcher === 'function') {
-        return await (this.patternMatcher as any)(input);
+        return await (this.patternMatcher as (input: string) => Promise<PatternMatch | null>)(input);
       }
 
       return null;

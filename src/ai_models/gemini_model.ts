@@ -2,7 +2,14 @@
 // Implementação do modelo Gemini da Google
 
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
-import BaseAIModel, { AIModelConfig, CommandData, SystemContext } from './base_model.ts';
+import BaseAIModel from './base_model.js';
+import type {
+  AIModelConfig,
+  CommandData,
+  SystemContext,
+  AICommandResponse,
+  AICommandAnalysisResult
+} from '../types/services.js';
 
 // Interface específica para configuração do Gemini
 interface GeminiConfig extends AIModelConfig {
@@ -61,7 +68,7 @@ export default class GeminiModel extends BaseAIModel {
     this.model = this.client.getGenerativeModel({ model: this.modelName });
   }
 
-  async analyzeCommand(commandData: CommandData): Promise<AnalysisResult | null> {
+  async analyzeCommand(commandData: CommandData): Promise<AICommandAnalysisResult> {
     try {
       const extendedData = commandData as ExtendedCommandData;
       const { command, exitCode } = extendedData;
@@ -117,19 +124,21 @@ Seja conciso e específico para o sistema detectado.`;
         : null;
 
       return {
-        description: analysis,
-        command: suggestedCommand,
-        confidence: 0.8,
-        category: 'llm_analysis',
-        source: 'google_gemini',
+        analysis,
+        suggestions: suggestedCommand ? [suggestedCommand] : undefined,
+        confidence: 0.8
       };
     } catch (error) {
       console.error('Erro na análise com Gemini:', error);
-      return null;
+      return {
+        analysis: `Error analyzing command: ${error.message}`,
+        confidence: 0,
+        error: error.message
+      };
     }
   }
 
-  async askCommand(question: string, systemContext?: SystemContext): Promise<string> {
+  async askCommand(question: string, systemContext?: SystemContext): Promise<AICommandResponse> {
     const extendedContext = (systemContext || {}) as ExtendedSystemContext;
 
     try {
@@ -178,10 +187,19 @@ Responda de forma direta e prática.`;
       }
 
       const result = await this.model!.generateContent(prompt);
-      return result.response.text();
+      const responseText = result.response.text();
+
+      return {
+        response: responseText,
+        success: true
+      };
     } catch (error) {
       console.error('Erro ao consultar Gemini:', error);
-      return `❌ Erro ao conectar com o assistente Gemini. Verifique sua configuração da API Google.`;
+      return {
+        response: `❌ Erro ao conectar com o assistente Gemini. Verifique sua configuração da API Google.`,
+        success: false,
+        error: error.message
+      };
     }
   }
 

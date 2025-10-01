@@ -16,6 +16,24 @@ import * as io from './setup-io.js';
 import * as system from './setup-system.js';
 
 /**
+ * Legacy config format for migration
+ */
+interface LegacyConfig {
+  ai_provider?: string;
+  anthropic_api_key?: string;
+  claude_api_key?: string;  // Old field name
+  openai_api_key?: string;
+  gemini_api_key?: string;
+  google_api_key?: string;  // Old field name
+  claude_model?: string;
+  openai_model?: string;
+  gemini_model?: string;
+  version?: string;
+  created?: string;
+  [key: string]: unknown;  // Allow other legacy fields
+}
+
+/**
  * ConfigManager class handles all configuration operations
  */
 export class ConfigManager {
@@ -30,15 +48,19 @@ export class ConfigManager {
     this.config = {
       homeDir,
       mcpDir,
+      configDir: path.join(mcpDir, 'config'),
       configPath: path.join(mcpDir, 'config.json'),
       zshrcPath: path.join(homeDir, '.zshrc'),
       bashrcPath: path.join(homeDir, '.bashrc'),
       versionFilePath: path.join(mcpDir, '.version'),
       backupDir: path.join(mcpDir, '.backups'),
       logsDir: path.join(mcpDir, 'logs'),
+      platform: system.detectPlatform(),
+      shell: system.detectShell(),
       isRoot: system.isRoot(),
       currentShell: system.detectShell().type,
-      version: '',
+      verbose: false,
+      version: '1.0.0',
       ...customConfig
     };
   }
@@ -61,6 +83,10 @@ export class ConfigManager {
    * Load API configuration from disk
    */
   async loadAPIConfig(): Promise<APIConfig | null> {
+    if (!this.config.configPath) {
+      throw new Error('Config path is not defined');
+    }
+
     try {
       const configData = await io.readJsonFile<APIConfig>(this.config.configPath);
 
@@ -81,6 +107,10 @@ export class ConfigManager {
    * Save API configuration to disk
    */
   async saveAPIConfig(apiConfig: APIConfig): Promise<void> {
+    if (!this.config.configPath) {
+      throw new Error('Config path is not defined');
+    }
+
     const normalizedConfig = this.normalizeAPIConfig(apiConfig);
 
     // Ensure directory exists
@@ -163,7 +193,7 @@ export class ConfigManager {
 
     try {
       // Load old config
-      const oldConfig = await io.readJsonFile<any>(oldConfigPath);
+      const oldConfig = await io.readJsonFile<LegacyConfig>(oldConfigPath);
 
       if (!oldConfig) {
         return false;
@@ -172,19 +202,23 @@ export class ConfigManager {
       // Map old format to new format
       const newConfig: APIConfig = {
         ai_provider: oldConfig.ai_provider || 'claude',
-        anthropic_api_key: oldConfig.anthropic_api_key || oldConfig.claude_api_key,
-        openai_api_key: oldConfig.openai_api_key,
-        gemini_api_key: oldConfig.gemini_api_key || oldConfig.google_api_key,
+        anthropic_api_key: oldConfig.anthropic_api_key || oldConfig.claude_api_key || '',
+        openai_api_key: oldConfig.openai_api_key || '',
+        gemini_api_key: oldConfig.gemini_api_key || oldConfig.google_api_key || '',
         claude_model: oldConfig.claude_model || DEFAULT_MODELS.claude,
         openai_model: oldConfig.openai_model || DEFAULT_MODELS.openai,
         gemini_model: oldConfig.gemini_model || DEFAULT_MODELS.gemini,
-        ...oldConfig
+        version: oldConfig.version || '1.0.0',
+        created: oldConfig.created || new Date().toISOString()
       };
 
       // Save in new location
       await this.saveAPIConfig(newConfig);
 
       // Create backup of old config
+      if (!this.config.backupDir) {
+        throw new Error('Backup directory is not defined');
+      }
       const backupPath = path.join(this.config.backupDir, 'old_config.json');
       await io.ensureDir(this.config.backupDir);
       await io.copyFile(oldConfigPath, backupPath);
@@ -204,6 +238,9 @@ export class ConfigManager {
    * Check if this is a fresh installation (no existing config)
    */
   async isFreshInstall(): Promise<boolean> {
+    if (!this.config.configPath) {
+      return true;
+    }
     return !await io.fileExists(this.config.configPath);
   }
 
@@ -211,6 +248,9 @@ export class ConfigManager {
    * Get the current installed version
    */
   async getInstalledVersion(): Promise<string | null> {
+    if (!this.config.versionFilePath) {
+      return null;
+    }
     try {
       const version = await io.readFile(this.config.versionFilePath, 'utf8');
       return version.trim();
@@ -223,6 +263,9 @@ export class ConfigManager {
    * Save the current version
    */
   async saveVersion(version: string): Promise<void> {
+    if (!this.config.versionFilePath) {
+      throw new Error('Version file path is not defined');
+    }
     await io.ensureDir(this.config.mcpDir);
     await io.writeFileAtomic(this.config.versionFilePath, version);
     this.config.version = version;
@@ -232,6 +275,9 @@ export class ConfigManager {
    * Create a backup of the current configuration
    */
   async createBackup(label?: string): Promise<string> {
+    if (!this.config.backupDir) {
+      throw new Error('Backup directory is not defined');
+    }
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupName = label ? `config-${label}-${timestamp}.json` : `config-${timestamp}.json`;
     const backupPath = path.join(this.config.backupDir, backupName);
@@ -254,6 +300,9 @@ export class ConfigManager {
    * List available backup configurations
    */
   async listBackups(): Promise<string[]> {
+    if (!this.config.backupDir) {
+      return [];
+    }
     try {
       const files = await io.listDirectory(this.config.backupDir, {
         pattern: /config-.*\.json$/
@@ -268,6 +317,9 @@ export class ConfigManager {
    * Restore configuration from backup
    */
   async restoreFromBackup(backupFile: string): Promise<void> {
+    if (!this.config.backupDir) {
+      throw new Error('Backup directory is not defined');
+    }
     const backupPath = path.join(this.config.backupDir, backupFile);
 
     if (!await io.fileExists(backupPath)) {
@@ -290,7 +342,7 @@ export class ConfigManager {
   /**
    * Normalize API configuration with defaults
    */
-  private normalizeAPIConfig(config: any): APIConfig {
+  private normalizeAPIConfig(config: Partial<APIConfig>): APIConfig {
     return {
       ai_provider: config.ai_provider || 'claude',
       anthropic_api_key: config.anthropic_api_key || '',
@@ -299,7 +351,8 @@ export class ConfigManager {
       claude_model: config.claude_model || DEFAULT_MODELS.claude,
       openai_model: config.openai_model || DEFAULT_MODELS.openai,
       gemini_model: config.gemini_model || DEFAULT_MODELS.gemini,
-      ...config
+      version: config.version || '1.0.0',
+      created: config.created || new Date().toISOString()
     };
   }
 
@@ -308,9 +361,12 @@ export class ConfigManager {
    */
   getEnvironmentVariables(): Record<string, string> {
     const env: Record<string, string> = {
-      MCP_HOME: this.config.mcpDir,
-      MCP_CONFIG: this.config.configPath
+      MCP_HOME: this.config.mcpDir
     };
+
+    if (this.config.configPath) {
+      env.MCP_CONFIG = this.config.configPath;
+    }
 
     if (this.apiConfig) {
       if (this.apiConfig.anthropic_api_key) {
@@ -342,7 +398,9 @@ export class ConfigManager {
       gemini_api_key: '',
       claude_model: DEFAULT_MODELS.claude,
       openai_model: DEFAULT_MODELS.openai,
-      gemini_model: DEFAULT_MODELS.gemini
+      gemini_model: DEFAULT_MODELS.gemini,
+      version: '1.0.0',
+      created: new Date().toISOString()
     };
 
     await this.saveAPIConfig(defaultConfig);

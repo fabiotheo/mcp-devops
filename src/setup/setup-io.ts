@@ -37,7 +37,7 @@ type ValidEncoding = typeof VALID_ENCODINGS[number];
  * Validate if encoding is supported
  */
 function validateEncoding(encoding: BufferEncoding): encoding is ValidEncoding {
-  return VALID_ENCODINGS.includes(encoding as any);
+  return (VALID_ENCODINGS as readonly string[]).includes(encoding);
 }
 
 // ============================================
@@ -549,7 +549,7 @@ export async function updateFileAtomic(
 /**
  * Read JSON file safely
  */
-export async function readJsonFile<T = any>(filepath: string): Promise<T | null> {
+export async function readJsonFile<T = unknown>(filepath: string): Promise<T | null> {
   try {
     const content = await readFile(filepath, 'utf8');
     return JSON.parse(content) as T;
@@ -569,7 +569,7 @@ export async function readJsonFile<T = any>(filepath: string): Promise<T | null>
  */
 export async function writeJsonFile(
   filepath: string,
-  data: any,
+  data: unknown,
   options?: { indent?: number; atomic?: boolean }
 ): Promise<void> {
   const { indent = 2, atomic = false } = options || {};
@@ -585,7 +585,7 @@ export async function writeJsonFile(
 /**
  * Update JSON file atomically
  */
-export async function updateJsonFile<T = any>(
+export async function updateJsonFile<T = unknown>(
   filepath: string,
   updater: (data: T | null) => T | Promise<T>,
   options?: { indent?: number }

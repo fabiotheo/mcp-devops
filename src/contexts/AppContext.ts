@@ -8,12 +8,15 @@
 
 import * as React from 'react';
 import { createContext, useContext, useRef, useState, useMemo, MutableRefObject, ReactNode } from 'react';
+import type { HistoryEntry, AIOrchestrator, PatternMatcher, TursoAdapter, BackendConfig } from '../types/services.js';
+import type { AppStatus } from '../hooks/useBackendInitialization.js';
+import type { RequestInfo } from '../hooks/useRequestManager.js';
 
 // ========== Type Definitions ==========
 
 interface CoreState {
   input: string;
-  status: string;
+  status: AppStatus;
   response: string;
   error: string | null;
   isProcessing: boolean;
@@ -22,7 +25,7 @@ interface CoreState {
 
 interface HistoryState {
   commandHistory: string[];
-  fullHistory: Array<{ command: string; response?: string; timestamp: number }>;
+  fullHistory: HistoryEntry[];
   history: string[];
   historyIndex: number;
 }
@@ -34,17 +37,17 @@ interface UIState {
 
 interface CoreActions {
   setInput: (value: string) => void;
-  setStatus: (value: string) => void;
+  setStatus: (value: AppStatus) => void;
   setResponse: (value: string) => void;
   setError: (value: string | null) => void;
   setIsProcessing: (value: boolean) => void;
   setIsCancelled: (value: boolean) => void;
-  setConfig: (value: AppConfig) => void;
+  setConfig: (value: BackendConfig) => void;
 }
 
 interface HistoryActions {
   setCommandHistory: (value: string[]) => void;
-  setFullHistory: (value: Array<{ command: string; response?: string; timestamp: number }>) => void;
+  setFullHistory: (value: HistoryEntry[]) => void;
   setHistory: (value: string[]) => void;
   setHistoryIndex: (value: number) => void;
 }
@@ -55,23 +58,16 @@ interface UIActions {
 }
 
 interface Services {
-  orchestrator: MutableRefObject<unknown>;
-  patternMatcher: MutableRefObject<unknown>;
-  tursoAdapter: MutableRefObject<unknown>;
+  orchestrator: MutableRefObject<AIOrchestrator | null>;
+  patternMatcher: MutableRefObject<PatternMatcher | null>;
+  tursoAdapter: MutableRefObject<TursoAdapter | null>;
 }
 
 interface RequestManagement {
   currentRequestId: MutableRefObject<string | null>;
-  activeRequests: MutableRefObject<Map<string, unknown>>;
+  activeRequests: MutableRefObject<Map<string, RequestInfo>>;
   aiAbortControllerRef: MutableRefObject<AbortController | null>;
   dbAbortControllerRef: MutableRefObject<AbortController | null>;
-}
-
-interface AppConfig {
-  isDebug?: boolean;
-  isTTY?: boolean;
-  user?: string;
-  [key: string]: unknown;
 }
 
 interface AppContextValue {
@@ -87,12 +83,12 @@ interface AppContextValue {
   };
   services: Services;
   requests: RequestManagement;
-  config: AppConfig;
+  config: BackendConfig;
 }
 
 interface AppProviderProps {
   children: ReactNode;
-  config?: AppConfig;
+  config?: BackendConfig;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -118,7 +114,7 @@ export function useAppContext(): AppContextValue {
 export function AppProvider({ children, config = {} }: AppProviderProps) {
   // ========== Core State ==========
   const [input, setInput] = useState<string>('');
-  const [status, setStatus] = useState<string>('initializing');
+  const [status, setStatus] = useState<AppStatus>('initializing');
   const [response, setResponse] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -126,7 +122,7 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
 
   // ========== History State ==========
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
-  const [fullHistory, setFullHistory] = useState<Array<{ command: string; response?: string; timestamp: number }>>([]);
+  const [fullHistory, setFullHistory] = useState<HistoryEntry[]>([]);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
 
@@ -135,16 +131,16 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
   const [lastEsc, setLastEsc] = useState<number>(0);
 
   // Config state
-  const [configState, setConfigState] = useState<AppConfig>(config);
+  const [configState, setConfigState] = useState<BackendConfig>(config);
 
   // ========== Service Refs ==========
-  const orchestrator = useRef<unknown>(null);
-  const patternMatcher = useRef<unknown>(null);
-  const tursoAdapter = useRef<unknown>(null);
+  const orchestrator = useRef<AIOrchestrator | null>(null);
+  const patternMatcher = useRef<PatternMatcher | null>(null);
+  const tursoAdapter = useRef<TursoAdapter | null>(null);
 
   // ========== Request Management Refs ==========
   const currentRequestId = useRef<string | null>(null);
-  const activeRequests = useRef<Map<string, unknown>>(new Map());
+  const activeRequests = useRef<Map<string, RequestInfo>>(new Map());
   const aiAbortControllerRef = useRef<AbortController | null>(null);
   const dbAbortControllerRef = useRef<AbortController | null>(null);
 
@@ -154,7 +150,7 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
   };
 
   // ========== Configuration ==========
-  const appConfig = useMemo<AppConfig>(() => ({
+  const appConfig = useMemo<BackendConfig>(() => ({
     isDebug: configState.isDebug || false,
     isTTY: configState.isTTY !== undefined ? configState.isTTY : process.stdout.isTTY,
     user: configState.user || 'default',
@@ -284,7 +280,7 @@ export function useRequestManagement(): RequestManagement {
   return requests;
 }
 
-export function useAppConfig(): AppConfig {
+export function useAppConfig(): BackendConfig {
   const { config } = useAppContext();
   return config;
 }

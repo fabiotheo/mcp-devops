@@ -63,6 +63,21 @@ interface CacheStats {
   dbSize: number;
 }
 
+interface RemoteHistoryItem {
+  id?: string;
+  command_uuid?: string;
+  command?: string;
+  response?: string | null;
+  timestamp?: number;
+  user_id?: string | null;
+  machine_id?: string | null;
+  session_id?: string | null;
+  status?: string;
+  tokens_used?: number;
+  completed_at?: number;
+  [key: string]: unknown;
+}
+
 interface PreparedStatements {
   insertCommand?: Database.Statement;
   getHistory?: Database.Statement;
@@ -323,9 +338,9 @@ class LocalCache {
         machine_id,
         limit,
         offset,
-      });
+      }) as HistoryRecord[];
 
-      return results.map((row: any) => ({
+      return results.map((row) => ({
         ...row,
         timestamp: row.timestamp * 1000, // Convert back to milliseconds
       }));
@@ -352,7 +367,7 @@ class LocalCache {
   /**
    * Mark items as synchronized
    */
-  markSynced(uuids) {
+  markSynced(uuids: string[]): boolean {
     const timestamp = Math.floor(Date.now() / 1000);
     const update = this.db.prepare(`
             UPDATE history_cache
@@ -360,7 +375,7 @@ class LocalCache {
             WHERE command_uuid = ?
         `);
 
-    const updateMany = this.db.transaction(uuids => {
+    const updateMany = this.db.transaction((uuids: string[]) => {
       for (const uuid of uuids) {
         update.run(timestamp, uuid);
       }
@@ -378,10 +393,10 @@ class LocalCache {
   /**
    * Clear sync queue after successful sync
    */
-  clearSyncQueue(ids) {
+  clearSyncQueue(ids: number[]): boolean {
     const del = this.db.prepare('DELETE FROM sync_queue WHERE id = ?');
 
-    const deleteMany = this.db.transaction(ids => {
+    const deleteMany = this.db.transaction((ids: number[]) => {
       for (const id of ids) {
         del.run(id);
       }
@@ -399,13 +414,13 @@ class LocalCache {
   /**
    * Update retry count for failed sync
    */
-  incrementRetryCount(id, error) {
+  incrementRetryCount(id: number, error: unknown): void {
     try {
       // Safely convert error to string
       const errorMessage = error
         ? typeof error === 'string'
           ? error
-          : error.message || String(error)
+          : error instanceof Error ? error.message : String(error)
         : 'Unknown error';
 
       this.db
@@ -452,7 +467,7 @@ class LocalCache {
   /**
    * Set sync metadata
    */
-  setMetadata(key, value) {
+  setMetadata(key: string, value: unknown): boolean {
     try {
       this.db
         .prepare(
@@ -472,7 +487,7 @@ class LocalCache {
   /**
    * Import history from remote (during sync)
    */
-  importHistory(remoteHistory) {
+  importHistory(remoteHistory: RemoteHistoryItem[]): boolean {
     const insert = this.db.prepare(`
             INSERT OR IGNORE INTO history_cache (
                 id, command, response, timestamp, user_id, machine_id,
@@ -483,14 +498,17 @@ class LocalCache {
             )
         `);
 
-    const importMany = this.db.transaction(items => {
+    const importMany = this.db.transaction((items: RemoteHistoryItem[]) => {
       for (const item of items) {
         insert.run({
           ...item,
           id: item.command_uuid || item.id,
+          command: item.command || '',
+          response: item.response || null,
+          timestamp: item.timestamp || item.completed_at || Math.floor(Date.now() / 1000),
           command_uuid: item.command_uuid || item.id,
-          status: item.status || 'completed', // Provide default status
-          tokens_used: item.tokens_used || 0, // Provide default tokens
+          status: item.status || 'completed',
+          tokens_used: item.tokens_used || 0,
         });
       }
     });
@@ -536,7 +554,7 @@ class LocalCache {
   /**
    * Clean old cache entries
    */
-  cleanup(daysToKeep = 30) {
+  cleanup(daysToKeep: number = 30): number {
     const cutoff = Math.floor(
       (Date.now() - daysToKeep * 24 * 60 * 60 * 1000) / 1000,
     );
@@ -561,6 +579,22 @@ class LocalCache {
       console.error(chalk.red('[Cache] Cleanup error:', error.message));
       return 0;
     }
+  }
+
+  /**
+   * Execute a query that returns a single row
+   */
+  public query<T = unknown>(sql: string, ...params: unknown[]): T | undefined {
+    if (!this.db) throw new Error('Database not initialized');
+    return this.db.prepare(sql).get(...params) as T | undefined;
+  }
+
+  /**
+   * Execute a query that modifies data (INSERT, UPDATE, DELETE)
+   */
+  public execute(sql: string, ...params: unknown[]): void {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.prepare(sql).run(...params);
   }
 
   close() {

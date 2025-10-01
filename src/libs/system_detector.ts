@@ -48,9 +48,115 @@ interface FirewallInfo {
   zones?: string[];
 }
 
+/**
+ * Generic service entry
+ */
+interface ServiceEntry {
+  name: string;
+  active: boolean;
+  details: string;
+  getBlockedIPs?: () => BlockedIPsResult;
+}
+
+/**
+ * Blocked IP entry
+ */
+interface BlockedIPEntry {
+  ip: string;
+  rule: string;
+  direction: string;
+  type: string;
+  comment?: string;
+  remainingTime?: number;
+  formattedTime?: string;
+}
+
+/**
+ * Result of blocked IPs query
+ */
+interface BlockedIPsResult {
+  success: boolean;
+  command: string;
+  blockedIPs: BlockedIPEntry[];
+  rawOutput?: string;
+  error?: string;
+  message?: string;
+  defaultPolicy?: string;
+  jails?: string[];
+}
+
+/**
+ * Asterisk service information
+ */
+interface AsteriskInfo {
+  name: string;
+  active: boolean;
+  version: string;
+  details: string;
+  activeChannels: number;
+  registeredPeers: number;
+  configDetails: Record<string, unknown>;
+  getCommands: () => Record<string, string>;
+}
+
+/**
+ * PM2 information
+ */
+interface PM2Info {
+  name: string;
+  active: boolean;
+  version: string;
+  details: string;
+  runningApps: number;
+  appDetails: Record<string, unknown>;
+  getCommands: () => Record<string, string>;
+}
+
+/**
+ * AWS CLI information
+ */
+interface AWSCLIInfo {
+  name: string;
+  active: boolean;
+  version: string;
+  details: string;
+  configured: boolean;
+  defaultRegion: string;
+  buckets: string[];
+  configDetails: Record<string, unknown>;
+  getCommands: () => Record<string, string>;
+}
+
+/**
+ * Installed packages structure
+ */
+interface InstalledPackages {
+  firewalls: ServiceEntry[];
+  webServers: ServiceEntry[];
+  databases: ServiceEntry[];
+  containerTools: ServiceEntry[];
+  monitoringTools: ServiceEntry[];
+  asterisk: AsteriskInfo | null;
+  pm2: PM2Info | null;
+  awsCLI: AWSCLIInfo | null;
+}
+
+/**
+ * Extended system context
+ */
+interface SystemContext extends SystemInfo {
+  commands: Record<string, unknown>;
+  capabilities: string[];
+  installedPackages: InstalledPackages;
+  firewallDetails?: {
+    activeFirewalls: string[];
+    blockedIPs: Record<string, BlockedIPsResult>;
+  };
+}
+
 class SystemDetector {
   private systemInfo: SystemInfo | null;
-  private installedPackages: any | null;
+  private installedPackages: InstalledPackages | null;
   private canUseSudo: boolean;
 
   constructor() {
@@ -85,7 +191,7 @@ class SystemDetector {
       return execSync(command, { encoding: 'utf8', ...options }).trim();
     } catch (error) {
       // Se falhar, retorna null ou string vazia dependendo do contexto
-      if ((options as any).returnNull) {
+      if (options.returnNull) {
         return null;
       }
       return '';
@@ -327,7 +433,7 @@ class SystemDetector {
   }
 
   // Detecta pacotes instalados no sistema
-  detectInstalledPackages(): any {
+  detectInstalledPackages(): InstalledPackages {
     if (this.installedPackages) {
       return this.installedPackages;
     }
@@ -348,8 +454,8 @@ class SystemDetector {
   }
 
   // Detecta firewalls instalados
-  detectFirewalls(): any[] {
-    const firewalls = [];
+  detectFirewalls(): ServiceEntry[] {
+    const firewalls: ServiceEntry[] = [];
 
     // Verifica UFW (Uncomplicated Firewall)
     try {
@@ -461,8 +567,8 @@ class SystemDetector {
   }
 
   // Detecta servidores web instalados
-  detectWebServers(): any[] {
-    const webServers = [];
+  detectWebServers(): ServiceEntry[] {
+    const webServers: ServiceEntry[] = [];
 
     // Verifica Nginx
     try {
@@ -506,8 +612,8 @@ class SystemDetector {
   }
 
   // Detecta bancos de dados instalados
-  detectDatabases(): any[] {
-    const databases = [];
+  detectDatabases(): ServiceEntry[] {
+    const databases: ServiceEntry[] = [];
 
     // Lista de bancos de dados comuns
     const dbServices = [
@@ -539,8 +645,8 @@ class SystemDetector {
   }
 
   // Detecta ferramentas de contêiner
-  detectContainerTools(): any[] {
-    const containerTools = [];
+  detectContainerTools(): ServiceEntry[] {
+    const containerTools: ServiceEntry[] = [];
 
     // Verifica Docker
     try {
@@ -582,8 +688,8 @@ class SystemDetector {
   }
 
   // Detecta ferramentas de monitoramento
-  detectMonitoringTools(): any[] {
-    const monitoringTools = [];
+  detectMonitoringTools(): ServiceEntry[] {
+    const monitoringTools: ServiceEntry[] = [];
 
     // Lista de ferramentas de monitoramento comuns
     const tools = [
@@ -648,13 +754,13 @@ class SystemDetector {
   }
 
   // Gera contexto para o LLM
-  getSystemContext(includeBlockedIPs = false) {
+  getSystemContext(includeBlockedIPs = false): SystemContext {
     // Detecta pacotes instalados se ainda não tiver feito
     if (!this.installedPackages) {
       this.detectInstalledPackages();
     }
 
-    const context = {
+    const context: SystemContext = {
       ...this.systemInfo,
       commands: this.getSystemCommands(),
       capabilities: this.getSystemCapabilities(),
@@ -669,7 +775,7 @@ class SystemDetector {
       );
 
       if (activeFirewalls.length > 0) {
-        (context as any).firewallDetails = {
+        context.firewallDetails = {
           activeFirewalls: activeFirewalls.map(fw => fw.name),
           blockedIPs: this.getAllBlockedIPs(),
         };
@@ -745,7 +851,7 @@ class SystemDetector {
   // Métodos para obter IPs bloqueados por diferentes firewalls
 
   // Obtém IPs bloqueados pelo UFW
-  getUFWBlockedIPs(): any {
+  getUFWBlockedIPs(): BlockedIPsResult {
     try {
       // Obtém regras do UFW
       const rawRules = execSync('ufw status numbered', {
@@ -756,7 +862,7 @@ class SystemDetector {
       }).trim();
 
       // Extrai IPs bloqueados
-      const blockedIPs: any[] = [];
+      const blockedIPs: BlockedIPEntry[] = [];
       const lines = rawRules.split('\n');
 
       // Pula o cabeçalho
@@ -794,14 +900,15 @@ class SystemDetector {
     } catch (error) {
       return {
         success: false,
-        error: error.message,
+        error: (error as Error).message,
         command: 'ufw status numbered',
+        blockedIPs: [],
       };
     }
   }
 
   // Obtém IPs bloqueados pelo FirewallD
-  getFirewallDBlockedIPs(): any {
+  getFirewallDBlockedIPs(): BlockedIPsResult {
     try {
       // Obtém zonas e regras do FirewallD
       const zones = execSync('firewall-cmd --list-all-zones', {
@@ -812,7 +919,7 @@ class SystemDetector {
       }).trim();
 
       // Extrai IPs bloqueados
-      const blockedIPs: any[] = [];
+      const blockedIPs: BlockedIPEntry[] = [];
 
       // Processa regras ricas
       if (richRules) {
@@ -865,14 +972,15 @@ class SystemDetector {
     } catch (error) {
       return {
         success: false,
-        error: error.message,
+        error: (error as Error).message,
         command: 'firewall-cmd commands',
+        blockedIPs: [],
       };
     }
   }
 
   // Obtém IPs bloqueados pelo iptables
-  getIptablesBlockedIPs(): any {
+  getIptablesBlockedIPs(): BlockedIPsResult {
     try {
       // Obtém regras do iptables
       const rawRules = execSync('iptables -L -n -v', {
@@ -881,7 +989,7 @@ class SystemDetector {
       const saveRules = execSync('iptables-save', { encoding: 'utf8' }).trim();
 
       // Extrai IPs bloqueados
-      const blockedIPs: any[] = [];
+      const blockedIPs: BlockedIPEntry[] = [];
       const lines = rawRules.split('\n');
 
       // Processa as linhas para encontrar regras DROP ou REJECT
@@ -941,14 +1049,15 @@ class SystemDetector {
     } catch (error) {
       return {
         success: false,
-        error: error.message,
+        error: (error as Error).message,
         command: 'iptables commands',
+        blockedIPs: [],
       };
     }
   }
 
   // Obtém IPs bloqueados pelo fail2ban
-  getFail2banBlockedIPs(): any {
+  getFail2banBlockedIPs(): BlockedIPsResult {
     try {
       // Obtém status do fail2ban
       const status = execSync('fail2ban-client status', {
@@ -967,7 +1076,7 @@ class SystemDetector {
       }
 
       const jails = jailsMatch[1].split(', ');
-      const blockedIPs: any[] = [];
+      const blockedIPs: BlockedIPEntry[] = [];
 
       // Para cada jail, obtém os IPs bloqueados
       for (const jail of jails) {
@@ -983,7 +1092,7 @@ class SystemDetector {
             for (const ip of bannedIPs) {
               if (ip.match(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/)) {
                 // Tenta obter informações adicionais sobre o banimento
-                let banInfo = {};
+                const banInfo: Partial<BlockedIPEntry> = {};
                 try {
                   const banData = execSync(
                     `fail2ban-client get ${jail} banip ${ip}`,
@@ -1000,8 +1109,8 @@ class SystemDetector {
                     const seconds = parseInt(timeMatch[4]);
                     const totalSeconds =
                       days * 86400 + hours * 3600 + minutes * 60 + seconds;
-                    (banInfo as any).remainingTime = totalSeconds;
-                    (banInfo as any).formattedTime = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+                    banInfo.remainingTime = totalSeconds;
+                    banInfo.formattedTime = `${days}d ${hours}h ${minutes}m ${seconds}s`;
                   }
                 } catch {}
 
@@ -1027,14 +1136,15 @@ class SystemDetector {
     } catch (error) {
       return {
         success: false,
-        error: error.message,
+        error: (error as Error).message,
         command: 'fail2ban-client status',
+        blockedIPs: [],
       };
     }
   }
 
   // Obtém IPs bloqueados pelo CSF (ConfigServer Firewall)
-  getCSFBlockedIPs(): any {
+  getCSFBlockedIPs(): BlockedIPsResult {
     try {
       // Verifica se o arquivo de IPs bloqueados existe
       if (!existsSync('/etc/csf/csf.deny')) {
@@ -1052,7 +1162,7 @@ class SystemDetector {
       }).trim();
 
       // Extrai IPs bloqueados
-      const blockedIPs: any[] = [];
+      const blockedIPs: BlockedIPEntry[] = [];
       const lines = denyContent.split('\n');
 
       for (const line of lines) {
@@ -1114,14 +1224,15 @@ class SystemDetector {
     } catch (error) {
       return {
         success: false,
-        error: error.message,
+        error: (error as Error).message,
         command: 'CSF commands',
+        blockedIPs: [],
       };
     }
   }
 
   // Obtém IPs bloqueados pelo Shorewall
-  getShorewallBlockedIPs(): any {
+  getShorewallBlockedIPs(): BlockedIPsResult {
     try {
       // Obtém regras do Shorewall
       const status = execSync('shorewall status', { encoding: 'utf8' }).trim();
@@ -1130,7 +1241,7 @@ class SystemDetector {
       }).trim();
 
       // Extrai IPs bloqueados
-      const blockedIPs: any[] = [];
+      const blockedIPs: BlockedIPEntry[] = [];
 
       // Processa as regras para encontrar IPs bloqueados
       const lines = rules.split('\n');
@@ -1184,21 +1295,22 @@ class SystemDetector {
     } catch (error) {
       return {
         success: false,
-        error: error.message,
+        error: (error as Error).message,
         command: 'Shorewall commands',
+        blockedIPs: [],
       };
     }
   }
 
   // Obtém IPs bloqueados pelo pf (BSD Packet Filter)
-  getPFBlockedIPs(): any {
+  getPFBlockedIPs(): BlockedIPsResult {
     try {
       // Obtém regras do pf
       const tables = execSync('pfctl -s Tables', { encoding: 'utf8' }).trim();
       const rules = execSync('pfctl -s rules', { encoding: 'utf8' }).trim();
 
       // Extrai IPs bloqueados
-      const blockedIPs: any[] = [];
+      const blockedIPs: BlockedIPEntry[] = [];
 
       // Processa as tabelas para encontrar listas de bloqueio
       const tablesList = tables.split('\n');
@@ -1257,16 +1369,17 @@ class SystemDetector {
     } catch (error) {
       return {
         success: false,
-        error: error.message,
+        error: (error as Error).message,
         command: 'pfctl commands',
+        blockedIPs: [],
       };
     }
   }
 
   // Método para obter todos os IPs bloqueados de todos os firewalls
-  getAllBlockedIPs(): Record<string, unknown> {
+  getAllBlockedIPs(): Record<string, BlockedIPsResult> {
     const firewalls = this.detectFirewalls();
-    const results = {};
+    const results: Record<string, BlockedIPsResult> = {};
 
     for (const firewall of firewalls) {
       if (firewall.active && typeof firewall.getBlockedIPs === 'function') {
@@ -1278,7 +1391,7 @@ class SystemDetector {
   }
 
   // Detecta Asterisk (servidor VoIP)
-  detectAsterisk(): Record<string, unknown> {
+  detectAsterisk(): AsteriskInfo | null {
     try {
       // Verifica se o Asterisk está instalado
       execSync('which asterisk', { stdio: 'ignore' });
@@ -1288,7 +1401,7 @@ class SystemDetector {
       let version = '';
       let activeChannels = 0;
       let registeredPeers = 0;
-      let details = {};
+      let details: Record<string, unknown> = {};
 
       try {
         // Verifica se o serviço está ativo
@@ -1392,7 +1505,7 @@ class SystemDetector {
   }
 
   // Detecta PM2 (Process Manager para Node.js)
-  detectPM2(): Record<string, unknown> {
+  detectPM2(): PM2Info | null {
     try {
       // Verifica se o PM2 está instalado
       execSync('which pm2', { stdio: 'ignore' });
@@ -1401,7 +1514,7 @@ class SystemDetector {
       let status = 'installed';
       let version = '';
       let runningApps = 0;
-      let details = {};
+      let details: Record<string, unknown> = {};
 
       try {
         // Obtém versão
@@ -1435,15 +1548,15 @@ class SystemDetector {
               const apps = JSON.parse(jlist);
               details = {
                 apps: apps
-                  .map(app => ({
+                  .map((app: Record<string, unknown>) => ({
                     name: app.name,
-                    status: app.pm2_env.status,
-                    memory: app.monit ? app.monit.memory : 'N/A',
-                    cpu: app.monit ? app.monit.cpu : 'N/A',
-                    uptime: app.pm2_env.pm_uptime
-                      ? new Date(app.pm2_env.pm_uptime)
+                    status: (app.pm2_env as Record<string, unknown>)?.status,
+                    memory: (app.monit as Record<string, unknown>)?.memory || 'N/A',
+                    cpu: (app.monit as Record<string, unknown>)?.cpu || 'N/A',
+                    uptime: (app.pm2_env as Record<string, unknown>)?.pm_uptime
+                      ? new Date((app.pm2_env as Record<string, unknown>).pm_uptime as number)
                       : 'N/A',
-                    restarts: app.pm2_env.restart_time,
+                    restarts: (app.pm2_env as Record<string, unknown>)?.restart_time,
                   }))
                   .slice(0, 5), // Limita a 5 apps para não sobrecarregar
               };
@@ -1501,7 +1614,7 @@ class SystemDetector {
   }
 
   // Detecta AWS CLI com foco em S3
-  detectAWSCLI(): Record<string, unknown> {
+  detectAWSCLI(): AWSCLIInfo | null {
     try {
       // Verifica se o AWS CLI está instalado
       execSync('which aws', { stdio: 'ignore' });
@@ -1510,8 +1623,8 @@ class SystemDetector {
       let version = '';
       let configured = false;
       let defaultRegion = '';
-      let buckets = [];
-      let details = {};
+      let buckets: string[] = [];
+      let details: Record<string, unknown> = {};
 
       try {
         // Obtém versão
@@ -1546,7 +1659,7 @@ class SystemDetector {
                     const match = line.match(/\S+\s+(.+)/);
                     return match ? match[1].trim() : null;
                   })
-                  .filter(Boolean);
+                  .filter((bucket): bucket is string => bucket !== null);
 
                 // Limita a quantidade de buckets para não sobrecarregar
                 buckets = buckets.slice(0, 10);

@@ -36,7 +36,7 @@ export function useInputHandler({
   const { state, actions, services, requests, config } = useAppContext();
 
   // Destructure what we need
-  const { input, status, isProcessing, isCancelled } = state.core;
+  const { input, status, isProcessing } = state.core;
   const { commandHistory, historyIndex } = state.history;
   const { lastCtrlC, lastEsc } = state.ui;
   const { history } = state.history;
@@ -132,7 +132,7 @@ export function useInputHandler({
           // IMMEDIATELY mark as cancelled in Map local (primary source)
           const request = activeRequests.current.get(requestIdToCancel);
           if (request) {
-            (request as any).status = 'cancelled';
+            request.status = 'cancelled';
           }
 
           // Use unified cleanup function (it will handle everything including fullHistory update)

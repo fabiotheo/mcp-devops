@@ -8,20 +8,15 @@
  * Extracted from mcp-ink-cli.mjs as part of modularization effort.
  */
 
-import { useRef, useState, RefObject, Dispatch, SetStateAction } from 'react';
+import { useRef, useState, Dispatch, SetStateAction } from 'react';
 import { CANCELLATION_MARKER } from '../constants.js';
+import type {
+  HistoryEntry,
+  TursoAdapter,
+  ServiceRef
+} from '../types/services.js';
 
 // ============== INTERFACES E TIPOS ==============
-
-/**
- * History entry with role and content
- */
-export interface HistoryMessage {
-  /** Role of the message sender */
-  role: 'user' | 'assistant' | 'system';
-  /** Content of the message */
-  content: string;
-}
 
 /**
  * Request information stored in activeRequests
@@ -40,21 +35,11 @@ export interface RequestInfo {
 }
 
 /**
- * Turso adapter interface for request management
- */
-export interface TursoAdapterRequest {
-  /** Check if connected */
-  isConnected: () => boolean;
-  /** Update status by request ID */
-  updateStatusByRequestId: (requestId: string, status: string) => Promise<void>;
-}
-
-/**
  * Parameters for the request manager hook
  */
 export interface UseRequestManagerParams {
   /** Function to update fullHistory */
-  setFullHistory: Dispatch<SetStateAction<HistoryMessage[]>>;
+  setFullHistory: Dispatch<SetStateAction<HistoryEntry[]>>;
   /** Function to clear input on cancellation */
   setInput: Dispatch<SetStateAction<string>>;
   /** Function to set processing state */
@@ -64,7 +49,7 @@ export interface UseRequestManagerParams {
   /** Function to set error state */
   setError: Dispatch<SetStateAction<string | null>>;
   /** Turso adapter ref */
-  tursoAdapter: RefObject<TursoAdapterRequest | null>;
+  tursoAdapter: ServiceRef<TursoAdapter>;
   /** Debug mode flag */
   isDebug: boolean;
   /** TTY flag for bracketed paste mode */
@@ -78,15 +63,15 @@ export interface UseRequestManagerParams {
  */
 export interface UseRequestManagerReturn {
   /** Current request ID ref */
-  currentRequestId: RefObject<string | null>;
+  currentRequestId: ServiceRef<string>;
   /** Current Turso entry ID ref */
-  currentTursoEntryId: RefObject<string | null>;
+  currentTursoEntryId: ServiceRef<string>;
   /** Map of active requests */
-  activeRequests: RefObject<Map<string, RequestInfo>>;
+  activeRequests: ServiceRef<Map<string, RequestInfo>>;
   /** AI abort controller ref */
-  aiAbortControllerRef: RefObject<AbortController | null>;
+  aiAbortControllerRef: ServiceRef<AbortController>;
   /** Database abort controller ref */
-  dbAbortControllerRef: RefObject<AbortController | null>;
+  dbAbortControllerRef: ServiceRef<AbortController>;
   /** Cleanup request function */
   cleanupRequest: (requestId: string | null, reason: string, clearInput?: boolean) => Promise<void>;
   /** Cancelled state */
@@ -182,7 +167,7 @@ export function useRequestManager({
       }
 
       // Add the user's cancelled message and cancellation marker to fullHistory
-      setFullHistory((prev: HistoryMessage[]) => {
+      setFullHistory((prev: HistoryEntry[]) => {
         const updated = [...prev];
 
         // Check if the user message is already in history

@@ -5,6 +5,9 @@
  * Gerencia CRUD de usuários sem senha (foco em compartilhamento de conhecimento)
  */
 
+import TursoHistoryClient from './turso-client.js';
+import type { ResultSet } from '@libsql/client';
+
 /**
  * User interface
  */
@@ -14,14 +17,30 @@ interface User {
   name: string;
   email: string;
   is_active?: number;
-  created_at?: string;
+  created_at?: number;
   last_seen?: string;
 }
 
-export default class UserManager {
-  private client: any;
+/**
+ * UserStats interface
+ */
+interface UserStats {
+  total_commands: number;
+  active_days: number;
+  last_command?: number;
+  first_command?: number;
+  avg_tokens?: number;
+  total_tokens?: number;
+  top_commands?: Array<{
+    command: string;
+    usage_count: number;
+  }>;
+}
 
-  constructor(tursoClient: any) {
+export default class UserManager {
+  private client: TursoHistoryClient;
+
+  constructor(tursoClient: TursoHistoryClient) {
     if (!tursoClient) {
       throw new Error('TursoClient is required');
     }
@@ -55,7 +74,7 @@ export default class UserManager {
     const existing = await this.client.execute({
       sql: 'SELECT id FROM users WHERE username = ?',
       args: [username],
-    });
+    }) as ResultSet;
 
     if (existing.rows.length > 0) {
       throw new Error(`User ${username} already exists`);
@@ -65,7 +84,7 @@ export default class UserManager {
     const emailCheck = await this.client.execute({
       sql: 'SELECT id FROM users WHERE email = ?',
       args: [email],
-    });
+    }) as ResultSet;
 
     if (emailCheck.rows.length > 0) {
       throw new Error(`Email ${email} is already in use`);
@@ -89,13 +108,13 @@ export default class UserManager {
     const result = await this.client.execute({
       sql: 'SELECT * FROM users WHERE username = ? AND is_active = 1',
       args: [username],
-    });
+    }) as ResultSet;
 
     if (result.rows.length === 0) {
       throw new Error(`User ${username} not found`);
     }
 
-    return result.rows[0];
+    return result.rows[0] as unknown as User;
   }
 
   /**
@@ -105,13 +124,13 @@ export default class UserManager {
     const result = await this.client.execute({
       sql: 'SELECT * FROM users WHERE email = ? AND is_active = 1',
       args: [email],
-    });
+    }) as ResultSet;
 
     if (result.rows.length === 0) {
       throw new Error(`User with email ${email} not found`);
     }
 
-    return result.rows[0] as User;
+    return result.rows[0] as unknown as User;
   }
 
   /**
@@ -138,7 +157,7 @@ export default class UserManager {
       const emailCheck = await this.client.execute({
         sql: 'SELECT id FROM users WHERE email = ? AND username != ?',
         args: [updates.email, username],
-      });
+      }) as ResultSet;
 
       if (emailCheck.rows.length > 0) {
         throw new Error(
@@ -203,14 +222,14 @@ export default class UserManager {
       ? 'SELECT username, name, email, created_at FROM users WHERE is_active = 1 ORDER BY name'
       : 'SELECT username, name, email, is_active, created_at FROM users ORDER BY name';
 
-    const result = await this.client.execute(sql);
-    return result.rows as User[];
+    const result = await this.client.execute(sql) as ResultSet;
+    return result.rows as unknown as User[];
   }
 
   /**
    * Obtém estatísticas de um usuário
    */
-  async getUserStats(username: string): Promise<Record<string, unknown>> {
+  async getUserStats(username: string): Promise<UserStats> {
     const user = await this.getUser(username);
 
     const stats = await this.client.execute({
@@ -225,7 +244,7 @@ export default class UserManager {
                 FROM history_user
                 WHERE user_id = ?`,
       args: [user?.id],
-    });
+    }) as ResultSet;
 
     // Comandos mais usados
     const topCommands = await this.client.execute({
@@ -239,12 +258,12 @@ export default class UserManager {
                 ORDER BY usage_count DESC
                 LIMIT 5`,
       args: [user?.id],
-    });
+    }) as ResultSet;
 
     return {
       ...stats.rows[0],
       top_commands: topCommands.rows,
-    };
+    } as unknown as UserStats;
   }
 
   /**
@@ -260,9 +279,9 @@ export default class UserManager {
                     AND (name LIKE ? OR email LIKE ? OR username LIKE ?)
                   ORDER BY name`,
       args: [searchTerm, searchTerm, searchTerm],
-    });
+    }) as ResultSet;
 
-    return result.rows as User[];
+    return result.rows as unknown as User[];
   }
 
   /**
@@ -272,7 +291,7 @@ export default class UserManager {
     const result = await this.client.execute({
       sql: 'SELECT id FROM users WHERE username = ?',
       args: [username],
-    });
+    }) as ResultSet;
 
     return result.rows.length === 0;
   }
@@ -284,7 +303,7 @@ export default class UserManager {
     const result = await this.client.execute({
       sql: 'SELECT id FROM users WHERE email = ?',
       args: [email],
-    });
+    }) as ResultSet;
 
     return result.rows.length === 0;
   }

@@ -22,14 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 // Import Context and Provider
 import { AppProvider, useAppContext } from './contexts/AppContext.js';
-
-// Type definitions for AppProvider config
-interface AppConfig {
-  isDebug?: boolean;
-  isTTY?: boolean;
-  user?: string;
-  [key: string]: unknown;
-}
+import type { BackendConfig } from './types/services.js';
 
 // Import hooks
 import { useRequestManager } from './hooks/useRequestManager.js';
@@ -104,9 +97,9 @@ const MCPInkAppInner: React.FC = () => {
 
   // Initialize history manager with proper typing
   const { loadCommandHistory, saveToHistory } = useHistoryManager({
-    tursoAdapter: tursoAdapter as any, // Type mismatch with ref - safe to cast
+    tursoAdapter,
     setCommandHistory,
-    setFullHistory: setFullHistory as any, // Type mismatch between hooks - safe to cast
+    setFullHistory,
     commandHistory,
     user: currentUser,
     isDebug: debugMode
@@ -114,12 +107,12 @@ const MCPInkAppInner: React.FC = () => {
 
   // Initialize request manager for handling async operations
   const requestManager = useRequestManager({
-    setFullHistory: setFullHistory as any, // Type mismatch between hooks - safe to cast
+    setFullHistory,
     setInput,
     setIsProcessing: actions.core.setIsProcessing,
     setStatus,
     setError,
-    tursoAdapter: tursoAdapter as any, // Type mismatch with ref - safe to cast
+    tursoAdapter,
     isDebug: debugMode,
     isTTY,
   });
@@ -139,33 +132,33 @@ const MCPInkAppInner: React.FC = () => {
     // Services
     orchestrator,
     patternMatcher,
-    tursoAdapter: tursoAdapter as any, // Type mismatch with ref - safe to cast
+    tursoAdapter,
     // Functions
     saveToHistory,
     setCommandHistory,
-    setFullHistory: setFullHistory as any, // Type mismatch between hooks - safe to cast
+    setFullHistory,
     setHistory,
     setResponse,
     setIsProcessing: actions.core.setIsProcessing,
     setStatus,
     setError,
     // Other
-    requestManager, // Pass the whole requestManager object
+    requestManager,
     isDebug: debugMode,
     user: currentUser,
     formatResponse,
     debug
-  } as any);
+  });
 
   // Initialize backend services with type casting for incompatible types
   useBackendInitialization({
-    setConfig: setConfig as any, // Type mismatch between AppConfig and BackendConfig
-    setStatus: setStatus as any, // Type mismatch between status types
+    setConfig,
+    setStatus,
     setError,
     loadCommandHistory,
-    orchestrator: orchestrator as any, // Ref type mismatch
-    patternMatcher: patternMatcher as any, // Ref type mismatch
-    tursoAdapter: tursoAdapter as any, // Ref type mismatch
+    orchestrator,
+    patternMatcher,
+    tursoAdapter,
     user: currentUser,
     isDebug: debugMode
   });
@@ -468,7 +461,7 @@ const MCPInkAppInner: React.FC = () => {
 const MCPInkApp: React.FC = () => {
   const isTTY: boolean = !!process.stdin.isTTY;
 
-  const config: AppConfig = {
+  const config: BackendConfig = {
     isDebug,
     isTTY,
     user

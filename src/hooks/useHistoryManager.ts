@@ -9,56 +9,26 @@
 
 import * as path from 'node:path';
 import * as fs from 'fs/promises';
-import { MutableRefObject, Dispatch, SetStateAction } from 'react';
+import { Dispatch, SetStateAction } from 'react';
+import type {
+  HistoryEntry,
+  TursoAdapter,
+  TursoHistoryEntry,
+  ServiceRef
+} from '../types/services.js';
 
 // ============== INTERFACES E TIPOS ==============
-
-/**
- * History entry with role and content
- */
-export interface HistoryMessage {
-  /** Role of the message sender */
-  role: 'user' | 'assistant' | 'system';
-  /** Content of the message */
-  content: string;
-}
-
-/**
- * Turso history entry
- */
-export interface TursoHistoryEntry {
-  /** Command text */
-  command: string;
-  /** Response text */
-  response?: string | null;
-  /** Status of the command */
-  status?: 'pending' | 'completed' | 'cancelled' | 'error';
-  /** Timestamp */
-  timestamp?: number | Date;
-}
-
-/**
- * Turso adapter interface for history operations
- */
-export interface TursoAdapterHistory {
-  /** Check if connected */
-  isConnected: () => boolean;
-  /** Get history entries */
-  getHistory: (limit: number) => Promise<TursoHistoryEntry[]>;
-  /** Add to history */
-  addToHistory: (command: string, response: string | null) => Promise<void>;
-}
 
 /**
  * Parameters for the history manager hook
  */
 export interface UseHistoryManagerParams {
   /** Turso adapter ref */
-  tursoAdapter: MutableRefObject<TursoAdapterHistory | null>;
+  tursoAdapter: ServiceRef<TursoAdapter>;
   /** Function to update command history */
   setCommandHistory: Dispatch<SetStateAction<string[]>>;
   /** Function to update full conversation history */
-  setFullHistory: Dispatch<SetStateAction<HistoryMessage[]>>;
+  setFullHistory: Dispatch<SetStateAction<HistoryEntry[]>>;
   /** Current command history */
   commandHistory: string[];
   /** Current user */
@@ -99,11 +69,11 @@ export function useHistoryManager({
         tursoAdapter.current.isConnected()
       ) {
         // Load from Turso (user history if user is set, machine history if default)
-        const userHistory = await tursoAdapter.current.getHistory(10); // Get last 10 commands only for context
+        const userHistory = await tursoAdapter.current.getHistory(100); // Get last 100 commands
         const commands: string[] = [];
 
         // Store full conversation history (not just commands)
-        const fullConversationHistory: HistoryMessage[] = [];
+        const fullConversationHistory: HistoryEntry[] = [];
 
         // Process history to include both questions and responses
         userHistory.forEach((h: TursoHistoryEntry) => {
@@ -139,7 +109,7 @@ export function useHistoryManager({
 
         // Load conversation history to provide context to AI
         // Preserve any messages from current session and prepend old history
-        setFullHistory((prev: HistoryMessage[]) => {
+        setFullHistory((prev: HistoryEntry[]) => {
           // If there are messages in the current session, keep them
           // Otherwise, just load the history
           if (prev && prev.length > 0) {

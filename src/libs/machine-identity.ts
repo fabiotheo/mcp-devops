@@ -156,7 +156,7 @@ export default class MachineIdentityManager {
         )
           continue;
 
-        for (const iface of ifaces as any[]) {
+        for (const iface of ifaces) {
           if (iface.mac && iface.mac !== '00:00:00:00:00:00') {
             return iface.mac;
           }

@@ -37,7 +37,7 @@ export interface ProcessingResult {
   /** Tipo de resposta */
   type?: 'help' | 'system' | 'status' | 'history' | 'exit' | 'ai' | 'error';
   /** Dados adicionais */
-  data?: any;
+  data?: unknown;
   /** Mensagem de erro */
   error?: string;
   /** Resposta do AI */
@@ -78,10 +78,11 @@ export interface CommandProcessorEvents {
   'exit-request': () => void;
   'multiline-detected': (lines: string[]) => void;
   'debug-mode': (enabled: boolean) => void;
+  [key: string]: (...args: never[]) => void;
 }
 
 // Interface para EventEmitter tipado
-interface TypedEventEmitter<TEvents extends Record<string, any>> {
+interface TypedEventEmitter<TEvents extends Record<string, (...args: never[]) => void>> {
   on<TEventName extends keyof TEvents & string>(
     eventName: TEventName,
     handler: TEvents[TEventName]

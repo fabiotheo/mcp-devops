@@ -133,6 +133,10 @@ export function useCommandProcessor(
     // Clear previous execution log
     clearExecutionLog();
 
+    // Add command to display history IMMEDIATELY for better UX
+    // User sees what they typed right away, before processing starts
+    setHistory(prev => [...prev, `❯ ${command}`]);
+
     // Generate unique request_id (timestamp + random for uniqueness)
     const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     currentRequestId.current = requestId;
@@ -376,10 +380,10 @@ export function useCommandProcessor(
         }
         setResponse(formattedResponse);
 
-        // Update display history with formatted response
+        // Update display history with formatted response only
+        // Command was already added at the start for better UX
         setHistory(prev => [
           ...prev,
-          `❯ ${command}`,
           formatResponse(formattedResponse, debug),
         ]);
 
@@ -431,7 +435,8 @@ export function useCommandProcessor(
         // If no response at all, show timeout message
         const timeoutMsg = '⏳ O processamento demorou muito e foi interrompido. Por favor, tente uma pergunta mais simples ou divida em partes menores.';
         setResponse(timeoutMsg);
-        setHistory(prev => [...prev, '❯ ' + command, timeoutMsg, '─'.repeat(80)]);
+        // Command was already added at the start, only add timeout message
+        setHistory(prev => [...prev, timeoutMsg, '─'.repeat(80)]);
         setFullHistory(prev => [...prev, {
           role: 'user' as const,
           content: command
@@ -468,8 +473,9 @@ export function useCommandProcessor(
       setError(errorMsg);
       setResponse(errorMsg);
 
-      // Update display history with error
-      setHistory(prev => [...prev, `❯ ${command}`, errorMsg]);
+      // Update display history with error only
+      // Command was already added at the start for better UX
+      setHistory(prev => [...prev, errorMsg]);
 
       // Update Turso with error status
       if (

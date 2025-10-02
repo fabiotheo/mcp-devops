@@ -30,6 +30,10 @@ import { useCommandProcessor } from './hooks/useCommandProcessor.js';
 import { useInputHandler } from './hooks/useInputHandler.js';
 import { useBackendInitialization } from './hooks/useBackendInitialization.js';
 import { useHistoryManager } from './hooks/useHistoryManager.js';
+import { useStatusProcessor } from './hooks/useStatusProcessor.js';
+
+// Import components
+import StatusLine from './components/StatusLine.js';
 
 // Import utilities
 import { formatResponse } from './utils/responseFormatter.js';
@@ -95,6 +99,13 @@ const MCPInkAppInner: React.FC = () => {
   const { isDebug: debugMode, isTTY, user: currentUser } = config;
 
   const terminalWidth = stdout?.columns || 80;
+
+  // Process execution log for StatusLine display
+  const statusData = useStatusProcessor({
+    executionLog,
+    isProcessing,
+    maxIterations: 10
+  });
 
   // Initialize history manager with proper typing
   const { loadCommandHistory, saveToHistory } = useHistoryManager({
@@ -401,42 +412,14 @@ const MCPInkAppInner: React.FC = () => {
               })
             )
       ),
-      // Execution log - streaming progress
-      executionLog.length > 0 && React.createElement(
+      // Status Line - compact progress display (replaces verbose execution log)
+      statusData.shouldShow && React.createElement(
         Box,
         {
           paddingLeft: 1,
           paddingRight: 1,
-          marginTop: 1,
-          flexDirection: 'column',
         },
-        React.createElement(
-          Static,
-          {
-            items: executionLog,
-            children: (event: any) => {
-              const icon = event.type === 'iteration-start' ? '🔄' :
-                          event.type === 'command-execute' ? '🔧' :
-                          event.type === 'command-complete' ? '✓' :
-                          event.type === 'timeout' ? '⏳' :
-                          event.type === 'error' ? '❌' : '•';
-
-              const color = event.type === 'command-complete' ? 'green' :
-                           event.type === 'timeout' ? 'yellow' :
-                           event.type === 'error' ? 'red' : 'cyan';
-
-              return React.createElement(
-                Box,
-                { key: event.id },
-                React.createElement(
-                  Text,
-                  { color, dimColor: event.type === 'command-complete' },
-                  `${icon} ${event.message}${event.duration ? ` (${event.duration}ms)` : ''}`
-                )
-              );
-            }
-          }
-        )
+        React.createElement(StatusLine, statusData)
       )
     ),
     // Bottom section: Input area

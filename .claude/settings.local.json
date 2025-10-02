@@ -161,7 +161,10 @@
       "WebSearch",
       "Bash(MCP_USER=fabio timeout 10 node ~/.mcp-terminal/src/mcp-ink-cli.js --debug)",
       "WebFetch(domain:www.npmjs.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(MCP_USER=fabio timeout 8 node src/mcp-ink-cli.tsx --debug)",
+      "Bash(MCP_USER=fabio gtimeout 8 node src/mcp-ink-cli.tsx --debug)",
+      "Bash(MCP_USER=fabio node src/mcp-ink-cli.tsx --debug)"
     ],
     "deny": [],
     "ask": []

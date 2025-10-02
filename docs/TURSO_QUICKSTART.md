@@ -14,7 +14,7 @@
 ```bash
 # ⚠️ CUIDADO: Apenas o admin executa isso!
 # Cria o schema do banco de dados
-node libs/turso-admin-setup.js
+node libs/turso-admin-setup.ts
 
 # Após criar schema, gerar token de CLIENTE no Turso
 # com permissões READ + WRITE (não admin!)
@@ -23,7 +23,7 @@ node libs/turso-admin-setup.js
 #### Para CLIENTES (todas as máquinas):
 ```bash
 # Configurar conexão com banco existente
-node libs/turso-client-setup.js
+node libs/turso-client-setup.ts
 
 # Criar primeiro usuário (se necessário)
 ipcom-chat user create --username USER --name "Nome" --email email@exemplo.com
@@ -100,13 +100,13 @@ ipcom-chat machine info
 
 ```bash
 # Verificar se schema está correto
-node libs/turso-verify-schema.js
+node libs/turso-verify-schema.ts
 
 # Migrar histórico local para Turso
-node libs/migrate-history.js
+node libs/migrate-history.ts
 
 # Verificar status da migração
-node libs/migrate-history.js verify
+node libs/migrate-history.ts verify
 ```
 
 ## 📊 Modos de Operação
@@ -170,10 +170,10 @@ export IPCOM_USER="fabio"
 cat ~/.mcp-terminal/turso-config.json
 
 # Verificar integridade do schema
-node libs/turso-verify-schema.js
+node libs/turso-verify-schema.ts
 
 # Re-configurar (cliente)
-node libs/turso-client-setup.js
+node libs/turso-client-setup.ts
 ```
 
 ### Usuário não encontrado
@@ -191,7 +191,7 @@ ipcom-chat user create --username USER --name "Nome" --email email
 ipcom-chat history stats
 
 # Forçar sincronização
-node libs/turso-client.js sync
+node libs/turso-client.ts sync
 
 # Ver logs
 tail -f ~/.mcp-terminal/turso.log
@@ -206,7 +206,7 @@ tail -f ~/.mcp-terminal/turso.log
 1. **No servidor principal (APENAS UMA VEZ!):**
 ```bash
 # Criar schema do banco
-node libs/turso-admin-setup.js
+node libs/turso-admin-setup.ts
 
 # Seguir instruções para gerar token de CLIENTE no Turso
 # Token deve ter apenas READ + WRITE (não admin!)

@@ -2,3 +2,5 @@ node_modules/
 /backup-v1-20250921-085953/
 /backup-libs-20250921-211841/
 /backup-interface-v2-20250921-213840/
+dist/
+*.log

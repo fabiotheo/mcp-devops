@@ -111,7 +111,7 @@ Migração para **Ink** com:
 interface-v2/
 ├── components/
 │   ├── App.jsx
-│   ├── InputHandler.jsx
+│   ├── InputHandler.tsx
 │   └── PasteManager.jsx
 ├── tests/
 │   └── test-ink-basic.js
@@ -150,10 +150,10 @@ interface-v2/
 5. **Componentes adicionais**
    ```
    components/
-   ├── HighlightedText.jsx
+   ├── HighlightedText.tsx
    ├── CommandHistory.jsx
-   ├── AutoComplete.jsx
-   └── StatusIndicator.jsx
+   ├── AutoComplete.tsx
+   └── StatusIndicator.tsx
    ```
 
 6. **Testes**
@@ -169,7 +169,7 @@ interface-v2/
 #### Componentes de Integração:
 1. **AIConnector Bridge**
    ```javascript
-   // Bridge entre Ink UI e ai_orchestrator.js
+   // Bridge entre Ink UI e ai_orchestrator.ts
    - EventEmitter para comunicação bidirecional
    - Manter compatibilidade com API existente
    ```
@@ -193,12 +193,12 @@ interface-v2/
    ```
    interface-v2/
    ├── bridges/
-   │   ├── AIConnector.js
-   │   ├── CommandProcessor.js
+   │   ├── AIConnector.ts
+   │   ├── CommandProcessor.ts
    │   └── adapters/
-   │       ├── PatternAdapter.js
+   │       ├── PatternAdapter.ts
    │       ├── WebSearchAdapter.js
-   │       └── TursoAdapter.js
+   │       └── TursoAdapter.ts
    ```
 
 6. **Validação**

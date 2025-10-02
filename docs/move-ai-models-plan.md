@@ -6,21 +6,21 @@ Mover o diretório `ai_models/` para dentro de `interface-v2/` para melhor organ
 ## Análise de Impacto
 
 ### Arquivos Core que precisam de atualização:
-1. **ai_orchestrator.js**
-   - Import atual: `./ai_models/model_factory.js`
-   - Novo import: `./interface-v2/ai_models/model_factory.js`
+1. **ai_orchestrator.ts**
+   - Import atual: `./ai_models/model_factory.ts`
+   - Novo import: `./interface-v2/ai_models/model_factory.ts`
 
-2. **ai_orchestrator_bash.js**
+2. **ai_orchestrator_bash.ts**
    - Não importa diretamente de ai_models (usa apenas o modelo passado)
 
 3. **mcp-assistant.js**
-   - Import atual: `./ai_models/model_factory.js`
-   - Novo import: `./interface-v2/ai_models/model_factory.js`
+   - Import atual: `./ai_models/model_factory.ts`
+   - Novo import: `./interface-v2/ai_models/model_factory.ts`
 
 ### Arquivos dentro de interface-v2:
 1. **interface-v2/mcp-ink-cli.mjs**
-   - Import atual: `../ai_models/model_factory.js`
-   - Novo import: `./ai_models/model_factory.js`
+   - Import atual: `../ai_models/model_factory.ts`
+   - Novo import: `./ai_models/model_factory.ts`
 
 ### Setup.js precisa atualizar:
 1. Caminho de origem para copiar ai_models
@@ -39,31 +39,31 @@ mv ai_models/ interface-v2/ai_models/
 
 ### Fase 3: Atualizar Imports nos Arquivos Core
 
-#### ai_orchestrator.js
+#### ai_orchestrator.ts
 ```javascript
 // De:
-import ModelFactory from './ai_models/model_factory.js';
+import ModelFactory from './ai_models/model_factory.ts';
 
 // Para:
-import ModelFactory from './interface-v2/ai_models/model_factory.js';
+import ModelFactory from './interface-v2/ai_models/model_factory.ts';
 ```
 
 #### mcp-assistant.js
 ```javascript
 // De:
-import ModelFactory from './ai_models/model_factory.js';
+import ModelFactory from './ai_models/model_factory.ts';
 
 // Para:
-import ModelFactory from './interface-v2/ai_models/model_factory.js';
+import ModelFactory from './interface-v2/ai_models/model_factory.ts';
 ```
 
 #### interface-v2/mcp-ink-cli.mjs
 ```javascript
 // De:
-import ModelFactory from '../ai_models/model_factory.js';
+import ModelFactory from '../ai_models/model_factory.ts';
 
 // Para:
-import ModelFactory from './ai_models/model_factory.js';
+import ModelFactory from './ai_models/model_factory.ts';
 ```
 
 ### Fase 4: Atualizar setup.js
@@ -80,10 +80,10 @@ const destAiModelsDir = path.join(this.mcpDir, 'ai_models');
 ```
 
 #### Ajuste de imports na instalação (linhas ~953-962)
-Adicionar lógica para ajustar caminhos de ai_orchestrator.js e mcp-assistant.js:
+Adicionar lógica para ajustar caminhos de ai_orchestrator.ts e mcp-assistant.js:
 ```javascript
 // Para arquivos na raiz que importam de interface-v2/ai_models
-if (sourceFile === 'ai_orchestrator.js' || sourceFile === 'mcp-assistant.js') {
+if (sourceFile === 'ai_orchestrator.ts' || sourceFile === 'mcp-assistant.js') {
     adjustedContent = adjustedContent.replace(
         /from ['"]\.\/interface-v2\/ai_models\//g,
         "from './ai_models/"
@@ -93,7 +93,7 @@ if (sourceFile === 'ai_orchestrator.js' || sourceFile === 'mcp-assistant.js') {
 
 ### Fase 5: Testes
 1. Testar interface-v2 localmente
-2. Testar ai_orchestrator.js
+2. Testar ai_orchestrator.ts
 3. Testar mcp-assistant.js
 4. Executar setup.js --force
 5. Testar instalação em ~/.mcp-terminal/
@@ -118,8 +118,8 @@ if (sourceFile === 'ai_orchestrator.js' || sourceFile === 'mcp-assistant.js') {
 # Restaurar ai_models para raiz
 mv interface-v2/ai_models/ ai_models/
 
-# Reverter imports em ai_orchestrator.js
-sed -i '' 's|./interface-v2/ai_models/|./ai_models/|g' ai_orchestrator.js
+# Reverter imports em ai_orchestrator.ts
+sed -i '' 's|./interface-v2/ai_models/|./ai_models/|g' ai_orchestrator.ts
 
 # Reverter imports em mcp-assistant.js
 sed -i '' 's|./interface-v2/ai_models/|./ai_models/|g' mcp-assistant.js
@@ -150,8 +150,8 @@ mv ai_models/ interface-v2/ai_models/
 # Fase 3: Atualizar imports
 echo "✏️ Atualizando imports..."
 
-# ai_orchestrator.js
-sed -i '' 's|./ai_models/|./interface-v2/ai_models/|g' ai_orchestrator.js
+# ai_orchestrator.ts
+sed -i '' 's|./ai_models/|./interface-v2/ai_models/|g' ai_orchestrator.ts
 
 # mcp-assistant.js
 sed -i '' 's|./ai_models/|./interface-v2/ai_models/|g' mcp-assistant.js
@@ -168,7 +168,7 @@ chmod +x migrate-ai-models.sh
 
 ## Checklist de Validação
 - [ ] ai_models movido para interface-v2/
-- [ ] ai_orchestrator.js importando corretamente
+- [ ] ai_orchestrator.ts importando corretamente
 - [ ] mcp-assistant.js importando corretamente
 - [ ] interface-v2/mcp-ink-cli.mjs importando corretamente
 - [ ] setup.js atualizado para copiar do novo local

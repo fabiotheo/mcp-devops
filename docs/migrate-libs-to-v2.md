@@ -5,9 +5,9 @@
 ### Arquivos que importam de `./libs/`:
 
 1. **Arquivos principais (precisam atualização):**
-   - `interface-v2/mcp-ink-cli.mjs` - Já usa `../libs/pattern_matcher.js`
+   - `interface-v2/mcp-ink-cli.mjs` - Já usa `../libs/pattern_matcher.ts`
    - `ipcom-chat-cli.js` - Usa turso-client, user-manager, machine-identity
-   - `mcp-claude.js` - Usa system_detector, turso-client, sync-manager
+   - `mcp-claude.ts` - Usa system_detector, turso-client, sync-manager
 
 2. **Arquivos de teste (podem ser removidos ou ignorados):**
    - `add-test-commands.js` - Script de teste
@@ -17,16 +17,16 @@
 
 ### Bibliotecas em `libs/` (24 arquivos):
 - **Core/Essenciais:**
-  - `turso-client.js` - Cliente do banco de dados Turso
-  - `pattern_matcher.js` - Matcher de padrões de comandos
-  - `system_detector.js` - Detector de sistema operacional
-  - `user-manager.js` - Gerenciador de usuários
-  - `machine-identity.js` - Identidade da máquina
-  - `sync-manager.js` - Gerenciador de sincronização
+  - `turso-client.ts` - Cliente do banco de dados Turso
+  - `pattern_matcher.ts` - Matcher de padrões de comandos
+  - `system_detector.ts` - Detector de sistema operacional
+  - `user-manager.ts` - Gerenciador de usuários
+  - `machine-identity.ts` - Identidade da máquina
+  - `sync-manager.ts` - Gerenciador de sincronização
 
 - **UI/Input:**
-  - `paste-manager.js` - Gerenciador de paste
-  - `multiline-input.js` - Input multi-linha
+  - `paste-manager.ts` - Gerenciador de paste
+  - `multiline-input.ts` - Input multi-linha
   - `keybinding-manager.js` - Gerenciador de atalhos
 
 - **Outros:**
@@ -48,33 +48,33 @@ mv libs/ interface-v2/libs/
 #### interface-v2/mcp-ink-cli.mjs
 ```javascript
 // De:
-import PatternMatcher from '../libs/pattern_matcher.js';
+import PatternMatcher from '../libs/pattern_matcher.ts';
 // Para:
-import PatternMatcher from './libs/pattern_matcher.js';
+import PatternMatcher from './libs/pattern_matcher.ts';
 ```
 
 #### ipcom-chat-cli.js
 ```javascript
 // De:
-import TursoHistoryClient from './libs/turso-client.js';
-import UserManager from './libs/user-manager.js';
-import MachineIdentityManager from './libs/machine-identity.js';
+import TursoHistoryClient from './libs/turso-client.ts';
+import UserManager from './libs/user-manager.ts';
+import MachineIdentityManager from './libs/machine-identity.ts';
 // Para:
-import TursoHistoryClient from './interface-v2/libs/turso-client.js';
-import UserManager from './interface-v2/libs/user-manager.js';
-import MachineIdentityManager from './interface-v2/libs/machine-identity.js';
+import TursoHistoryClient from './interface-v2/libs/turso-client.ts';
+import UserManager from './interface-v2/libs/user-manager.ts';
+import MachineIdentityManager from './interface-v2/libs/machine-identity.ts';
 ```
 
-#### mcp-claude.js (arquivo legacy)
+#### mcp-claude.ts (arquivo legacy)
 ```javascript
 // De:
-import SystemDetector from './libs/system_detector.js';
-import TursoHistoryClient from './libs/turso-client.js';
-import SyncManager from './libs/sync-manager.js';
+import SystemDetector from './libs/system_detector.ts';
+import TursoHistoryClient from './libs/turso-client.ts';
+import SyncManager from './libs/sync-manager.ts';
 // Para:
-import SystemDetector from './interface-v2/libs/system_detector.js';
-import TursoHistoryClient from './interface-v2/libs/turso-client.js';
-import SyncManager from './interface-v2/libs/sync-manager.js';
+import SystemDetector from './interface-v2/libs/system_detector.ts';
+import TursoHistoryClient from './interface-v2/libs/turso-client.ts';
+import SyncManager from './interface-v2/libs/sync-manager.ts';
 ```
 
 ### Fase 4: Atualizar setup.js
@@ -133,7 +133,7 @@ mv libs interface-v2/
 # Atualizar imports
 sed -i '' 's|../libs/|./libs/|g' interface-v2/mcp-ink-cli.mjs
 sed -i '' 's|./libs/|./interface-v2/libs/|g' ipcom-chat-cli.js
-sed -i '' 's|./libs/|./interface-v2/libs/|g' mcp-claude.js
+sed -i '' 's|./libs/|./interface-v2/libs/|g' mcp-claude.ts
 
 echo "✅ Migração concluída!"
 ```

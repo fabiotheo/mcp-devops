@@ -1,0 +1,19 @@
+{
+  "name": "simple-command-response",
+  "created": "2025-09-26T01:10:56.547Z",
+  "updated": "2025-09-26T01:10:56.548Z",
+  "hash": "f675c84ca52755871a83058737263026603ba20a575368c6b32711e248ac5a15",
+  "data": [
+    {
+      "role": "user",
+      "content": "what is docker ps",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "assistant",
+      "content": "Docker ps lists running containers...",
+      "timestamp": "[TIMESTAMP]"
+    }
+  ]
+}

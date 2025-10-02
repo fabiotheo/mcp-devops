@@ -300,11 +300,9 @@ class MCPSetup {
 
       console.log('\n✅ Força atualização concluída com sucesso!\n');
       console.log('🔧 Arquivos atualizados:');
-      console.log('   • mcp-assistant.js');
-      console.log('   • mcp-client.js');
       console.log('   • mcp-interactive.js');
-      console.log('   • ai_orchestrator.js');
-      console.log('   • system_detector.js');
+      console.log('   • ai_orchestrator.ts');
+      console.log('   • system_detector.ts');
       console.log('   • Todos os outros arquivos do projeto\n');
 
       console.log('📋 Próximos passos:');
@@ -483,7 +481,7 @@ class MCPSetup {
     try {
       await fs.mkdir(aiModelsDir, { recursive: true });
 
-      const sourceDir = path.join(process.cwd(), 'src', 'ai_models');
+      const sourceDir = path.join(process.cwd(), 'dist', 'ai_models');
 
       // Verificar se o diretório de origem existe
       try {
@@ -492,7 +490,6 @@ class MCPSetup {
         const sourceFiles = [
           'base_model.js',
           'claude_model.js',
-          'openai_model.js',
           'gemini_model.js',
           'model_factory.js',
         ];
@@ -517,9 +514,9 @@ class MCPSetup {
         // Criar arquivos de modelo padrão
         console.log('  📝 Criando arquivos de modelo padrão...');
 
-        // base_model.js
+        // base_model.ts
         await fs.writeFile(
-          path.join(aiModelsDir, 'base_model.js'),
+          path.join(aiModelsDir, 'base_model.ts'),
           `// ~/.mcp-terminal/ai_models/base_model.js
 // Classe base para todos os modelos de IA
 
@@ -560,14 +557,14 @@ export default class BaseAIModel {
 }`,
         );
 
-        // claude_model.js
+        // claude_model.ts
         await fs.writeFile(
-          path.join(aiModelsDir, 'claude_model.js'),
-          `// ~/.mcp-terminal/ai_models/claude_model.js
+          path.join(aiModelsDir, 'claude_model.ts'),
+          `// ~/.mcp-terminal/ai_models/claude_model.ts
 // Implementação do modelo Claude da Anthropic
 
 import { Anthropic } from '@anthropic-ai/sdk';
-import BaseAIModel from './base_model.js';
+import BaseAIModel from './base_model.ts';
 
 export default class ClaudeModel extends BaseAIModel {
     constructor(config) {
@@ -742,9 +739,9 @@ Responda de forma direta e prática.\`;
 }`,
         );
 
-        // model_factory.js
+        // model_factory.ts
         await fs.writeFile(
-          path.join(aiModelsDir, 'model_factory.js'),
+          path.join(aiModelsDir, 'model_factory.ts'),
           `// ~/.mcp-terminal/ai_models/model_factory.js
 // Factory para criar a instância do modelo de IA adequado
 
@@ -1048,19 +1045,19 @@ export default class ModelFactory {
 
     // Se o arquivo vem de src/, precisa ajustar os imports da v2
     if (sourceFile.includes('src/')) {
-      // ../ai_orchestrator_bash.js -> ./ai_orchestrator_bash.js
+      // ../ai_orchestrator_bash.ts -> ./ai_orchestrator_bash.ts
       adjustedContent = adjustedContent.replace(
         /from ['"]\.\.\/ai_orchestrator_bash\.js['"]/g,
-        "from './ai_orchestrator_bash.js'",
+        "from './ai_orchestrator_bash.ts'",
       );
       // libs agora está dentro de src, então ./libs/ já está correto
       // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/libs\//g, "from './libs/");
       // ai_models agora está dentro de src, então ./ai_models/ já está correto
       // adjustedContent = adjustedContent.replace(/from ['"]\.\.\/ai_models\//g, "from './ai_models/");
-      // ./bridges/adapters/TursoAdapter.js -> ./src/bridges/adapters/TursoAdapter.js
+      // ./bridges/adapters/TursoAdapter.ts -> ./src/bridges/adapters/TursoAdapter.ts
       adjustedContent = adjustedContent.replace(
         /from ['"]\.\/bridges\/adapters\/TursoAdapter\.js['"]/g,
-        "from './src/bridges/adapters/TursoAdapter.js'",
+        "from './src/bridges/adapters/TursoAdapter.ts'",
       );
     }
 
@@ -1088,22 +1085,21 @@ export default class ModelFactory {
     console.log('\n🔧 Copiando e configurando scripts...');
 
     // Lista de arquivos a serem copiados
-    // MIGRAÇÃO V2: src/mcp-ink-cli.mjs agora é a interface principal
     const filesToCopy = [
-      // Interface principal V2
-      { src: 'src/mcp-ink-cli.mjs', dest: 'ipcom-chat-cli.js' },
+      // CLI principal com comandos (compilado de TypeScript)
+      { src: 'dist/ipcom-chat-cli.js', dest: 'src/ipcom-chat-cli.js' },
 
-      // Backup da v1 (se existir)
-      { src: 'src/ipcom-chat-cli.js', dest: 'ipcom-chat-cli-v1.backup.js' },
+      // Interface Ink (compilado de TypeScript)
+      { src: 'dist/mcp-ink-cli.js', dest: 'src/mcp-ink-cli.js' },
 
-      // Orquestradores e libs essenciais
-      { src: 'src/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
-      { src: 'src/ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
+      // Orquestradores e libs essenciais (agora de dist/)
+      { src: 'dist/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
+      { src: 'dist/ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
 
-      // Arquivos de configuração
-      { src: 'src/configure-ai.js', dest: 'configure-ai.js' },
+      // Arquivos de configuração (agora de dist/)
+      { src: 'dist/configure-ai.js', dest: 'configure-ai.js' },
 
-      // Scripts shell
+      // Scripts shell (não compilados, mantém original)
       { src: 'scripts/zsh_integration.sh', dest: 'zsh_integration.sh' },
 
       // Mantém deploy para Linux
@@ -1132,9 +1128,9 @@ export default class ModelFactory {
       }
     }
 
-    // Copiar libs
+    // Copiar libs (agora de dist/)
     try {
-      const libsDir = path.join(process.cwd(), 'src', 'libs');
+      const libsDir = path.join(process.cwd(), 'dist', 'libs');
       const destLibsDir = path.join(this.mcpDir, 'libs');
 
       // Criar diretório libs se não existir
@@ -1159,9 +1155,9 @@ export default class ModelFactory {
       // console.log(`  ⚠ Diretório libs não encontrado (normal em versões antigas)`);
     }
 
-    // Copiar components da src (necessário para a v2)
+    // Copiar components da dist (necessário para a v2)
     try {
-      const componentsDir = path.join(process.cwd(), 'src', 'components');
+      const componentsDir = path.join(process.cwd(), 'dist', 'components');
       const destComponentsDir = path.join(this.mcpDir, 'components');
 
       // Criar diretório components se não existir
@@ -1183,9 +1179,9 @@ export default class ModelFactory {
       console.log(`  ⚠ Erro ao copiar components: ${error.message}`);
     }
 
-    // Copiar src (Nova interface Ink)
+    // Copiar src (Nova interface Ink) - agora de dist/
     try {
-      const interfaceV2Dir = path.join(process.cwd(), 'src');
+      const interfaceV2Dir = path.join(process.cwd(), 'dist');
       const destInterfaceV2Dir = path.join(this.mcpDir, 'src');
 
       // Criar diretório src se não existir
@@ -1251,7 +1247,7 @@ export default class ModelFactory {
       const ipcomChatContent = `#!/usr/bin/env node
 
 // V2 Interface - Always use the new Ink interface
-await import('./ipcom-chat-cli.js');`;
+await import('./src/ipcom-chat-cli.js');`;
 
       const ipcomChatPath = path.join(this.mcpDir, 'ipcom-chat');
       await fs.writeFile(ipcomChatPath, ipcomChatContent);
@@ -1306,9 +1302,7 @@ configurator.run().catch(error => {
     }
 
     const scripts = [
-      'mcp-client.js',
-      'mcp-assistant.js',
-      'configure-ai.js',
+      'configure-ai.ts',
       'mcp-configure',
       'mcp-interactive.js',
       'ipcom-chat',
@@ -1338,14 +1332,6 @@ configurator.run().catch(error => {
       await fs.mkdir(binDir, { recursive: true });
 
       const links = [
-        {
-          from: path.join(this.mcpDir, 'mcp-assistant.js'),
-          to: path.join(binDir, 'ask'),
-        },
-        {
-          from: path.join(this.mcpDir, 'mcp-client.js'),
-          to: path.join(binDir, 'mcp-monitor'),
-        },
         {
           from: path.join(this.mcpDir, 'mcp-configure'),
           to: path.join(binDir, 'mcp-configure'),

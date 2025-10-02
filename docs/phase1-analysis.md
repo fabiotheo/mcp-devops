@@ -43,12 +43,12 @@ Estrutura de Componentes:
 interface-v2/
 ├── components/
 │   ├── AppV3.jsx         # Componente principal
-│   ├── InputHandler.jsx  # Gerencia entrada
+│   ├── InputHandler.tsx  # Gerencia entrada
 │   ├── PasteManager.jsx  # Gerencia paste
-│   └── StatusIndicator.jsx
+│   └── StatusIndicator.tsx
 ├── bridges/
-│   ├── AIConnector.js    # Conexão com IA
-│   └── CommandProcessor.js
+│   ├── AIConnector.ts    # Conexão com IA
+│   └── CommandProcessor.ts
 └── indexV3.js            # Entry point
 ```
 
@@ -90,12 +90,12 @@ A duplicação visual que você relatou pode estar ocorrendo devido a:
 User Input
     │
     ▼
-InputHandler.jsx
+InputHandler.tsx
     │
     ▼
 AppV3.jsx (setState)
     │
-    ├──► AIConnector.js
+    ├──► AIConnector.ts
     │        │
     │        ▼
     │    AI Response
@@ -196,7 +196,7 @@ class CharacterStreamer {
    - Remover duplicação de output
    - Implementar streaming
 
-2. `interface-v2/components/InputHandler.jsx`
+2. `interface-v2/components/InputHandler.tsx`
    - Simplificar para prompt único
 
 ## Próximos Passos

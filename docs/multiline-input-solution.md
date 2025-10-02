@@ -8,7 +8,7 @@ Created a custom `MultilineInput` component that properly handles multi-line tex
 
 ### Component Features
 
-#### `interface-v2/components/MultilineInput.js`
+#### `interface-v2/components/MultilineInput.ts`
 - **Proper line rendering**: Each line is rendered in its own Box
 - **Smart cursor positioning**: Always at the end of the last line
 - **Auto-indentation**: Continuation lines are indented by 2 spaces

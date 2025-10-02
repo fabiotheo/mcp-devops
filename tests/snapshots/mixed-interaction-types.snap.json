@@ -1,0 +1,41 @@
+{
+  "name": "mixed-interaction-types",
+  "created": "2025-09-26T01:10:56.595Z",
+  "updated": "2025-09-26T01:10:56.595Z",
+  "hash": "b880ea1439bb77d40e228060f7f65e59cf0bec71f7f46900c5916b264ce400a7",
+  "data": [
+    {
+      "role": "user",
+      "content": "/help",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "system",
+      "content": "Available commands:\n/help - Show this help\n/clear - Clear screen\n/history - Show command history",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "user",
+      "content": "normal question about docker",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "assistant",
+      "content": "Docker is a containerization platform...",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "user",
+      "content": "/clear",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "system",
+      "content": "[Screen cleared]",
+      "timestamp": "[TIMESTAMP]"
+    }
+  ]
+}

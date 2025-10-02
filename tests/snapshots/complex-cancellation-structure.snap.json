@@ -1,0 +1,41 @@
+{
+  "name": "complex-cancellation-structure",
+  "created": "2025-09-26T01:10:56.557Z",
+  "updated": "2025-09-26T01:10:56.557Z",
+  "hash": "53514b31f60e8fe0f5b094cebc01a33cc78009d5f0c12a9f4a995a868d78dc40",
+  "data": [
+    {
+      "role": "user",
+      "content": "first command",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "assistant",
+      "content": "First response from AI",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "user",
+      "content": "second command that will be cancelled",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "system",
+      "content": "[A mensagem anterior foi cancelada pelo usuário com ESC antes de ser respondida]",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "user",
+      "content": "third command after cancellation",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]"
+    },
+    {
+      "role": "assistant",
+      "content": "Response to third command",
+      "timestamp": "[TIMESTAMP]"
+    }
+  ]
+}

@@ -24,7 +24,7 @@ Solução Recomendada
 
 Para resolver completamente o problema do salvamento de respostas, seria melhor:
 
-1. Modificar o saveCommand no turso-client.js para retornar todos os IDs quando em modo hybrid
+1. Modificar o saveCommand no turso-client.ts para retornar todos os IDs quando em modo hybrid
 2. Armazenar esses IDs no TursoAdapter
 3. Usar os IDs corretos ao atualizar as respostas
 

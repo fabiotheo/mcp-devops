@@ -161,7 +161,7 @@ CREATE TABLE command_cache (
 #### 2.1 Gerenciador de Identidade de Máquina
 
 ```javascript
-// libs/machine-identity.js
+// libs/machine-identity.ts
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
@@ -264,7 +264,7 @@ export default class MachineIdentityManager {
 #### 2.2 Cliente Turso
 
 ```javascript
-// libs/turso-client.js
+// libs/turso-client.ts
 import { createClient } from '@libsql/client';
 
 export default class TursoHistoryClient {
@@ -452,7 +452,7 @@ export default class TursoHistoryClient {
 #### 2.3 Gerenciador de Usuários
 
 ```javascript
-// libs/user-manager.js
+// libs/user-manager.ts
 export default class UserManager {
     constructor(tursoClient) {
         this.client = tursoClient;
@@ -571,9 +571,9 @@ export default class UserManager {
 
 ```javascript
 // Adicionar no início do arquivo
-import TursoHistoryClient from './libs/turso-client.js';
-import UserManager from './libs/user-manager.js';
-import MachineIdentityManager from './libs/machine-identity.js';
+import TursoHistoryClient from './libs/turso-client.ts';
+import UserManager from './libs/user-manager.ts';
+import MachineIdentityManager from './libs/machine-identity.ts';
 
 // Parse argumentos de linha de comando
 const args = process.argv.slice(2);
@@ -628,9 +628,9 @@ async processInput(input) {
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import TursoHistoryClient from './libs/turso-client.js';
-import UserManager from './libs/user-manager.js';
-import MachineIdentityManager from './libs/machine-identity.js';
+import TursoHistoryClient from './libs/turso-client.ts';
+import UserManager from './libs/user-manager.ts';
+import MachineIdentityManager from './libs/machine-identity.ts';
 
 const program = new Command();
 
@@ -801,7 +801,7 @@ program.parse();
 #### 4.1 Migração do Histórico Existente
 
 ```javascript
-// libs/migrate-history.js
+// libs/migrate-history.ts
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
@@ -1242,14 +1242,14 @@ export default class SuggestionEngine {
 
 ### Semana 1: Fundação
 - [ ] Setup Turso (criar DB, configurar replicas)
-- [ ] Implementar machine-identity.js
-- [ ] Implementar turso-client.js básico
+- [ ] Implementar machine-identity.ts
+- [ ] Implementar turso-client.ts básico
 - [ ] Criar schema inicial no Turso
 - [ ] Testes unitários dos módulos
 
 ### Semana 2: Integração
 - [ ] Integrar Turso com mcp-interactive.js
-- [ ] Implementar user-manager.js
+- [ ] Implementar user-manager.ts
 - [ ] Criar comandos CLI (user, history, machine)
 - [ ] Sistema de migração de histórico existente
 - [ ] Testes de integração
@@ -1435,7 +1435,7 @@ export default class TursoMonitor {
 ## Próximos Passos Imediatos
 
 1. **Criar conta Turso** e database de desenvolvimento
-2. **Implementar machine-identity.js** com testes
+2. **Implementar machine-identity.ts** com testes
 3. **Protótipo mínimo** com save/load básico
 4. **Validar** com 2-3 máquinas de teste
 5. **Iterar** baseado em feedback

@@ -16,8 +16,8 @@ find . -type f -name "*.js" -o -name "*.mjs" | grep -v node_modules | grep -v ba
 # 1.2 Verificar arquivos principais em uso
 - mcp-client.js (monitoramento de comandos)
 - mcp-assistant.js (interface principal v1)
-- ai_orchestrator.js (orquestrador compartilhado)
-- libs/turso-client.js (cliente Turso)
+- ai_orchestrator.ts (orquestrador compartilhado)
+- libs/turso-client.ts (cliente Turso)
 - setup.js (instalador atual)
 
 # 1.3 Checklist de testes funcionais
@@ -142,7 +142,7 @@ const destInterfaceV2Dir = path.join(this.mcpDir, 'interface-v2');
 │   ├── bridges/
 │   │   ├── AIOrchestrator.js
 │   │   └── adapters/
-│   │       └── TursoAdapter.js
+│   │       └── TursoAdapter.ts
 │   └── components/
 ├── libs/ (compartilhado)
 ├── patterns/ (compartilhado)
@@ -249,7 +249,7 @@ cp ~/.mcp_terminal_history.backup ~/.mcp_terminal_history
 ## ALTERAÇÕES NECESSÁRIAS NO CÓDIGO
 
 ### 1. Correções já implementadas
-- [x] ORDER BY timestamp ASC no turso-client.js
+- [x] ORDER BY timestamp ASC no turso-client.ts
 - [x] Remoção de marcadores de cancelamento do histórico de navegação
 
 ### 2. Pendentes para migração

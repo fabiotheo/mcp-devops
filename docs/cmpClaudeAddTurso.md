@@ -1,15 +1,15 @@
-# Plano de Integração Turso no mcp-claude.js
+# Plano de Integração Turso no mcp-claude.ts
 
 ## Visão Geral
 
-Este documento detalha o plano completo para integrar o Turso Database no `mcp-claude.js`, mantendo toda a UX atual (paste detection, ESC interruption, conversation history) enquanto adiciona persistência de conversas e sincronização entre sessões.
+Este documento detalha o plano completo para integrar o Turso Database no `mcp-claude.ts`, mantendo toda a UX atual (paste detection, ESC interruption, conversation history) enquanto adiciona persistência de conversas e sincronização entre sessões.
 
 ## Contexto Atual
 
 ### O que temos:
-- `mcp-claude.js` - Interface moderna com UX melhorado
+- `mcp-claude.ts` - Interface moderna com UX melhorado
 - Sistema antigo (`src/core/mcp-interactive.js`) - Tinha integração completa com Turso
-- `libs/turso-client.js` - Cliente Turso já implementado
+- `libs/turso-client.ts` - Cliente Turso já implementado
 - Infraestrutura de configuração e setup funcional
 
 ### O que perdemos na migração:
@@ -64,7 +64,7 @@ ESC pressionado → Salvar pergunta com status "cancelled"
 ### Sequência de Implementação
 
 #### Etapa 1: Preparação
-- Criar backup: `cp mcp-claude.js mcp-claude-backup.js`
+- Criar backup: `cp mcp-claude.ts mcp-claude-backup.js`
 - Verificar APIs do TursoHistoryClient existente
 - Adicionar imports necessários
 
@@ -95,8 +95,8 @@ ESC pressionado → Salvar pergunta com status "cancelled"
 ### 1. Imports Adicionais
 
 ```javascript
-import TursoHistoryClient from './libs/turso-client.js';
-import UserManager from './libs/user-manager.js';
+import TursoHistoryClient from './libs/turso-client.ts';
+import UserManager from './libs/user-manager.ts';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
@@ -232,7 +232,7 @@ async saveTursoConversation(question, response, status) {
 
 ```bash
 # Test 1: Conexão Turso
-node mcp-claude.js
+node mcp-claude.ts
 # Expected: "✓ Turso conectado" ou "⚠️ Turso indisponível"
 
 # Test 2: Conversa Normal
@@ -262,7 +262,7 @@ node mcp-claude.js
 ```bash
 # Test 6: Modo Offline
 mv ~/.mcp-terminal/turso-config.json ~/.mcp-terminal/turso-config.json.bak
-node mcp-claude.js
+node mcp-claude.ts
 # Expected: "ℹ️ Turso não configurado (modo offline)" + interface funciona normal
 
 # Test 7: Recovery
@@ -311,7 +311,7 @@ mv ~/.mcp-terminal/turso-config.json.bak ~/.mcp-terminal/turso-config.json
 
 ### Passo 1: Backup e Preparação
 ```bash
-cp mcp-claude.js mcp-claude-backup.js
+cp mcp-claude.ts mcp-claude-backup.js
 ```
 
 ### Passo 2: Implementação Incremental
@@ -334,7 +334,7 @@ cp mcp-claude.js mcp-claude-backup.js
 
 ## Resultado Final
 
-Sistema híbrido que mantém toda a excelente UX do `mcp-claude.js` atual, mas adiciona:
+Sistema híbrido que mantém toda a excelente UX do `mcp-claude.ts` atual, mas adiciona:
 - Persistência automática de todas as conversas
 - Histórico sincronizado entre sessões
 - Política inteligente para cancelamentos

@@ -308,13 +308,13 @@ sudo npm install -g --unsafe-perm
 - Controle de sessão e contexto
 
 #### 3. **AI Orchestrator** - Cérebro do Sistema
-- Sistema iterativo de refinamento (`ai_orchestrator.js`)
+- Sistema iterativo de refinamento (`ai_orchestrator.ts`)
 - Executa múltiplos comandos até ter resposta completa
 - Mantém contexto e objetivo da conversa
 - Integração com múltiplos providers de AI
 
 #### 4. **Pattern Matcher** - Respostas Rápidas
-- Biblioteca local de padrões (`libs/pattern_matcher.js`)
+- Biblioteca local de padrões (`libs/pattern_matcher.ts`)
 - Detecção de comandos comuns (fail2ban, docker, disk usage)
 - Execução pré-definida de sequências
 - Extração inteligente de dados
@@ -350,14 +350,14 @@ mcp-devops/
 │   ├── mcp-server.js          # Servidor MCP
 │   └── database.js            # Gerenciamento SQLite
 ├── libs/
-│   ├── pattern_matcher.js    # Sistema de padrões
+│   ├── pattern_matcher.ts    # Sistema de padrões
 │   └── command_executor.js   # Executor de comandos
 ├── ai_models/
-│   ├── base_model.js         # Interface base
-│   ├── claude_model.js       # Provider Claude
+│   ├── base_model.ts         # Interface base
+│   ├── claude_model.ts       # Provider Claude
 │   ├── openai_model.js       # Provider OpenAI
-│   ├── gemini_model.js       # Provider Gemini
-│   └── model_factory.js      # Factory pattern
+│   ├── gemini_model.ts       # Provider Gemini
+│   └── model_factory.ts      # Factory pattern
 ├── patterns/
 │   ├── git_errors.json       # Padrões Git
 │   ├── npm_errors.json       # Padrões NPM
@@ -903,7 +903,7 @@ mcp-terminal/
 ├── mcp-client.js      # Command monitoring and analysis
 ├── mcp-assistant.js   # Natural language command assistant
 ├── mcp-server.js      # Optional API server for integration
-├── system_detector.js # System information detection
+├── system_detector.ts # System information detection
 ├── setup.js           # Installation and configuration
 ├── patterns/          # Error patterns for different tools
 │   ├── npm_errors.json
@@ -916,9 +916,9 @@ mcp-terminal/
 │   ├── index.js
 │   └── firecrawl_wrapper.js
 ├── ai_models/         # AI model implementations
-│   ├── base_model.js
-│   ├── claude_model.js
-│   ├── model_factory.js
+│   ├── base_model.ts
+│   ├── claude_model.ts
+│   ├── model_factory.ts
 │   └── ...
 ├── zsh_integration.sh # Shell integration
 └── config.json        # Configuration file

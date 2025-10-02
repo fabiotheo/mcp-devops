@@ -104,17 +104,17 @@ sqlite3 ~/.mcp-terminal/cache.db "SELECT COUNT(*) FROM history_cache;"
 
 ## 🛠️ Componentes Principais
 
-### LocalCache (`libs/local-cache.js`)
+### LocalCache (`libs/local-cache.ts`)
 - Gerencia banco SQLite local
 - Queue de sincronização
 - Estatísticas e metadata
 
-### SyncManager (`libs/sync-manager.js`)
+### SyncManager (`libs/sync-manager.ts`)
 - Orquestra sincronização bidirecional
 - Resolve conflitos
 - Gerencia sync periódico
 
-### Integração (`mcp-claude.js`)
+### Integração (`mcp-claude.ts`)
 - Usa SyncManager quando disponível
 - Fallback para Turso direto
 - Fallback para arquivo local
@@ -160,7 +160,7 @@ console.log(stats);
 { "debug": true }
 
 # Ou via environment
-DEBUG=1 node mcp-claude.js
+DEBUG=1 node mcp-claude.ts
 ```
 
 ## ✅ Checklist de Funcionalidades

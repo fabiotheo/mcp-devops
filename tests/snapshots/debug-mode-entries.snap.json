@@ -1,0 +1,31 @@
+{
+  "name": "debug-mode-entries",
+  "created": "2025-09-26T01:10:56.586Z",
+  "updated": "2025-09-26T01:10:56.586Z",
+  "hash": "f368ba449281562abb91c938355bac85dd7c96e2b99295105c5530c2f35bc9ae",
+  "data": [
+    {
+      "role": "user",
+      "content": "test command",
+      "timestamp": "[TIMESTAMP]",
+      "requestId": "[ID]",
+      "debug": true
+    },
+    {
+      "role": "debug",
+      "content": "[DEBUG] Processing command with AI orchestrator",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "debug",
+      "content": "[DEBUG] Pattern matcher found: docker_ps",
+      "timestamp": "[TIMESTAMP]"
+    },
+    {
+      "role": "assistant",
+      "content": "Command processed successfully",
+      "timestamp": "[TIMESTAMP]",
+      "debug": true
+    }
+  ]
+}

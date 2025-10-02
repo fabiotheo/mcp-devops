@@ -53,18 +53,26 @@ export default class ClaudeModel extends BaseAIModel {
   constructor(config: ClaudeConfig) {
     super(config);
     this.client = null;
-    // Modelos que suportam tools (Claude 3+)
-    this.modelName = config.claude_model || 'claude-3-5-sonnet-20241022';
+    // Modelo padrão: Claude Sonnet 4.5 (melhor para agentes e coding)
+    this.modelName = config.claude_model || 'claude-sonnet-4-5-20250929';
 
-    // Lista de modelos que suportam tools
+    // Lista de modelos que suportam tools (todos os modelos Claude atuais)
     this.toolSupportedModels = [
-      'claude-3-5-sonnet-20241022',
+      // Claude 4.5 (latest - default)
+      'claude-sonnet-4-5-20250929',
+      // Claude 4.1 e 4
+      'claude-opus-4-1-20250805',
+      'claude-opus-4-20250514',
+      'claude-sonnet-4-20250514',
+      // Claude 3.7
+      'claude-3-7-sonnet-20250219',
+      // Claude 3.5
       'claude-3-5-haiku-20241022',
+      'claude-3-5-sonnet-20241022',
+      // Claude 3
       'claude-3-opus-20240229',
       'claude-3-sonnet-20240229',
       'claude-3-haiku-20240307',
-      'claude-sonnet-4-20250514',
-      'claude-opus-4-1-20250805',
     ];
   }
 

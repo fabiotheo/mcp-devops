@@ -852,44 +852,15 @@ export default class ModelFactory {
       output: process.stdout,
     });
 
-    // Seleciona o provedor de IA
-    const provider = await new Promise(resolve => {
-      console.log('\n📋 Escolha o provedor de IA:');
-      console.log('  1. Claude (Anthropic)');
-      console.log('  2. GPT (OpenAI)');
-      console.log('  3. Gemini (Google)');
-      rl.question('Escolha uma opção (1-3): ', answer => {
-        switch (answer.trim()) {
-          case '2':
-            resolve('openai');
-            break;
-          case '3':
-            resolve('gemini');
-            break;
-          default:
-            resolve('claude');
-        }
-      });
-    });
-
+    // Configura Claude como provedor (único suportado atualmente)
+    const provider = 'claude';
     config.ai_provider = provider;
-    console.log(`  ✓ Provedor selecionado: ${provider}`);
 
-    // Solicita API key apropriada
-    let apiKeyPrompt, apiKeyField;
-    switch (provider) {
-      case 'openai':
-        apiKeyPrompt = '🔐 Digite sua OpenAI API key: ';
-        apiKeyField = 'openai_api_key';
-        break;
-      case 'gemini':
-        apiKeyPrompt = '🔐 Digite sua Google Gemini API key: ';
-        apiKeyField = 'gemini_api_key';
-        break;
-      default:
-        apiKeyPrompt = '🔐 Digite sua Anthropic API key: ';
-        apiKeyField = 'anthropic_api_key';
-    }
+    console.log('\n🔑 Configurando Anthropic Claude API...');
+
+    // Solicita API key do Claude
+    const apiKeyPrompt = '🔐 Digite sua Anthropic API key: ';
+    const apiKeyField = 'anthropic_api_key';
 
     // Preserva a API key existente se disponível
     if (
@@ -911,37 +882,35 @@ export default class ModelFactory {
       config[apiKeyField] = apiKey;
     }
 
-    // Seleciona o modelo específico
-    let modelOptions, modelField;
-    switch (provider) {
-      case 'openai':
-        modelOptions = ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'];
-        modelField = 'openai_model';
-        break;
-      case 'gemini':
-        modelOptions = ['gemini-pro', 'gemini-pro-vision'];
-        modelField = 'gemini_model';
-        break;
-      default:
-        modelOptions = [
-          'claude-3-7-sonnet-20250219',
-          'claude-3-5-sonnet-20240620',
-          'claude-3-haiku-20240307',
-        ];
-        modelField = 'claude_model';
-    }
+    // Seleciona o modelo Claude
+    const modelOptions = [
+      { name: 'Claude Sonnet 4.5 (recomendado) ⭐', id: 'claude-sonnet-4-5-20250929' },
+      { name: 'Claude Opus 4.1', id: 'claude-opus-4-1-20250805' },
+      { name: 'Claude Opus 4', id: 'claude-opus-4-20250514' },
+      { name: 'Claude Sonnet 4', id: 'claude-sonnet-4-20250514' },
+      { name: 'Claude Sonnet 3.7', id: 'claude-3-7-sonnet-20250219' },
+      { name: 'Claude Haiku 3.5', id: 'claude-3-5-haiku-20241022' },
+      { name: 'Claude Haiku 3', id: 'claude-3-haiku-20240307' },
+    ];
+    const modelField = 'claude_model';
 
     const modelChoice = await new Promise(resolve => {
-      console.log('\n📋 Escolha o modelo específico:');
+      console.log('\n📋 Escolha o modelo Claude:');
       modelOptions.forEach((model, index) => {
-        console.log(`  ${index + 1}. ${model}`);
+        console.log(`  ${index + 1}. ${model.name}`);
       });
-      rl.question(`Escolha uma opção (1-${modelOptions.length}): `, answer => {
-        const index = parseInt(answer.trim()) - 1;
-        if (index >= 0 && index < modelOptions.length) {
-          resolve(modelOptions[index]);
+      rl.question(`Escolha uma opção (1-${modelOptions.length}) [padrão: 1]: `, answer => {
+        const trimmed = answer.trim();
+        if (trimmed === '') {
+          // Enter sem digitar = padrão (opção 1)
+          resolve(modelOptions[0].id);
         } else {
-          resolve(modelOptions[0]);
+          const index = parseInt(trimmed) - 1;
+          if (index >= 0 && index < modelOptions.length) {
+            resolve(modelOptions[index].id);
+          } else {
+            resolve(modelOptions[0].id);
+          }
         }
       });
     });

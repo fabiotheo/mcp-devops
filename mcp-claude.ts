@@ -262,7 +262,7 @@ class MCPClaudeFixedFinal {
         // Se não for ClaudeModel, criar um novo ClaudeModel
         this.aiModel = new ClaudeModel({
           anthropic_api_key: this.config.anthropic_api_key,
-          claude_model: this.config.claude_model || 'claude-3-5-sonnet-20241022'
+          claude_model: this.config.claude_model || 'claude-sonnet-4-5-20250929'
         });
         await this.aiModel.initialize();
       }
@@ -281,7 +281,7 @@ class MCPClaudeFixedFinal {
       // Fallback para um ClaudeModel básico
       this.aiModel = new ClaudeModel({
         anthropic_api_key: this.config.anthropic_api_key || '',
-        claude_model: 'claude-3-5-sonnet-20241022'
+        claude_model: 'claude-sonnet-4-5-20250929'
       });
     }
   }

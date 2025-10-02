@@ -43,7 +43,7 @@ export interface InitializeBackendOptions {
 const DEFAULT_CONFIG: BackendConfig = {
   ai_provider: 'claude',
   anthropic_api_key: process.env.ANTHROPIC_API_KEY,
-  claude_model: 'claude-3-5-sonnet-20241022',
+  claude_model: 'claude-sonnet-4-5-20250929',
   use_native_tools: false,
   max_tokens: 4096,
   temperature: 0.7,

@@ -113,17 +113,23 @@ class AIConfigurator {
 
     if (provider === 'anthropic') {
       console.log('\n📚 Modelos Claude disponíveis:\n');
-      console.log('  1) Claude 3 Opus (Mais poderoso)');
-      console.log('  2) Claude 3 Sonnet (Balanceado)');
-      console.log('  3) Claude 3 Haiku (Mais rápido)');
-      console.log('  4) Claude 3.5 Sonnet (Recomendado - Melhor custo-benefício)');
+      console.log('  1) Claude Sonnet 4.5 (Recomendado) ⭐');
+      console.log('  2) Claude Opus 4.1');
+      console.log('  3) Claude Opus 4');
+      console.log('  4) Claude Sonnet 4');
+      console.log('  5) Claude Sonnet 3.7');
+      console.log('  6) Claude Haiku 3.5');
+      console.log('  7) Claude Haiku 3');
       console.log('  0) Voltar\n');
 
       models = {
-        '1': 'claude-3-opus-20240229',
-        '2': 'claude-3-sonnet-20240229',
-        '3': 'claude-3-haiku-20240307',
-        '4': 'claude-3-5-sonnet-20241022',
+        '1': 'claude-sonnet-4-5-20250929',
+        '2': 'claude-opus-4-1-20250805',
+        '3': 'claude-opus-4-20250514',
+        '4': 'claude-sonnet-4-20250514',
+        '5': 'claude-3-7-sonnet-20250219',
+        '6': 'claude-3-5-haiku-20241022',
+        '7': 'claude-3-haiku-20240307',
       };
     } else if (provider === 'openai') {
       console.log('\n📚 Modelos GPT disponíveis:\n');

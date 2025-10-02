@@ -12,6 +12,7 @@ import { debugLog } from '../utils/debugLogger.js';
 import type { HistoryEntry, AIOrchestrator, PatternMatcher, TursoAdapter, BackendConfig } from '../types/services.js';
 import type { AppStatus } from '../hooks/useBackendInitialization.js';
 import type { RequestInfo } from '../hooks/useRequestManager.js';
+import type { ProgressEvent } from '../ai_orchestrator_bash.js';
 
 // ========== Type Definitions ==========
 
@@ -22,6 +23,7 @@ interface CoreState {
   error: string | null;
   isProcessing: boolean;
   isCancelled: boolean;
+  executionLog: ProgressEvent[];
 }
 
 interface HistoryState {
@@ -44,6 +46,9 @@ interface CoreActions {
   setIsProcessing: (value: boolean) => void;
   setIsCancelled: (value: boolean) => void;
   setConfig: (value: BackendConfig) => void;
+  setExecutionLog: (value: ProgressEvent[] | ((prev: ProgressEvent[]) => ProgressEvent[])) => void;
+  addExecutionLog: (event: ProgressEvent) => void;
+  clearExecutionLog: () => void;
 }
 
 interface HistoryActions {
@@ -120,6 +125,16 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isCancelled, setIsCancelled] = useState<boolean>(false);
+  const [executionLog, setExecutionLog] = useState<ProgressEvent[]>([]);
+
+  // Helper functions for executionLog
+  const addExecutionLog = (event: ProgressEvent) => {
+    setExecutionLog(prev => [...prev, event]);
+  };
+
+  const clearExecutionLog = () => {
+    setExecutionLog([]);
+  };
 
   // ========== History State ==========
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
@@ -180,7 +195,8 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
         response,
         error,
         isProcessing,
-        isCancelled
+        isCancelled,
+        executionLog
       },
       history: {
         commandHistory,
@@ -203,7 +219,10 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
         setError,
         setIsProcessing,
         setIsCancelled,
-        setConfig: setConfigWithDebug
+        setConfig: setConfigWithDebug,
+        setExecutionLog,
+        addExecutionLog,
+        clearExecutionLog
       },
       history: {
         setCommandHistory,
@@ -236,11 +255,12 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
     config: appConfig
   }), [
     // Dependencies for useMemo - all state and refs that are used
-    input, status, response, error, isProcessing, isCancelled,
+    input, status, response, error, isProcessing, isCancelled, executionLog,
     commandHistory, fullHistory, history, historyIndex,
     lastCtrlC, lastEsc,
     currentRequestId,
     setInput, setStatus, setResponse, setError, setIsProcessing, setIsCancelled, setConfigState,
+    setExecutionLog, addExecutionLog, clearExecutionLog,
     setCommandHistory, setFullHistory, setHistory, setHistoryIndex,
     setLastCtrlC, setLastEsc,
     orchestrator, patternMatcher, tursoAdapter,

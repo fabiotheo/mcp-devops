@@ -20,6 +20,7 @@ import type {
   ServiceRef
 } from '../types/services.js';
 import type { UseRequestManagerReturn } from './useRequestManager.js';
+import type { ProgressEvent } from '../ai_orchestrator_bash.js';
 
 // ============== INTERFACES E TIPOS ==============
 
@@ -49,6 +50,10 @@ export interface UseCommandProcessorParams {
   setIsProcessing: Dispatch<SetStateAction<boolean>>;
   setStatus: Dispatch<SetStateAction<string>>;
   setError: Dispatch<SetStateAction<string | null>>;
+
+  // Execution log setters
+  addExecutionLog: (event: ProgressEvent) => void;
+  clearExecutionLog: () => void;
 
   // Functions
   saveToHistory: (command: string, response?: string | null) => Promise<void>;
@@ -100,7 +105,9 @@ export function useCommandProcessor(
     setError,
     status,
     setStatus,
-    saveToHistory
+    saveToHistory,
+    addExecutionLog,
+    clearExecutionLog
   } = params;
   // Extract needed functions from requestManager
   const {
@@ -122,6 +129,9 @@ export function useCommandProcessor(
       debug(`[Debug] processCommand called with: "${command}"`);
     }
     if (!command.trim()) return;
+
+    // Clear previous execution log
+    clearExecutionLog();
 
     // Generate unique request_id (timestamp + random for uniqueness)
     const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
@@ -290,6 +300,26 @@ export function useCommandProcessor(
 
             setResponse(prev => prev + chunk);
           },
+          onProgress: (event: ProgressEvent) => {
+            // Check if this request is still active
+            const currentReq = activeRequests.current.get(requestId);
+            if (!currentReq || currentReq.status === 'cancelled') {
+              if (debug) {
+                debug(`[Debug] Ignoring progress event for cancelled request ${requestId}`);
+              }
+              return;
+            }
+
+            if (currentRequestId.current !== requestId) {
+              if (debug) {
+                debug(`[Debug] Ignoring progress event for old request ${requestId}`);
+              }
+              return;
+            }
+
+            // Add progress event to execution log
+            addExecutionLog(event);
+          },
         },
       );
 
@@ -397,6 +427,18 @@ export function useCommandProcessor(
         if (result && !result.success && result.error) {
           throw new Error(result.error);
         }
+
+        // If no response at all, show timeout message
+        const timeoutMsg = '⏳ O processamento demorou muito e foi interrompido. Por favor, tente uma pergunta mais simples ou divida em partes menores.';
+        setResponse(timeoutMsg);
+        setHistory(prev => [...prev, '❯ ' + command, timeoutMsg, '─'.repeat(80)]);
+        setFullHistory(prev => [...prev, {
+          role: 'user' as const,
+          content: command
+        }, {
+          role: 'assistant' as const,
+          content: timeoutMsg
+        }]);
       }
     } catch (err) {
       const error = err as Error;
@@ -489,7 +531,9 @@ export function useCommandProcessor(
     user,
     debug,
     formatResponse,
-    saveToHistory
+    saveToHistory,
+    addExecutionLog,
+    clearExecutionLog
   ]);
 
   return {

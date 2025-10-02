@@ -14,7 +14,7 @@
 
 import * as React from 'react';
 const { useEffect } = React;
-import { Box, render, Text, useApp, useStdout } from 'ink';
+import { Box, render, Text, useApp, useStdout, Static } from 'ink';
 import Spinner from 'ink-spinner';
 import MultilineInput from './components/MultilineInput.js';
 import * as path from 'node:path';
@@ -81,11 +81,11 @@ const MCPInkAppInner: React.FC = () => {
   const { state, actions, services, config } = useAppContext();
 
   // Destructure state
-  const { input, status, response, error, isProcessing } = state.core;
+  const { input, status, response, error, isProcessing, executionLog } = state.core;
   const { history, commandHistory, fullHistory } = state.history;
 
   // Destructure actions
-  const { setConfig, setStatus, setError, setInput, setResponse } = actions.core;
+  const { setConfig, setStatus, setError, setInput, setResponse, addExecutionLog, clearExecutionLog } = actions.core;
   const { setHistory, setCommandHistory, setFullHistory } = actions.history;
 
   // Destructure services
@@ -143,6 +143,8 @@ const MCPInkAppInner: React.FC = () => {
     setIsProcessing: actions.core.setIsProcessing,
     setStatus,
     setError,
+    addExecutionLog,
+    clearExecutionLog,
     // Other
     requestManager,
     isDebug: debugMode,
@@ -172,12 +174,14 @@ const MCPInkAppInner: React.FC = () => {
     exit
   });
 
-  // Enable bracketed paste mode on mount
+  // Disable bracketed paste mode to prevent escape codes in input
+  // Ink handles paste detection internally without needing bracketed paste mode
   useEffect(() => {
     if (isTTY) {
-      enableBracketedPasteMode(isTTY, debugMode);
+      disableBracketedPasteMode(isTTY, debugMode);
       return () => {
-        disableBracketedPasteMode(isTTY, debugMode);
+        // Re-enable on unmount to restore terminal state
+        enableBracketedPasteMode(isTTY, debugMode);
       };
     }
   }, [isTTY, debugMode]);
@@ -385,16 +389,54 @@ const MCPInkAppInner: React.FC = () => {
             React.createElement(Text, { color: 'red' }, line)
           );
         } else {
+          // Use custom markdown parser for proper rendering
           const elements = parseMarkdownToElements(line);
           return React.createElement(
             Box,
             { key: i, flexDirection: 'column', marginBottom: 0 },
-            elements
+            ...elements
           );
         }
       }
               })
             )
+      ),
+      // Execution log - streaming progress
+      executionLog.length > 0 && React.createElement(
+        Box,
+        {
+          paddingLeft: 1,
+          paddingRight: 1,
+          marginTop: 1,
+          flexDirection: 'column',
+        },
+        React.createElement(
+          Static,
+          {
+            items: executionLog,
+            children: (event: any) => {
+              const icon = event.type === 'iteration-start' ? '🔄' :
+                          event.type === 'command-execute' ? '🔧' :
+                          event.type === 'command-complete' ? '✓' :
+                          event.type === 'timeout' ? '⏳' :
+                          event.type === 'error' ? '❌' : '•';
+
+              const color = event.type === 'command-complete' ? 'green' :
+                           event.type === 'timeout' ? 'yellow' :
+                           event.type === 'error' ? 'red' : 'cyan';
+
+              return React.createElement(
+                Box,
+                { key: event.id },
+                React.createElement(
+                  Text,
+                  { color, dimColor: event.type === 'command-complete' },
+                  `${icon} ${event.message}${event.duration ? ` (${event.duration}ms)` : ''}`
+                )
+              );
+            }
+          }
+        )
       )
     ),
     // Bottom section: Input area

@@ -106,17 +106,33 @@ interface AIModel {
   }) => Promise<AIResponse>;
 }
 
+export interface ProgressEvent {
+  id: string;
+  timestamp: number;
+  type: 'iteration-start' | 'command-execute' | 'command-complete' | 'iteration-complete' | 'timeout' | 'error';
+  message: string;
+  iteration?: number;
+  totalIterations?: number;
+  command?: string;
+  result?: string;
+  duration?: number;
+}
+
+export type ProgressCallback = (event: ProgressEvent) => void;
+
 interface OrchestratorConfig {
   maxIterations?: number;
   maxExecutionTime?: number;
   verboseLogging?: boolean;
   enableBash?: boolean;
   bashConfig?: BashSessionConfig;
+  onProgress?: ProgressCallback;
 }
 
 interface OrchestratorOptions {
   tool_choice?: { type: string };
   signal?: AbortSignal;
+  onProgress?: ProgressCallback;
 }
 
 interface OrchestratorResult {
@@ -332,6 +348,7 @@ export default class AICommandOrchestratorBash {
       verboseLogging: config.verboseLogging || false,
       enableBash: config.enableBash !== false,
       bashConfig: config.bashConfig || {},
+      onProgress: config.onProgress,
     };
     this.bashSession = null;
     this.startTime = null;
@@ -445,6 +462,17 @@ INSTRUÇÕES IMPORTANTES:
 5. Para tarefas específicas de fail2ban, use as ferramentas otimizadas quando disponíveis
 6. Considere todo o histórico da conversa ao responder, incluindo mensagens canceladas
 
+IMPORTANTE - QUANDO MOSTRAR OUTPUTS:
+- Quando o usuário pedir para "mostrar", "exibir", "ver" ou "me mostre" um arquivo/script/conteúdo:
+  * Você DEVE incluir o conteúdo COMPLETO na sua resposta
+  * Use blocos de código markdown (\`\`\`) para formatar scripts e outputs
+  * NÃO resuma ou omita partes a menos que explicitamente solicitado
+  * Se executou um comando como 'cat arquivo.sh', mostre o output completo do comando
+- Exemplos:
+  * "me mostre esse script" → Inclua o conteúdo completo do script na resposta
+  * "exiba o conteúdo do arquivo" → Mostre todo o conteúdo, não apenas descreva
+  * "qual o conteúdo de X?" → Apresente o conteúdo completo em bloco de código
+
 <use_parallel_tool_calls>
 Sempre que possível, execute operações independentes em paralelo.
 Por exemplo, ao verificar múltiplos serviços ou coletar várias informações do sistema.
@@ -514,8 +542,34 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
       iterations++;
       context.metadata.iterations = iterations;
 
+      // Emit iteration start event
+      const onProgress = options.onProgress || this.config.onProgress;
+      if (onProgress) {
+        onProgress({
+          id: `iter-${iterations}-${Date.now()}`,
+          timestamp: Date.now(),
+          type: 'iteration-start',
+          message: `Iteração ${iterations}/${this.config.maxIterations} iniciada`,
+          iteration: iterations,
+          totalIterations: this.config.maxIterations,
+        });
+      }
+
       if (Date.now() - this.startTime > this.config.maxExecutionTime) {
         debugLog('⚠️ Tempo limite excedido', { iterations, elapsed: Date.now() - this.startTime }, this.config.verboseLogging);
+
+        // Emit timeout event
+        if (onProgress) {
+          onProgress({
+            id: `timeout-${Date.now()}`,
+            timestamp: Date.now(),
+            type: 'timeout',
+            message: `⏳ Tempo limite excedido após ${iterations} iterações`,
+            iteration: iterations,
+            totalIterations: this.config.maxIterations,
+            duration: Date.now() - this.startTime,
+          });
+        }
         break;
       }
 
@@ -547,6 +601,7 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
               (block as ToolUseBlock).name,
               (block as ToolUseBlock).input,
               context,
+              onProgress,
             );
 
             toolResults.push({
@@ -587,7 +642,8 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
   async executeTool(
     toolName: string,
     toolInput: Record<string, unknown>,
-    context: ExecutionContext
+    context: ExecutionContext,
+    onProgress?: ProgressCallback
   ): Promise<string | Record<string, unknown>> {
     try {
       if (toolName === 'bash') {
@@ -606,6 +662,18 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
           debugLog('🔧 Bash', { command }, this.config.verboseLogging);
         }
 
+        // Emit command execute event
+        const commandStartTime = Date.now();
+        if (onProgress) {
+          onProgress({
+            id: `cmd-${commandStartTime}`,
+            timestamp: commandStartTime,
+            type: 'command-execute',
+            message: '🔧 Executando comando',
+            command: command.length > 100 ? command.substring(0, 100) + '...' : command,
+          });
+        }
+
         context.executedCommands.push(command);
 
         const result = await this.bashSession!.execute(command);
@@ -622,6 +690,19 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
           output: sanitized,
           truncated: result.truncated,
         });
+
+        // Emit command complete event
+        if (onProgress) {
+          onProgress({
+            id: `cmd-complete-${Date.now()}`,
+            timestamp: Date.now(),
+            type: 'command-complete',
+            message: '✓ Comando executado',
+            command: command.length > 100 ? command.substring(0, 100) + '...' : command,
+            result: sanitized && sanitized.length > 200 ? sanitized.substring(0, 200) + '...' : sanitized,
+            duration: Date.now() - commandStartTime,
+          });
+        }
 
         return sanitized || 'Comando executado sem saída';
       } else if (toolName === 'list_fail2ban_jails') {
@@ -668,10 +749,34 @@ Sistema: ${context.os || 'Linux'} ${context.distro || ''}`;
   formatResults(context: ExecutionContext): OrchestratorResult {
     const duration = Date.now() - this.startTime!;
 
+    // If no final answer but we have executed commands, generate a partial response
+    let finalAnswer = context.finalAnswer;
+    if (!finalAnswer && context.executedCommands.length > 0) {
+      finalAnswer = `⏳ Processamento interrompido por timeout, mas consegui executar ${context.executedCommands.length} comando(s):\n\n`;
+
+      // Show last 3 commands and their results
+      const lastCommands = context.executedCommands.slice(-3);
+      const lastResults = context.results.slice(-3);
+
+      for (let i = 0; i < lastCommands.length; i++) {
+        finalAnswer += `**Comando ${i + 1}:**\n\`\`\`bash\n${lastCommands[i]}\n\`\`\`\n`;
+        if (lastResults[i]) {
+          const currentResult = lastResults[i];
+          const resultStr = typeof currentResult === 'string'
+            ? currentResult
+            : (currentResult as CommandResult).output || JSON.stringify(currentResult);
+          const truncated = resultStr.length > 200 ? resultStr.substring(0, 200) + '...' : resultStr;
+          finalAnswer += `**Resultado:**\n\`\`\`\n${truncated}\n\`\`\`\n\n`;
+        }
+      }
+
+      finalAnswer += '\n💡 Tente fazer uma pergunta mais específica ou divida em partes menores.';
+    }
+
     return {
-      success: !!context.finalAnswer,
+      success: !!finalAnswer,
       question: context.originalQuestion,
-      directAnswer: context.finalAnswer,
+      directAnswer: finalAnswer || null,
       executedCommands: context.executedCommands,
       results: context.results,
       iterations: context.metadata.iterations,

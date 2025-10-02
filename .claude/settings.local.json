@@ -157,7 +157,11 @@
       "mcp__serena__insert_after_symbol",
       "mcp__zen__chat",
       "Bash(npm run install-script:*)",
-      "Bash(./node_modules/.bin/tsc:*)"
+      "Bash(./node_modules/.bin/tsc:*)",
+      "WebSearch",
+      "Bash(MCP_USER=fabio timeout 10 node ~/.mcp-terminal/src/mcp-ink-cli.js --debug)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []

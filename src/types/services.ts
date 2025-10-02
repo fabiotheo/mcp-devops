@@ -154,6 +154,7 @@ export interface AskCommandOptions {
   conversationHistory?: HistoryEntry[];
   abort?: AbortController;
   onStream?: (chunk: string) => void;
+  onProgress?: (event: import('../ai_orchestrator_bash.js').ProgressEvent) => void;
   interactive?: boolean;
   source?: string;
   systemContext?: SystemContext;

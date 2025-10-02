@@ -95,10 +95,11 @@ export const parseMarkdownToElements = (text: string, baseKey: string = 'md'): R
 
     // Process inline markdown for regular lines
     const inlineElements = processInlineMarkdown(line, lineKey);
+    // Wrap all inline elements in a single Text component to prevent line breaks
     elements.push(
       React.createElement(
-        Box,
-        { key: `${lineKey}-box` },
+        Text,
+        { key: `${lineKey}-text` },
         ...inlineElements
       )
     );
@@ -222,8 +223,8 @@ function processInlineMarkdown(text: string, baseKey: string): ReactElement[] {
         elements.push(
           React.createElement(
             Text,
-            { key, color: 'yellow' },
-            `\`${segment.content}\``
+            { key, color: 'cyan', backgroundColor: 'gray' },
+            segment.content
           )
         );
         break;

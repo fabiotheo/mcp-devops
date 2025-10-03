@@ -62,6 +62,40 @@ export function useInputHandler({
   }
 
   useInput(async (char, key) => {
+    // Handle Ctrl+C FIRST - double tap to exit
+    // IMPORTANT: exitOnCtrlC is disabled in render(), so we must handle it here
+    if (key.ctrl && char === 'c') {
+      const now = Date.now();
+
+      if (lastCtrlC > 0 && now - lastCtrlC < 2000) {
+        // Second Ctrl+C within 2 seconds - exit
+        if (!isDebug) {
+          console.clear();
+        }
+        console.log('\n\x1b[33mGoodbye!\x1b[0m\n');
+        exit();
+      } else {
+        // First Ctrl+C - show message prominently
+        setLastCtrlC(now);
+
+        // Add message to history for better visibility
+        const exitMessage = '⚠️  Press Ctrl+C again within 2 seconds to exit';
+        setHistory([...history, exitMessage]);
+
+        // Also set as response
+        setResponse(exitMessage);
+
+        // Clear message after 2 seconds
+        setTimeout(() => {
+          setResponse('');
+          setLastCtrlC(0);
+          // Remove the exit message from history
+          setHistory(history.filter(msg => msg !== exitMessage));
+        }, 2000);
+      }
+      return; // Stop processing this key
+    }
+
     // Only accept input when ready
     if (status !== 'ready' && status !== 'processing') {
       return;
@@ -296,28 +330,6 @@ Config: ${action.payload.config}`;
       // Move cursor right (forward in string)
       if (cursorPosition < input.length) {
         setCursorPosition(cursorPosition + 1);
-      }
-    } else if (key.ctrl && char === 'c') {
-      // Handle Ctrl+C (double tap to exit)
-      const now = Date.now();
-
-      if (lastCtrlC > 0 && now - lastCtrlC < 2000) {
-        // Second Ctrl+C within 2 seconds - exit
-        if (!isDebug) {
-          console.clear();
-        }
-        console.log('\n\x1b[33mGoodbye!\x1b[0m\n');
-        exit();
-      } else {
-        // First Ctrl+C - show message
-        setLastCtrlC(now);
-        setResponse('Press Ctrl+C again to exit');
-
-        // Clear message after 2 seconds
-        setTimeout(() => {
-          setResponse('');
-          setLastCtrlC(0);
-        }, 2000);
       }
     } else if (key.backspace || key.delete) {
       // Delete character at cursor position

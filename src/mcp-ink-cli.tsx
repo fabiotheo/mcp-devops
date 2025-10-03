@@ -327,11 +327,16 @@ const MCPInkAppInner: React.FC = () => {
           ),
           React.createElement(
             Box,
-            { marginTop: 1 },
+            { marginTop: 1, flexDirection: 'column' },
             React.createElement(
               Text,
               { color: 'green' },
-              `   ipcom-chat user create --username ${username}`
+              `   ipcom-chat user create \\`
+            ),
+            React.createElement(
+              Text,
+              { color: 'green' },
+              `     --username ${username} --name "Nome"`
             )
           )
         ),
@@ -342,16 +347,7 @@ const MCPInkAppInner: React.FC = () => {
           React.createElement(
             Text,
             { dimColor: true, italic: true },
-            'Você também pode adicionar informações opcionais:'
-          ),
-          React.createElement(
-            Box,
-            { marginTop: 0 },
-            React.createElement(
-              Text,
-              { dimColor: true, italic: true },
-              `   --name "Nome Completo" --email "email@example.com"`
-            )
+            'Obrigatórios: --username e --name. Opcional: --email'
           )
         )
       );

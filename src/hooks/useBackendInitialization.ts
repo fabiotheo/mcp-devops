@@ -106,8 +106,14 @@ export function useBackendInitialization({
         }
       } catch (err) {
         if (mounted) {
-          console.error('Backend initialization failed:', err);
-          setError(err.message || 'Failed to initialize backend services');
+          // Handle user not found error specially
+          if (err instanceof Error && err.message.startsWith('USER_NOT_FOUND:')) {
+            const username = err.message.split(':')[1];
+            setError(`USER_NOT_FOUND:${username}`);
+          } else {
+            console.error('Backend initialization failed:', err);
+            setError(err.message || 'Failed to initialize backend services');
+          }
           setStatus('error');
         }
       }

@@ -178,6 +178,18 @@ const MCPInkAppInner: React.FC = () => {
     isDebug: debugMode
   });
 
+  // Auto-exit when error status is reached (e.g., user not found)
+  useEffect(() => {
+    if (status === 'error') {
+      // Give user time to read the error message before exiting
+      const timer = setTimeout(() => {
+        exit();
+      }, 3000); // 3 seconds delay
+
+      return () => clearTimeout(timer);
+    }
+  }, [status, exit]);
+
   // Initialize input handler with minimal parameters
   useInputHandler({
     processCommand,
@@ -259,18 +271,115 @@ const MCPInkAppInner: React.FC = () => {
 
   // Render error screen
   if (status === 'error') {
+    // Check if it's a user not found error
+    const isUserNotFound = error && error.startsWith('USER_NOT_FOUND:');
+    const username = isUserNotFound ? error.split(':')[1] : '';
+
+    if (isUserNotFound) {
+      // Beautiful user not found screen
+      return React.createElement(
+        Box,
+        {
+          flexDirection: 'column',
+          padding: 2,
+          borderStyle: 'round',
+          borderColor: 'red',
+          width: 70,
+        },
+        // Icon and title
+        React.createElement(
+          Box,
+          { marginBottom: 1 },
+          React.createElement(
+            Text,
+            { color: 'red', bold: true },
+            '🚫 Usuário não encontrado'
+          )
+        ),
+        // Username in error
+        React.createElement(
+          Box,
+          { marginBottom: 1 },
+          React.createElement(
+            Text,
+            { color: 'yellow' },
+            `Usuário: "${username}"`
+          )
+        ),
+        // Separator
+        React.createElement(
+          Box,
+          { marginBottom: 1 },
+          React.createElement(
+            Text,
+            { dimColor: true },
+            '─'.repeat(65)
+          )
+        ),
+        // Instructions
+        React.createElement(
+          Box,
+          { flexDirection: 'column', marginBottom: 1 },
+          React.createElement(
+            Text,
+            { color: 'cyan', bold: true },
+            '💡 Como resolver:'
+          ),
+          React.createElement(
+            Box,
+            { marginTop: 1 },
+            React.createElement(
+              Text,
+              { color: 'green' },
+              `   ipcom-chat user create --username ${username}`
+            )
+          )
+        ),
+        // Additional help
+        React.createElement(
+          Box,
+          { flexDirection: 'column' },
+          React.createElement(
+            Text,
+            { dimColor: true, italic: true },
+            'Você também pode adicionar informações opcionais:'
+          ),
+          React.createElement(
+            Box,
+            { marginTop: 0 },
+            React.createElement(
+              Text,
+              { dimColor: true, italic: true },
+              `   --name "Nome Completo" --email "email@example.com"`
+            )
+          )
+        )
+      );
+    }
+
+    // Generic error screen
     return React.createElement(
       Box,
-      { flexDirection: 'column', paddingTop: 1 },
+      {
+        flexDirection: 'column',
+        padding: 2,
+        borderStyle: 'round',
+        borderColor: 'red',
+      },
       React.createElement(
         Text,
-        { color: 'red' },
-        '❌ ', error || 'An error occurred during initialization'
+        { color: 'red', bold: true },
+        '❌ Erro de inicialização'
       ),
       React.createElement(
         Text,
-        { dimColor: true },
-        'Please check your configuration and try again.'
+        { color: 'white' },
+        error || 'Ocorreu um erro durante a inicialização'
+      ),
+      React.createElement(
+        Text,
+        { dimColor: true, italic: true },
+        'Verifique sua configuração e tente novamente.'
       )
     );
   }

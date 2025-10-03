@@ -94,10 +94,16 @@ class MCPSetup {
       // 5. Tornar scripts executáveis
       await this.makeExecutable();
 
-      // 6. Teste inicial
+      // 6. Verificar versão e sincronização
+      await this.verifyVersionSync();
+
+      // 7. Verificar integridade da instalação
+      await this.verifyInstallationIntegrity();
+
+      // 8. Teste inicial
       await this.runTests();
 
-      // 7. Salvar versão atual
+      // 9. Salvar versão atual
       await this.saveVersion();
 
       console.log(
@@ -1078,8 +1084,124 @@ export default class ModelFactory {
     return adjustedContent;
   }
 
+  /**
+   * Generate SHA256 checksum for a file
+   */
+  async generateChecksum(filePath) {
+    const crypto = await import('crypto');
+    const content = await fs.readFile(filePath);
+    return crypto.createHash('sha256').update(content).digest('hex');
+  }
+
+  /**
+   * Save checksums to a manifest file
+   */
+  async saveChecksumManifest(checksums) {
+    const manifestPath = path.join(this.mcpDir, '.checksums.json');
+    await fs.writeFile(manifestPath, JSON.stringify(checksums, null, 2));
+  }
+
+  /**
+   * Load checksums from manifest file
+   */
+  async loadChecksumManifest() {
+    try {
+      const manifestPath = path.join(this.mcpDir, '.checksums.json');
+      const content = await fs.readFile(manifestPath, 'utf8');
+      return JSON.parse(content);
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Force clean installation by removing stale files
+   */
+  async cleanStaleFiles() {
+    console.log('\n🧹 Limpando arquivos antigos (cache busting)...');
+
+    const dirsToClean = [
+      path.join(this.mcpDir, 'src'),
+      path.join(this.mcpDir, 'libs'),
+      path.join(this.mcpDir, 'components'),
+      path.join(this.mcpDir, 'ai_models'),
+      path.join(this.mcpDir, 'hooks'),
+      path.join(this.mcpDir, 'contexts'),
+      path.join(this.mcpDir, 'services'),
+      path.join(this.mcpDir, 'utils'),
+      path.join(this.mcpDir, 'bridges'),
+    ];
+
+    for (const dir of dirsToClean) {
+      try {
+        await fs.rm(dir, { recursive: true, force: true });
+        console.log(`  ✓ Removido: ${path.basename(dir)}/`);
+      } catch (error) {
+        // Silently ignore if directory doesn't exist
+      }
+    }
+
+    // Remove old standalone files that might be outdated
+    const filesToClean = [
+      'ipcom-chat-cli.js',
+      'mcp-ink-cli.js',
+      'ai_orchestrator.js',
+      'ai_orchestrator_bash.js',
+      'configure-ai.js',
+    ];
+
+    for (const file of filesToClean) {
+      try {
+        await fs.unlink(path.join(this.mcpDir, file));
+        console.log(`  ✓ Removido: ${file}`);
+      } catch {
+        // Silently ignore if file doesn't exist
+      }
+    }
+
+    console.log('  ✅ Limpeza concluída\n');
+  }
+
+  /**
+   * Verify installation integrity using checksums
+   */
+  async verifyInstallationIntegrity() {
+    console.log('\n🔍 Verificando integridade da instalação...');
+
+    const manifest = await this.loadChecksumManifest();
+    const errors = [];
+
+    for (const [file, expectedChecksum] of Object.entries(manifest)) {
+      const filePath = path.join(this.mcpDir, file);
+      try {
+        const actualChecksum = await this.generateChecksum(filePath);
+        if (actualChecksum !== expectedChecksum) {
+          errors.push(`  ❌ ${file} - checksum não corresponde`);
+        }
+      } catch (error) {
+        errors.push(`  ❌ ${file} - arquivo não encontrado`);
+      }
+    }
+
+    if (errors.length > 0) {
+      console.log('\n⚠️  Problemas de integridade detectados:');
+      errors.forEach(err => console.log(err));
+      console.log('\n💡 Execute: node setup.js --upgrade --auto para corrigir\n');
+      return false;
+    }
+
+    console.log('  ✅ Todos os arquivos verificados com sucesso\n');
+    return true;
+  }
+
   async makeExecutable() {
     console.log('\n🔧 Copiando e configurando scripts...');
+
+    // Cache busting: Clean stale files before installation
+    await this.cleanStaleFiles();
+
+    // Track checksums for integrity validation
+    const checksums = {};
 
     // Lista de arquivos a serem copiados
     const filesToCopy = [
@@ -1114,6 +1236,10 @@ export default class ModelFactory {
           // Ajusta os imports para a estrutura instalada
           content = this.adjustImportsForInstallation(content, file.src);
           await fs.writeFile(destPath, content);
+
+          // Generate checksum for integrity validation
+          checksums[file.dest] = await this.generateChecksum(destPath);
+
           console.log(`  ✓ Arquivo ${file.dest} copiado`);
         } catch (err) {
           console.log(
@@ -1437,6 +1563,62 @@ configurator.run().catch(error => {
     } catch (error) {
       console.log(`  ⚠ Não foi possível criar links: ${error.message}`);
     }
+
+    // Save checksum manifest for integrity validation
+    await this.saveChecksumManifest(checksums);
+    console.log(`  ✅ Manifest de checksums salvo (${Object.keys(checksums).length} arquivos rastreados)`);
+  }
+
+  /**
+   * Verify installation version and sync status
+   */
+  async verifyVersionSync() {
+    console.log('\n📊 Verificando versão e sincronização...');
+
+    // Check installed version
+    const installedVersion = await this.getCurrentVersion();
+    const currentVersion = this.version;
+
+    if (installedVersion) {
+      console.log(`  • Versão instalada: ${installedVersion}`);
+      console.log(`  • Versão do código fonte: ${currentVersion}`);
+
+      if (installedVersion !== currentVersion) {
+        console.log(`  ⚠️  Versões diferentes detectadas!`);
+        console.log(`  💡 Execute: node setup.js --upgrade --auto para atualizar\n`);
+        return false;
+      }
+    } else {
+      console.log(`  • Primeira instalação detectada`);
+    }
+
+    // Check if all critical files exist
+    const criticalFiles = [
+      'src/mcp-ink-cli.js',
+      'src/bridges/adapters/TursoAdapter.js',
+      'src/libs/turso-client.js',
+      'src/services/backendService.js',
+      'src/hooks/useBackendInitialization.js'
+    ];
+
+    const missingFiles = [];
+    for (const file of criticalFiles) {
+      try {
+        await fs.access(path.join(this.mcpDir, file));
+      } catch {
+        missingFiles.push(file);
+      }
+    }
+
+    if (missingFiles.length > 0) {
+      console.log(`  ❌ Arquivos críticos não encontrados:`);
+      missingFiles.forEach(f => console.log(`     - ${f}`));
+      console.log(`  💡 Execute: node setup.js --upgrade --auto para corrigir\n`);
+      return false;
+    }
+
+    console.log(`  ✅ Todas as verificações passaram\n`);
+    return true;
   }
 
   async runTests() {
@@ -1720,6 +1902,7 @@ async function main() {
   const isUpgrade = args.includes('--upgrade');
   const isUninstall = args.includes('--uninstall');
   const isForce = args.includes('--force');
+  const isVerify = args.includes('--verify');
   const isHelp = args.includes('--help') || args.includes('-h');
   const removeAllData = args.includes('--remove-all-data');
 
@@ -1741,12 +1924,26 @@ async function main() {
       '  node setup.js --uninstall        - Desinstalar (manter configurações)',
     );
     console.log('  node setup.js --uninstall --remove-all-data - Remover tudo');
+    console.log('  node setup.js --verify           - Verificar integridade da instalação');
     console.log('  node setup.js --help             - Mostrar esta ajuda\n');
     console.log('💡 Nova opção --force: útil para desenvolvimento e testes!');
+    console.log('💡 Nova opção --verify: verifica checksums e arquivos críticos!');
     return;
   }
 
-  if (isUninstall) {
+  if (isVerify) {
+    console.log('\n🔍 Verificando instalação do MCP Terminal Assistant...\n');
+    const versionOk = await setup.verifyVersionSync();
+    const integrityOk = await setup.verifyInstallationIntegrity();
+
+    if (versionOk && integrityOk) {
+      console.log('✅ Instalação verificada com sucesso!\n');
+      process.exit(0);
+    } else {
+      console.log('❌ Problemas detectados na instalação!\n');
+      process.exit(1);
+    }
+  } else if (isUninstall) {
     await setup.uninstall(removeAllData);
   } else if (isForce) {
     await setup.forceUpdate();

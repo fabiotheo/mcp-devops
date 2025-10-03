@@ -87,6 +87,7 @@ const MCPInkAppInner: React.FC = () => {
   // Destructure state
   const { input, status, response, error, isProcessing, executionLog } = state.core;
   const { history, commandHistory, fullHistory } = state.history;
+  const { cursorPosition } = state.ui;
 
   // Destructure actions
   const { setConfig, setStatus, setError, setInput, setResponse, addExecutionLog, clearExecutionLog } = actions.core;
@@ -457,6 +458,7 @@ const MCPInkAppInner: React.FC = () => {
               placeholder: 'Type your question...',
               showCursor: true,
               isActive: status === 'ready',
+              cursorPosition: cursorPosition,
             })
       ),
       // Bottom separator line

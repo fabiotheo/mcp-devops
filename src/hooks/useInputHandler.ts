@@ -38,12 +38,12 @@ export function useInputHandler({
   // Destructure what we need
   const { input, status, isProcessing } = state.core;
   const { commandHistory, historyIndex } = state.history;
-  const { lastCtrlC, lastEsc } = state.ui;
+  const { lastCtrlC, lastEsc, cursorPosition } = state.ui;
   const { history } = state.history;
 
   const { setInput, setResponse, setIsCancelled } = actions.core;
   const { setCommandHistory, setHistory, setHistoryIndex } = actions.history;
-  const { setLastCtrlC, setLastEsc } = actions.ui;
+  const { setLastCtrlC, setLastEsc, setCursorPosition } = actions.ui;
 
   const { orchestrator, patternMatcher } = services;
   const { currentRequestId, activeRequests } = requests;
@@ -97,6 +97,7 @@ export function useInputHandler({
       // Process the pasted content
       const newInput = processPastedInput(input, char);
       setInput(newInput);
+      setCursorPosition(newInput.length); // Move cursor to end after paste
 
       if (isDebug) {
         debug('Clean pasted content', JSON.stringify(cleanPastedContent(char)));
@@ -113,6 +114,7 @@ export function useInputHandler({
       if (timeSinceLastEsc < 500) {
         // Double ESC - clear input
         setInput('');
+        setCursorPosition(0);
         setLastEsc(0);
         if (isDebug) {
           debug('Double ESC - Input cleared', true);
@@ -239,6 +241,7 @@ Config: ${action.payload.config}`;
       }
 
       setInput('');
+      setCursorPosition(0); // Reset cursor to start
       // Force re-enable bracketed paste mode after clearing input
       enableBracketedPasteMode(isTTY, false);
     } else if (key.upArrow) {
@@ -261,9 +264,9 @@ Config: ${action.payload.config}`;
             ? historyIndex + 1
             : historyIndex;
         setHistoryIndex(newIndex);
-        setInput(
-          navigableHistory[navigableHistory.length - 1 - newIndex] || '',
-        );
+        const historyText = navigableHistory[navigableHistory.length - 1 - newIndex] || '';
+        setInput(historyText);
+        setCursorPosition(historyText.length); // Move cursor to end
       }
     } else if (key.downArrow) {
       // Navigate history down
@@ -276,12 +279,23 @@ Config: ${action.payload.config}`;
       if (historyIndex > 0) {
         const newIndex = historyIndex - 1;
         setHistoryIndex(newIndex);
-        setInput(
-          navigableHistory[navigableHistory.length - 1 - newIndex] || '',
-        );
+        const historyText = navigableHistory[navigableHistory.length - 1 - newIndex] || '';
+        setInput(historyText);
+        setCursorPosition(historyText.length); // Move cursor to end
       } else if (historyIndex === 0) {
         setHistoryIndex(-1);
         setInput('');
+        setCursorPosition(0);
+      }
+    } else if (key.leftArrow) {
+      // Move cursor left (backward in string)
+      if (cursorPosition > 0) {
+        setCursorPosition(cursorPosition - 1);
+      }
+    } else if (key.rightArrow) {
+      // Move cursor right (forward in string)
+      if (cursorPosition < input.length) {
+        setCursorPosition(cursorPosition + 1);
       }
     } else if (key.ctrl && char === 'c') {
       // Handle Ctrl+C (double tap to exit)
@@ -306,18 +320,24 @@ Config: ${action.payload.config}`;
         }, 2000);
       }
     } else if (key.backspace || key.delete) {
-      const newValue = input.slice(0, -1);
-      if (isDebug && newValue === '') {
-        debug('Input cleared via backspace - now empty', true);
+      // Delete character at cursor position
+      if (cursorPosition > 0) {
+        const newValue = input.slice(0, cursorPosition - 1) + input.slice(cursorPosition);
+        if (isDebug && newValue === '') {
+          debug('Input cleared via backspace - now empty', true);
+        }
+        setInput(newValue);
+        setCursorPosition(cursorPosition - 1);
       }
-      setInput(newValue);
     } else if (key.ctrl && char === 'l') {
       // Clear screen - Ctrl+L
       setHistory([]);
       setResponse('');
     } else if (char && !key.ctrl && !key.meta) {
-      // Regular single character input
-      setInput(input + char);
+      // Insert character at cursor position
+      const newValue = input.slice(0, cursorPosition) + char + input.slice(cursorPosition);
+      setInput(newValue);
+      setCursorPosition(cursorPosition + 1);
     }
   });
 }

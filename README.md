@@ -756,6 +756,53 @@ tail -f /tmp/mcp-debug.log
 
 **Nota:** O log só é criado quando `--debug` é usado. Em modo normal, nenhum log é gravado para máxima performance.
 
+### Gerenciamento de Usuários
+
+O sistema suporta múltiplos usuários, cada um com seu próprio histórico isolado no Turso DB.
+
+#### Criar novo usuário
+
+```bash
+# Criar usuário básico
+ipcom-chat user create --username aristides
+
+# Criar usuário com informações completas
+ipcom-chat user create --username aristides --name "Aristides Silva" --email "aristides@example.com"
+```
+
+#### Usar o chat com usuário específico
+
+```bash
+# Iniciar chat como usuário específico
+ipcom-chat --user aristides
+
+# Combinar com modo debug
+ipcom-chat --user aristides --debug
+```
+
+#### Listar usuários
+
+```bash
+ipcom-chat user list
+```
+
+#### Deletar usuário
+
+Para deletar um usuário completamente:
+
+```bash
+# 1. Deletar do banco de dados
+ipcom-chat user delete --username aristides
+
+# 2. (Opcional) Se quiser deletar também o banco Turso
+turso db destroy mcp-terminal-aristides --yes
+
+# 3. (Opcional) Remover token de autenticação local
+rm ~/.mcp-terminal/.turso-auth-aristides
+```
+
+**Nota:** Todos os usuários compartilham o mesmo banco de dados Turso global, mas cada um tem histórico completamente isolado.
+
 ## 📚 Documentação Antiga (Referência)
 
 ### Command Assistance

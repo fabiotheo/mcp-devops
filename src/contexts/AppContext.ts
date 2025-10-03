@@ -36,6 +36,7 @@ interface HistoryState {
 interface UIState {
   lastCtrlC: number;
   lastEsc: number;
+  cursorPosition: number;
 }
 
 interface CoreActions {
@@ -61,6 +62,7 @@ interface HistoryActions {
 interface UIActions {
   setLastCtrlC: (value: number) => void;
   setLastEsc: (value: number) => void;
+  setCursorPosition: (value: number) => void;
 }
 
 interface Services {
@@ -145,6 +147,7 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
   // ========== UI State ==========
   const [lastCtrlC, setLastCtrlC] = useState<number>(0);
   const [lastEsc, setLastEsc] = useState<number>(0);
+  const [cursorPosition, setCursorPosition] = useState<number>(0);
 
   // Config state
   const [configState, setConfigState] = useState<BackendConfig>(config);
@@ -206,7 +209,8 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
       },
       ui: {
         lastCtrlC,
-        lastEsc
+        lastEsc,
+        cursorPosition
       }
     },
 
@@ -232,7 +236,8 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
       },
       ui: {
         setLastCtrlC,
-        setLastEsc
+        setLastEsc,
+        setCursorPosition
       }
     },
 

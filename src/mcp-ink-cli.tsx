@@ -87,6 +87,7 @@ const MCPInkAppInner: React.FC = () => {
   // Destructure state
   const { input, status, response, error, isProcessing, executionLog } = state.core;
   const { history, commandHistory, fullHistory } = state.history;
+  const { cursorPosition } = state.ui;
 
   // Destructure actions
   const { setConfig, setStatus, setError, setInput, setResponse, addExecutionLog, clearExecutionLog } = actions.core;
@@ -199,7 +200,7 @@ const MCPInkAppInner: React.FC = () => {
 
   // Clear Ctrl+C message after timeout
   useEffect(() => {
-    if (response === 'Press Ctrl+C again to exit') {
+    if (response && response.includes('Press Ctrl+C again')) {
       const timer = setTimeout(() => {
         setResponse('');
         actions.ui.setLastCtrlC(0);
@@ -399,6 +400,13 @@ const MCPInkAppInner: React.FC = () => {
             { key: i, flexDirection: 'column', marginBottom: 0 },
             React.createElement(Text, { color: 'red' }, line)
           );
+        } else if (line.includes('⚠️')) {
+          // Warning messages (like Ctrl+C exit prompt)
+          return React.createElement(
+            Box,
+            { key: i, flexDirection: 'column', marginBottom: 0 },
+            React.createElement(Text, { color: 'yellow', bold: true }, line)
+          );
         } else {
           // Use custom markdown parser for proper rendering
           const elements = parseMarkdownToElements(line);
@@ -457,6 +465,7 @@ const MCPInkAppInner: React.FC = () => {
               placeholder: 'Type your question...',
               showCursor: true,
               isActive: status === 'ready',
+              cursorPosition: cursorPosition,
             })
       ),
       // Bottom separator line
@@ -476,7 +485,7 @@ const MCPInkAppInner: React.FC = () => {
         React.createElement(
           Text,
           { dimColor: true, italic: true },
-          '/help for commands • ↑↓ for history • Ctrl+C to exit'
+          '/help for commands • ↑↓ for history • Ctrl+C twice to exit'
         )
       )
     )
@@ -505,10 +514,12 @@ const MCPInkApp: React.FC = () => {
 /**
  * Start the Ink application
  * We use React.createElement instead of JSX to avoid additional compilation issues
- * Note: In Ink v6, render options are not supported as a second argument
- * The exitOnCtrlC behavior is handled within the app using useApp hook
+ *
+ * IMPORTANT: exitOnCtrlC must be false to allow custom double Ctrl+C handling in useInput
  */
-const app = render(React.createElement(MCPInkApp));
+const app = render(React.createElement(MCPInkApp), {
+  exitOnCtrlC: false
+});
 
 // Handle non-TTY mode
 if (!process.stdin.isTTY) {

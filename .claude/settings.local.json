@@ -164,7 +164,10 @@
       "WebFetch(domain:github.com)",
       "Bash(MCP_USER=fabio timeout 8 node src/mcp-ink-cli.tsx --debug)",
       "Bash(MCP_USER=fabio gtimeout 8 node src/mcp-ink-cli.tsx --debug)",
-      "Bash(MCP_USER=fabio node src/mcp-ink-cli.tsx --debug)"
+      "Bash(MCP_USER=fabio node src/mcp-ink-cli.tsx --debug)",
+      "Bash(MCP_USER=fabio timeout 8 node dist/mcp-ink-cli.js --debug)",
+      "Bash(MCP_USER=fabio gtimeout 8 node dist/mcp-ink-cli.js --debug)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []

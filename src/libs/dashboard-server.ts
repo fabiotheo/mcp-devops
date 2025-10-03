@@ -12,6 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import LocalCache from './local-cache.js';
 import TursoHistoryClient from './turso-client.js';
+import SyncManager from './sync-manager.js';
 import fs from 'fs/promises';
 import os from 'os';
 import chalk from 'chalk';
@@ -438,8 +439,6 @@ class DashboardServer {
         return { success: false, error: 'Turso not configured' };
       }
 
-      // Import SyncManager
-      const { default: SyncManager } = await import('./sync-manager.js');
       const syncManager = new SyncManager({ debug: this.config.debug });
       await syncManager.initialize(this.tursoClient);
 

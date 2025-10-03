@@ -110,12 +110,12 @@ class MCPSetup {
       console.log();
       console.log('📋 Próximos passos:');
       console.log('1. Reinicie seu terminal ou execute: source ~/.zshrc');
-      console.log('2. Teste com: ask "como listar arquivos por tamanho"');
+      console.log('2. Teste com: ipcom "como listar arquivos por tamanho"');
       console.log('3. Execute um comando que falhe para ver o monitoramento');
       console.log();
       console.log('💡 Comandos disponíveis:');
       console.log('   • ipcom-chat - Interface interativa com IA');
-      console.log('   • ask "sua pergunta" - Perguntas diretas');
+      console.log('   • ipcom "sua pergunta" - Perguntas diretas');
       console.log('   • mcp-configure - Reconfigurar o sistema');
       console.log();
       console.log('📧 Suporte: fabio@ipcom.com.br');
@@ -235,7 +235,7 @@ class MCPSetup {
       }
       console.log('\n📋 Próximos passos:');
       console.log('1. Reinicie seu terminal ou execute: source ~/.zshrc');
-      console.log('2. Teste com: ask "como listar arquivos por tamanho"');
+      console.log('2. Teste com: ipcom "como listar arquivos por tamanho"');
       console.log('3. Execute um comando que falhe para ver o monitoramento');
       console.log();
       console.log('📧 Suporte: fabio@ipcom.com.br');
@@ -306,7 +306,7 @@ class MCPSetup {
       console.log('   • Todos os outros arquivos do projeto\n');
 
       console.log('📋 Próximos passos:');
-      console.log('1. Teste o assistente: mcp-assistant "teste"');
+      console.log('1. Teste o assistente: ipcom-chat');
       console.log('2. Verifique as configurações se necessário');
     } catch (error) {
       console.error('\n❌ Erro durante a força atualização:', error.message);
@@ -918,6 +918,34 @@ export default class ModelFactory {
     config[modelField] = modelChoice;
     console.log(`  ✓ Modelo selecionado: ${modelChoice}`);
 
+    // Configurar Turso (banco de dados distribuído para histórico)
+    console.log('\n💾 Configurando Turso (opcional - pressione Enter para pular)...');
+
+    const tursoUrl = await new Promise(resolve => {
+      rl.question('🔗 Turso Database URL (ou Enter para pular): ', answer => {
+        resolve(answer.trim());
+      });
+    });
+
+    if (tursoUrl) {
+      config.turso_url = tursoUrl;
+
+      const tursoToken = await new Promise(resolve => {
+        rl.question('🔑 Turso Auth Token: ', answer => {
+          resolve(answer.trim());
+        });
+      });
+
+      if (tursoToken) {
+        config.turso_token = tursoToken;
+        console.log('  ✓ Turso configurado');
+      } else {
+        console.log('  ⚠ Token não fornecido - Turso não será configurado');
+      }
+    } else {
+      console.log('  ℹ Turso não configurado - usando histórico local apenas');
+    }
+
     rl.close();
 
     // Salva a configuração
@@ -1056,10 +1084,10 @@ export default class ModelFactory {
     // Lista de arquivos a serem copiados
     const filesToCopy = [
       // CLI principal com comandos (compilado de TypeScript)
-      { src: 'dist/ipcom-chat-cli.js', dest: 'src/ipcom-chat-cli.js' },
+      { src: 'dist/ipcom-chat-cli.js', dest: 'ipcom-chat-cli.js' },
 
       // Interface Ink (compilado de TypeScript)
-      { src: 'dist/mcp-ink-cli.js', dest: 'src/mcp-ink-cli.js' },
+      { src: 'dist/mcp-ink-cli.js', dest: 'mcp-ink-cli.js' },
 
       // Orquestradores e libs essenciais (agora de dist/)
       { src: 'dist/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
@@ -1271,9 +1299,8 @@ configurator.run().catch(error => {
     }
 
     const scripts = [
-      'configure-ai.ts',
+      'configure-ai.js',
       'mcp-configure',
-      'mcp-interactive.js',
       'ipcom-chat',
     ];
 
@@ -1358,10 +1385,7 @@ configurator.run().catch(error => {
             await fs.mkdir(dir, { recursive: true });
 
             const globalLinks = [
-              {
-                from: path.join(this.mcpDir, 'mcp-assistant.js'),
-                to: path.join(dir, 'ask'),
-              },
+              // Removido mcp-assistant.js - substituído por ipcom-chat
               {
                 from: path.join(this.mcpDir, 'ipcom-chat'),
                 to: path.join(dir, 'ipcom-chat'),
@@ -1418,19 +1442,13 @@ configurator.run().catch(error => {
   async runTests() {
     console.log('\n🧪 Executando testes...');
 
-    // Teste 1: Verifica se a API key funciona
+    // Teste 1: Verifica se os arquivos principais existem
     try {
-      const test1 = execSync(
-        `node ${path.join(this.mcpDir, 'mcp-assistant.js')} --system-info`,
-        {
-          cwd: this.mcpDir,
-          encoding: 'utf8',
-          stdio: 'pipe',
-        },
-      );
-      console.log('  ✓ Sistema detectado corretamente');
+      await fs.access(path.join(this.mcpDir, 'ipcom-chat'));
+      await fs.access(path.join(this.mcpDir, 'mcp-ink-cli.js'));
+      console.log('  ✓ Arquivos principais instalados corretamente');
     } catch (error) {
-      console.log('  ⚠ Erro no teste do sistema:', error.message);
+      console.log('  ⚠ Erro: arquivos principais não encontrados:', error.message);
     }
 
     // Teste 2: Verifica cache
@@ -1681,7 +1699,7 @@ configurator.run().catch(error => {
 
       console.log('\n📋 Próximos passos:');
       console.log('1. Reinicie seu terminal ou execute: source ~/.zshrc');
-      console.log('2. Teste com: ask "como listar arquivos por tamanho"');
+      console.log('2. Teste com: ipcom "como listar arquivos por tamanho"');
       console.log('3. Execute um comando que falhe para ver o monitoramento');
     } catch (error) {
       console.error(

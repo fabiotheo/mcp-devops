@@ -62,6 +62,9 @@ const MCPInkAppInner: React.FC = () => {
 
   const terminalWidth: number = stdout?.columns || 80;
 
+  // Command selector state - for showing slash commands menu
+  const [showCommandSelector, setShowCommandSelector] = React.useState(false);
+
   // Initialize history manager with proper typing
   const { loadCommandHistory, saveToHistory } = useHistoryManager({
     tursoAdapter: tursoAdapter as any, // Type mismatch with ref - safe to cast
@@ -128,12 +131,13 @@ const MCPInkAppInner: React.FC = () => {
     isDebug
   });
 
-  // Initialize input handler (now with only 4 parameters!)
+  // Initialize input handler
   useInputHandler({
     processCommand,
     cleanupRequest,
     formatResponse,
-    exit
+    exit,
+    showCommandSelector
   });
 
   // Enable bracketed paste mode on mount

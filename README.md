@@ -764,6 +764,7 @@ O sistema suporta múltiplos usuários, cada um com seu próprio histórico isol
 
 ```bash
 # Criar usuário (campos obrigatórios: --username e --name)
+# IMPORTANTE: Use aspas no nome se contiver espaços
 ipcom-chat user create --username aristides --name "Aristides Silva"
 
 # Criar usuário com informações completas (email é opcional)

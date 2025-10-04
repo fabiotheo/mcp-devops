@@ -348,13 +348,25 @@ class AIConfigurator {
     console.log('\n🧪 Testando configuração...\n');
 
     try {
-      execSync(
-        `cd ${path.join(process.env.HOME || '', '.mcp-terminal')} && node mcp-assistant.js --system-info`,
-        { stdio: 'inherit' },
-      );
-      console.log('\n✅ Configuração testada com sucesso!');
+      // Test by checking if the installation is properly configured
+      const mcpDir = path.join(process.env.HOME || '', '.mcp-terminal');
+      const configPath = path.join(mcpDir, 'config.json');
+
+      // Check if config file exists
+      if (!existsSync(configPath)) {
+        throw new Error('Config file not found');
+      }
+
+      // Check if ipcom-chat exists in ~/.local/bin
+      const binPath = path.join(process.env.HOME || '', '.local', 'bin', 'ipcom-chat');
+      if (!existsSync(binPath)) {
+        throw new Error('ipcom-chat not found in ~/.local/bin');
+      }
+
+      console.log('✅ Configuração validada com sucesso!');
+      console.log(`\n📋 Teste o sistema com: ipcom-chat "teste de configuração"`);
     } catch (error) {
-      console.error('\n❌ Erro ao testar configuração');
+      console.error('\n❌ Erro ao validar configuração');
       console.log('Verifique se todos os arquivos foram instalados corretamente.');
       console.log('Execute: node setup.js --upgrade');
     }

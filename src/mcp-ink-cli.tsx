@@ -336,7 +336,7 @@ const MCPInkAppInner: React.FC = () => {
             React.createElement(
               Text,
               { color: 'green' },
-              `     --username ${username} --name "Nome"`
+              `     --username ${username} --name "Nome Completo"`
             )
           )
         ),
@@ -347,7 +347,12 @@ const MCPInkAppInner: React.FC = () => {
           React.createElement(
             Text,
             { dimColor: true, italic: true },
-            'Obrigatórios: --username e --name. Opcional: --email'
+            'Obrigatórios: --username e --name (use aspas se houver espaços)'
+          ),
+          React.createElement(
+            Text,
+            { dimColor: true, italic: true },
+            'Opcional: --email'
           )
         )
       );

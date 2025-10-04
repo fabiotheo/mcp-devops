@@ -6,6 +6,10 @@
  * Extracted from mcp-ink-cli.mjs as part of modularization effort.
  */
 
+import os from 'os';
+import fs from 'fs';
+import path from 'path';
+
 // Type definitions for command data
 interface CommandData {
   commandHistory?: string[];
@@ -14,6 +18,12 @@ interface CommandData {
   hasPatternMatcher?: boolean;
   isDebug?: boolean;
   hasConfig?: boolean;
+  userName?: string;
+  sessionStartTime?: number;
+  lastCommandTime?: number;
+  commandCount?: number;
+  successCount?: number;
+  failedCount?: number;
 }
 
 // Type definitions for actions
@@ -185,6 +195,197 @@ Config: ${statusPayload.config}`;
  */
 export function formatHistoryMessage(commands: string[]): string {
   return commands.join('\n') || 'No command history';
+}
+
+/**
+ * Get system CPU usage percentage
+ * @returns {number} CPU usage percentage (0-100)
+ */
+function getCpuUsage(): number {
+  const cpus = os.cpus();
+  let totalIdle = 0;
+  let totalTick = 0;
+
+  cpus.forEach(cpu => {
+    for (const type in cpu.times) {
+      totalTick += cpu.times[type as keyof typeof cpu.times];
+    }
+    totalIdle += cpu.times.idle;
+  });
+
+  const idle = totalIdle / cpus.length;
+  const total = totalTick / cpus.length;
+  const usage = 100 - ~~(100 * idle / total);
+  return Math.max(0, Math.min(100, usage));
+}
+
+/**
+ * Get system memory usage
+ * @returns {object} Memory usage info
+ */
+function getMemoryUsage(): { used: number; total: number; percentage: number } {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+  const percentage = (usedMem / totalMem) * 100;
+
+  return {
+    used: usedMem,
+    total: totalMem,
+    percentage: Math.round(percentage)
+  };
+}
+
+/**
+ * Format bytes to human-readable format
+ * @param {number} bytes - Bytes to format
+ * @returns {string} Formatted string (e.g., "1.2 GB")
+ */
+function formatBytes(bytes: number): string {
+  const gb = bytes / (1024 ** 3);
+  if (gb >= 1) {
+    return `${gb.toFixed(1)} GB`;
+  }
+  const mb = bytes / (1024 ** 2);
+  return `${mb.toFixed(1)} MB`;
+}
+
+/**
+ * Create a progress bar with percentage
+ * @param {number} percentage - Percentage (0-100)
+ * @param {number} width - Width of the bar (default: 15)
+ * @returns {string} Progress bar string
+ */
+function createProgressBar(percentage: number, width: number = 15): string {
+  const filled = Math.round((percentage / 100) * width);
+  const empty = width - filled;
+  return '█'.repeat(filled) + '░'.repeat(empty);
+}
+
+/**
+ * Format uptime duration
+ * @param {number} milliseconds - Duration in milliseconds
+ * @returns {string} Formatted duration (e.g., "15m 32s")
+ */
+function formatDuration(milliseconds: number): string {
+  const seconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes % 60}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  }
+  return `${seconds}s`;
+}
+
+/**
+ * Get package version
+ * @returns {string} Version string
+ */
+function getVersion(): string {
+  try {
+    const packagePath = path.join(process.cwd(), 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
+    return packageJson.version || '1.0.0';
+  } catch {
+    return '1.0.0';
+  }
+}
+
+/**
+ * Format enhanced status message with system metrics
+ * @param {Object} data - Status data
+ * @returns {string} Formatted status display
+ */
+export function formatEnhancedStatusMessage(data: CommandData): string {
+  const cpuUsage = getCpuUsage();
+  const memUsage = getMemoryUsage();
+  const loadAvg = os.loadavg();
+  const version = getVersion();
+
+  // Session info
+  const sessionDuration = data.sessionStartTime
+    ? Date.now() - data.sessionStartTime
+    : 0;
+  const lastActivity = data.lastCommandTime
+    ? Date.now() - data.lastCommandTime
+    : 0;
+
+  // Calculate success rate
+  const totalCommands = data.commandCount || 0;
+  const successCommands = data.successCount || 0;
+  const successRate = totalCommands > 0
+    ? Math.round((successCommands / totalCommands) * 100)
+    : 0;
+
+  // AI status
+  const aiStatus = data.hasOrchestrator ? '✓ Connected' : '✗ Disconnected';
+
+  // Format CPU usage with proper padding
+  const cpuText = cpuUsage.toString().padStart(2);
+  const cpuBar = createProgressBar(cpuUsage);
+
+  // Format memory usage with proper padding
+  const memUsed = formatBytes(memUsage.used);
+  const memTotal = formatBytes(memUsage.total);
+  const memBar = createProgressBar(memUsage.percentage);
+
+  // Format success rate with proper padding
+  const successText = successRate.toString().padStart(3);
+  const successBar = createProgressBar(successRate);
+
+  // Format commands count
+  const commandsText = totalCommands.toString().padStart(3);
+  const failedText = (data.failedCount || 0).toString().padStart(3);
+
+  // Format status indicators
+  const patternStatus = data.hasPatternMatcher ? '✓ Active  ' : '✗ Inactive';
+  const debugStatus = data.isDebug ? 'ON ' : 'OFF';
+  const ttyStatus = process.stdout.isTTY ? 'yes' : 'no ';
+  const dbStatus = data.hasConfig ? '✓ Turso' : '✗ None';
+
+  // Build the status display - single column layout
+  const lines = [
+    '╭─────────────────────────────────────────────────────────────╮',
+    '│ 📊 MCP Terminal Assistant - System Status                   │',
+    '╰─────────────────────────────────────────────────────────────╯',
+    '',
+    '👤 User & Session',
+    `   User:        ${data.userName || 'default'}`,
+    `   Session:     ${formatDuration(sessionDuration)}`,
+    `   Last active: ${lastActivity > 0 ? formatDuration(lastActivity) + ' ago' : 'now'}`,
+    '',
+    '🤖 AI Service',
+    `   Model:       Claude Sonnet 4.5`,
+    `   Status:      ${aiStatus}`,
+    `   Version:     ${version}`,
+    '',
+    '⚡ Performance',
+    `   Commands:    ${commandsText}`,
+    `   Success:     ${successText}% ${successBar}`,
+    `   Failed:      ${failedText}`,
+    '',
+    '💾 Storage',
+    `   Database:    ${dbStatus}`,
+    `   Records:     ${commandsText}`,
+    '',
+    '🧠 System Resources',
+    `   CPU:         ${cpuText}% ${cpuBar}`,
+    `   Memory:      ${memUsed} / ${memTotal} ${memBar} (${memUsage.percentage}%)`,
+    `   Load avg:    ${loadAvg.map(l => l.toFixed(2)).join(', ')}`,
+    '',
+    '⚙️  Configuration',
+    `   Pattern:     ${patternStatus}`,
+    `   Debug:       ${debugStatus}`,
+    `   TTY:         ${ttyStatus}`,
+    '',
+    '╰─────────────────────────────────────────────────────────────╯'
+  ];
+
+  return lines.join('\n');
 }
 
 // Legacy context interface for backward compatibility

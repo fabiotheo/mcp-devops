@@ -34,6 +34,7 @@ import { useStatusProcessor } from './hooks/useStatusProcessor.js';
 
 // Import components
 import StatusLine from './components/StatusLine.js';
+import CommandSelector from './components/CommandSelector.js';
 
 // Import utilities
 import { formatResponse } from './utils/responseFormatter.js';
@@ -43,6 +44,7 @@ import {
   disableBracketedPasteMode
 } from './utils/pasteDetection.js';
 import {parseMarkdownToElements} from "./components/MarkdownParser.js";
+import { parseSpecialCommand, formatEnhancedStatusMessage } from './utils/specialCommands.js';
 
 // @ts-ignore - import.meta is available in ES modules
 const __filename: string = fileURLToPath(import.meta.url);
@@ -100,6 +102,9 @@ const MCPInkAppInner: React.FC = () => {
   const { isDebug: debugMode, isTTY, user: currentUser } = config;
 
   const terminalWidth = stdout?.columns || 80;
+
+  // Command selector state - for showing slash commands menu
+  const [showCommandSelector, setShowCommandSelector] = React.useState(false);
 
   // Process execution log for StatusLine display
   const statusData = useStatusProcessor({
@@ -220,6 +225,101 @@ const MCPInkAppInner: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [response, setResponse, actions.ui]);
+
+  // Detect "/" to show command selector
+  // Keep selector open while input starts with "/"
+  useEffect(() => {
+    if (input.startsWith('/') && !isProcessing && status === 'ready') {
+      setShowCommandSelector(true);
+    } else if (showCommandSelector && !input.startsWith('/')) {
+      setShowCommandSelector(false);
+    }
+  }, [input, isProcessing, status, showCommandSelector]);
+
+  // Handler for command selection
+  const handleCommandSelect = (commandValue: string) => {
+    setShowCommandSelector(false);
+    const command = `/${commandValue}`;
+
+    // Parse special command to get action
+    const action = parseSpecialCommand(command, {
+      commandHistory,
+      status,
+      hasOrchestrator: !!orchestrator?.current,
+      hasPatternMatcher: !!patternMatcher?.current,
+      isDebug: debugMode,
+      hasConfig: !!config,
+      userName: currentUser,
+      sessionStartTime: state.session?.startTime,
+      lastCommandTime: state.session?.lastCommandTime,
+      commandCount: commandHistory.length,
+      successCount: state.session?.successCount || commandHistory.length,
+      failedCount: state.session?.failedCount || 0
+    });
+
+    if (action) {
+      // Handle the action
+      switch (action.type) {
+        case 'SHOW_HELP':
+          setResponse(action.payload.text);
+          setHistory([...history, `❯ ${command}`, formatResponse(action.payload.text, debug)]);
+          break;
+
+        case 'CLEAR_HISTORY':
+          setHistory([]);
+          setResponse('');
+          break;
+
+        case 'SHOW_HISTORY':
+          const historyText = action.payload.commands.join('\n') || 'No command history';
+          setResponse(historyText);
+          setHistory([...history, `❯ ${command}`, formatResponse(historyText, debug)]);
+          break;
+
+        case 'SHOW_STATUS':
+          // Use enhanced status message with system metrics
+          const enhancedStatusText = formatEnhancedStatusMessage({
+            commandHistory,
+            status,
+            hasOrchestrator: !!orchestrator?.current,
+            hasPatternMatcher: !!patternMatcher?.current,
+            isDebug: debugMode,
+            hasConfig: !!config,
+            userName: currentUser,
+            sessionStartTime: state.session?.startTime,
+            lastCommandTime: state.session?.lastCommandTime,
+            commandCount: commandHistory.length,
+            successCount: state.session?.successCount || commandHistory.length,
+            failedCount: state.session?.failedCount || 0
+          });
+          setResponse(enhancedStatusText);
+          setHistory([...history, `❯ ${command}`, formatResponse(enhancedStatusText, debug)]);
+          break;
+
+        case 'TOGGLE_DEBUG':
+          // Debug toggle is handled by the original implementation
+          // We don't handle it here in the command selector
+          setResponse('Debug mode toggle not supported from command selector');
+          break;
+
+        case 'EXIT_APPLICATION':
+          exit();
+          break;
+
+        case 'UNKNOWN_COMMAND':
+          const errorText = `Unknown command: /${action.payload.command}`;
+          setResponse(errorText);
+          setHistory([...history, `❯ ${command}`, formatResponse(errorText, debug)]);
+          break;
+      }
+    }
+  };
+
+  // Handler for command selector cancel
+  const handleCommandCancel = () => {
+    setShowCommandSelector(false);
+    setInput(''); // Reset input to empty
+  };
 
   // Show loading screen during initialization - centered and beautiful
   if (status !== 'ready' && status !== 'error' && status !== 'processing') {
@@ -556,7 +656,7 @@ const MCPInkAppInner: React.FC = () => {
           '─'.repeat(terminalWidth)
         )
       ),
-      // Input prompt
+      // Input prompt - show CommandSelector when "/" is typed
       React.createElement(
         Box,
         {
@@ -569,12 +669,18 @@ const MCPInkAppInner: React.FC = () => {
               React.createElement(Text, { color: 'yellow' }, '❯ Processing '),
               React.createElement(Spinner, { type: 'dots' })
             )
+          : showCommandSelector
+          ? React.createElement(CommandSelector, {
+              onSelect: handleCommandSelect,
+              onCancel: handleCommandCancel,
+              filterText: input.startsWith('/') ? input.slice(1) : ''
+            })
           : React.createElement(MultilineInput, {
               value: input,
               onChange: setInput,
-              placeholder: 'Type your question...',
+              placeholder: 'Type your question or / for commands...',
               showCursor: true,
-              isActive: status === 'ready',
+              isActive: status === 'ready' && !showCommandSelector,
               cursorPosition: cursorPosition,
             })
       ),

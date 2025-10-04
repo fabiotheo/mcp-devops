@@ -15,7 +15,7 @@ import {
   processPastedInput,
   enableBracketedPasteMode
 } from '../utils/pasteDetection.js';
-import { parseSpecialCommand } from '../utils/specialCommands.js';
+import { parseSpecialCommand, formatEnhancedStatusMessage } from '../utils/specialCommands.js';
 
 /**
  * Hook for handling terminal input
@@ -244,13 +244,23 @@ export function useInputHandler({
               break;
 
             case 'SHOW_STATUS':
-              const statusText = `Status: ${action.payload.status}
-AI Backend: ${action.payload.aiBackend}
-Pattern Matcher: ${action.payload.patternMatcher}
-Debug Mode: ${action.payload.debugMode}
-Config: ${action.payload.config}`;
-              setResponse(statusText);
-              setHistory([...history, `❯ ${command}`, formatResponse(statusText, debug)]);
+              // Use enhanced status message with system metrics
+              const enhancedStatusText = formatEnhancedStatusMessage({
+                commandHistory,
+                status,
+                hasOrchestrator: !!orchestrator?.current,
+                hasPatternMatcher: !!patternMatcher?.current,
+                isDebug,
+                hasConfig: !!config,
+                userName: config?.user || 'default',
+                sessionStartTime: state.session?.startTime,
+                lastCommandTime: state.session?.lastCommandTime,
+                commandCount: commandHistory.length,
+                successCount: state.session?.successCount || commandHistory.length,
+                failedCount: state.session?.failedCount || 0
+              });
+              setResponse(enhancedStatusText);
+              setHistory([...history, `❯ ${command}`, formatResponse(enhancedStatusText, debug)]);
               break;
 
             case 'EXIT_APPLICATION':

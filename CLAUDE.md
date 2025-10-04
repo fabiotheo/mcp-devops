@@ -167,6 +167,34 @@ try {
 
 **Note**: The `libs/` directory is already configured in `setup.js` to be automatically copied during installation (lines 855-880).
 
+### Adding New NPM Packages
+**CRITICAL**: When installing a new npm package (pnpm add/npm install), you MUST add it to `setup.js`:
+
+1. **Add to requiredDeps object** (around line 520-535):
+```javascript
+const requiredDeps = {
+  '@anthropic-ai/sdk': '^0.21.1',
+  // ... existing dependencies
+  'your-new-package': '^1.0.0',  // Add your package here
+};
+```
+
+2. **Why this is critical**:
+   - `setup.js` copies files to `~/.mcp-terminal/` during installation
+   - Without adding to `requiredDeps`, the package won't be installed in production
+   - Users will get "Cannot find package" errors when running ipcom-chat
+   - The package.json in `~/.mcp-terminal/` needs to have ALL dependencies
+
+3. **Testing**:
+   - After adding to `requiredDeps`, run: `node setup.js --upgrade --auto`
+   - Verify package is installed: `ls ~/.mcp-terminal/node_modules/your-package`
+
+**Example**: When @inkjs/ui was added, both ink version and @inkjs/ui were added to requiredDeps:
+```javascript
+ink: '^6.3.1',           // Updated from ^4.4.1 (peer dependency requirement)
+'@inkjs/ui': '^2.0.0',   // New package
+```
+
 ### Adding New AI Providers
 1. Create new provider class extending `BaseAIModel` in `ai_models/`
 2. Implement required methods: `initialize()`, `analyzeCommand()`, `askCommand()`

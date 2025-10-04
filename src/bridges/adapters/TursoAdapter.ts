@@ -118,6 +118,7 @@ interface TursoHistoryClientModule {
   setUser: (userId: string) => Promise<UserInfo | null>;
   saveCommand: (command: string, response: string | null, metadata?: Record<string, unknown>) => Promise<SaveMessageResult>;
   saveToUser: (command: string, response: string | null, metadata?: Record<string, unknown>) => Promise<SaveMessageResult>;
+  saveToMachine: (command: string, response: string | null, metadata?: Record<string, unknown>) => Promise<SaveMessageResult>;
   updateEntry: (entryId: string, updates: Record<string, unknown>) => Promise<void>;
   updateUserEntry: (entryId: string, updates: Record<string, unknown>) => Promise<void>;
   getHistory: (limit: number) => Promise<HistoryEntry[]>;
@@ -500,10 +501,20 @@ class TursoAdapter {
     try {
       let entryId;
 
-      // If we have a userId (not default), save to user table
+      // If we have a userId (not default), save to BOTH user table AND machine table
       // Otherwise, use saveCommand which respects the mode (will save to machine/global)
       if (this.userId && this.userId !== 'default') {
+        // Save to user table first
         entryId = await this.tursoClient.saveToUser(command, null, {
+          status,
+          request_id: requestId,
+          session_id: this.tursoClient.sessionId,
+          source: 'ink-interface',
+        });
+
+        // Also save to machine table for machine-level history
+        await this.tursoClient.saveToMachine(command, null, {
+          user_id: this.userId,
           status,
           request_id: requestId,
           session_id: this.tursoClient.sessionId,
@@ -688,6 +699,13 @@ class TursoAdapter {
           response,
           status,
           completed_at: updateTime,
+        });
+
+        // Also update machine table for registered users
+        // Find the most recent pending entry for this user
+        await this.tursoClient.client.execute({
+          sql: 'UPDATE history_machine SET response = ?, status = ?, completed_at = ?, updated_at = ? WHERE machine_id = ? AND user_id = ? AND status = ? AND response IS NULL ORDER BY timestamp DESC LIMIT 1',
+          args: [response, status, updateTime, updateTime, this.tursoClient.machineId, this.userId, 'pending'],
         });
       } else {
         // For default users, update global and machine tables

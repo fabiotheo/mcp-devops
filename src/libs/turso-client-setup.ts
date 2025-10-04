@@ -50,7 +50,7 @@ class TursoClientSetup {
 
   constructor() {
     this.configDir = path.join(os.homedir(), '.mcp-terminal');
-    this.configPath = path.join(this.configDir, 'turso-config.json');
+    this.configPath = path.join(this.configDir, 'config.json');
     this.machineIdPath = path.join(this.configDir, 'machine.json');
     this.client = null;
   }

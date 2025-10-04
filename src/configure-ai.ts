@@ -321,7 +321,7 @@ class AIConfigurator {
     const configPath = path.join(
       process.env.HOME || '',
       '.mcp-terminal',
-      'turso-config.json',
+      'config.json',
     );
 
     try {

@@ -84,7 +84,7 @@ class HistoryMigrator {
   constructor() {
     this.configDir = path.join(os.homedir(), '.mcp-terminal');
     this.historyFile = path.join(this.configDir, 'history.json');
-    this.tursoConfigFile = path.join(this.configDir, 'turso-config.json');
+    this.tursoConfigFile = path.join(this.configDir, 'config.json');
     this.migrationLogFile = path.join(this.configDir, 'migration.log');
     this.rl = readline.createInterface({
       input: process.stdin,

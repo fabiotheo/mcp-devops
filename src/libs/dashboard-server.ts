@@ -148,7 +148,7 @@ class DashboardServer {
         const configPath = path.join(
           os.homedir(),
           '.mcp-terminal',
-          'turso-config.json',
+          'config.json',
         );
         const tursoConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
         this.tursoClient = new TursoHistoryClient(tursoConfig);

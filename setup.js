@@ -44,6 +44,26 @@ class MCPSetup {
       // Fallback para versão padrão se não conseguir ler do package.json
       this.version = '1.0.1';
     }
+
+    /**
+     * PRESERVED PATHS - Files and directories that must NEVER be deleted during updates
+     * These contain user data and configurations that should persist across installations
+     *
+     * IMPORTANT: If you add new user data storage, add it to this list!
+     */
+    this.PRESERVED_PATHS = [
+      'cache',                    // API response cache
+      'logs',                     // User logs
+      'patterns',                 // Custom error patterns
+      'config.json',              // Main configuration
+      'config.json.bak',          // Configuration backup
+      'command-history.json',     // Local command history
+      '.backup-info.json',        // Backup metadata
+      '.simplified-migration',    // Migration flags
+      '.version',                 // Version tracking
+      '.checksums.json',          // File integrity manifest
+      'config',                   // Additional config directory if exists
+    ];
   }
 
   async setup() {
@@ -1116,10 +1136,20 @@ export default class ModelFactory {
 
   /**
    * Force clean installation by removing stale files
+   *
+   * ⚠️ CRITICAL: This function uses a STATIC list of directories and files to remove.
+   * If you refactor the project structure (rename/move directories), you MUST update this list!
+   *
+   * PROTECTED PATHS: Files/directories in this.PRESERVED_PATHS are NEVER deleted.
+   * These contain user data and must persist across updates.
+   *
+   * TODO: Consider migrating to manifest-based cleanup using .checksums.json
+   * to make this process more robust and self-maintaining.
    */
   async cleanStaleFiles() {
     console.log('\n🧹 Limpando arquivos antigos (cache busting)...');
 
+    // Application code directories that should be refreshed on every update
     const dirsToClean = [
       path.join(this.mcpDir, 'src'),
       path.join(this.mcpDir, 'libs'),
@@ -1130,18 +1160,27 @@ export default class ModelFactory {
       path.join(this.mcpDir, 'services'),
       path.join(this.mcpDir, 'utils'),
       path.join(this.mcpDir, 'bridges'),
+      path.join(this.mcpDir, 'docs'), // Documentation (no longer copied)
     ];
 
     for (const dir of dirsToClean) {
+      const baseName = path.basename(dir);
+
+      // Safety check: Never delete protected paths
+      if (this.PRESERVED_PATHS.includes(baseName)) {
+        console.log(`  ⚠️  IGNORADO (protegido): ${baseName}/`);
+        continue;
+      }
+
       try {
         await fs.rm(dir, { recursive: true, force: true });
-        console.log(`  ✓ Removido: ${path.basename(dir)}/`);
+        console.log(`  ✓ Removido: ${baseName}/`);
       } catch (error) {
         // Silently ignore if directory doesn't exist
       }
     }
 
-    // Remove old standalone files that might be outdated
+    // Remove old standalone files that might be outdated (compiled JavaScript files)
     const filesToClean = [
       'ipcom-chat-cli.js',
       'mcp-ink-cli.js',
@@ -1151,6 +1190,12 @@ export default class ModelFactory {
     ];
 
     for (const file of filesToClean) {
+      // Safety check: Never delete protected files
+      if (this.PRESERVED_PATHS.includes(file)) {
+        console.log(`  ⚠️  IGNORADO (protegido): ${file}`);
+        continue;
+      }
+
       try {
         await fs.unlink(path.join(this.mcpDir, file));
         console.log(`  ✓ Removido: ${file}`);
@@ -1159,7 +1204,7 @@ export default class ModelFactory {
       }
     }
 
-    console.log('  ✅ Limpeza concluída\n');
+    console.log('  ✅ Limpeza concluída (dados do usuário preservados)\n');
   }
 
   /**
@@ -1401,28 +1446,8 @@ configurator.run().catch(error => {
       console.log(`  ⚠ Erro ao criar mcp-configure: ${error.message}`);
     }
 
-    // Copiar documentação
-    try {
-      const docsDir = path.join(process.cwd(), 'docs');
-      const destDocsDir = path.join(this.mcpDir, 'docs');
-
-      // Criar diretório docs se não existir
-      await fs.mkdir(destDocsDir, { recursive: true });
-
-      // Copiar arquivos de documentação
-      const docFiles = await fs.readdir(docsDir);
-      for (const file of docFiles) {
-        if (file.endsWith('.md')) {
-          const srcPath = path.join(docsDir, file);
-          const destPath = path.join(destDocsDir, file);
-          const content = await fs.readFile(srcPath, 'utf8');
-          await fs.writeFile(destPath, content);
-        }
-      }
-      console.log(`  ✓ Documentação copiada`);
-    } catch (error) {
-      console.log(`  ⚠ Erro ao copiar documentação: ${error.message}`);
-    }
+    // Documentation is not copied to installation directory anymore
+    // Users should refer to the project repository for documentation
 
     const scripts = [
       'configure-ai.js',

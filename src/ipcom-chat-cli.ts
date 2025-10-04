@@ -638,8 +638,9 @@ program
     // Se nenhum comando ou opção foi especificado, inicia modo interativo
     const args = [path.join(__dirname, 'mcp-ink-cli.js')];
 
-    // Determine user: --user option > MCP_USER env > OS username
-    const effectiveUser = options.user || process.env.MCP_USER || os.userInfo().username || 'default';
+    // Determine user: --user option > MCP_USER env > 'default' (no OS username)
+    // Using 'default' when no user specified allows machine-only history without user validation
+    const effectiveUser = options.user || process.env.MCP_USER || 'default';
 
     // Always pass user to child process
     process.env.MCP_USER = effectiveUser;

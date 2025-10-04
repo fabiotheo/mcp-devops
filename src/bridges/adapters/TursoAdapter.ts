@@ -195,27 +195,50 @@ class TursoAdapter {
       }
 
       // Load Turso client
-      debugLog('[TursoAdapter] Loading Turso client module...', {}, true);
+      debugLog('[TursoAdapter] Loading Turso client module...', { path: this.tursoClientPath }, true);
       const module = await import(this.tursoClientPath) as { default?: unknown; TursoHistoryClient?: unknown };
       const TursoHistoryClient = module.default || module.TursoHistoryClient;
-      debugLog('[TursoAdapter] Turso client module loaded', {}, true);
+      debugLog('[TursoAdapter] Turso client module loaded', { hasDefault: !!module.default, hasNamed: !!module.TursoHistoryClient }, true);
 
       // Load configuration
       debugLog('[TursoAdapter] Loading configuration...', {}, true);
       const config: TursoConfig = JSON.parse(await fs.readFile(this.configPath, 'utf8'));
-      debugLog('[TursoAdapter] Configuration loaded', {}, true);
+      debugLog('[TursoAdapter] Configuration loaded', { 
+        hasTursoUrl: !!config.turso_url,
+        hasTursoToken: !!config.turso_token,
+        hasDatabaseUrl: !!config.databaseUrl,
+        hasAuthToken: !!config.authToken,
+        configKeys: Object.keys(config).filter(k => k.toLowerCase().includes('turso') || k.toLowerCase().includes('database') || k.toLowerCase().includes('auth'))
+      }, true);
 
-      // Initialize client
-      debugLog('[TursoAdapter] Creating TursoClient instance...', {}, true);
+      // Initialize client with appropriate mode
+      // For 'default' user, use machine mode (no user validation)
+      // For specific users, use user mode (with validation)
+      const historyMode = (this.userId && this.userId !== 'default') ? 'user' : 'machine';
+      debugLog('[TursoAdapter] Creating TursoClient instance...', { 
+        debug: this.debug,
+        historyMode,
+        userId: this.userId
+      }, true);
+      
       this.tursoClient = new (TursoHistoryClient as unknown as new (config: TursoConfig) => TursoHistoryClientModule)({
         ...config,
         debug: this.debug,
+        history_mode: historyMode,
       });
-      debugLog('[TursoAdapter] TursoClient instance created', {}, true);
+      debugLog('[TursoAdapter] TursoClient instance created', { 
+        hasInitialize: typeof this.tursoClient.initialize === 'function',
+        clientType: this.tursoClient.constructor.name 
+      }, true);
 
-      // Simple initialization without timeout
+      // Initialize with timeout to prevent hanging
       debugLog('[TursoAdapter] Initializing TursoClient...', {}, true);
-      await this.tursoClient.initialize();
+      await Promise.race([
+        this.tursoClient.initialize(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Turso initialization timeout after 5s')), 5000)
+        )
+      ]);
       debugLog('[TursoAdapter] ✓ TursoClient initialized successfully', {}, true);
 
       // Set the user - this will throw if user doesn't exist
@@ -228,22 +251,24 @@ class TursoAdapter {
         debugLog('[TursoAdapter] Skipping setUser (default user or empty)', { userId: this.userId }, true);
       }
 
+      this.initialized = true;
       this.enabled = true;
+      debugLog('[TursoAdapter] Adapter fully initialized', { enabled: this.enabled }, true);
+    } catch (err: any) {
+      debugLog('[TursoAdapter] Initialization failed', { 
+        error: err?.message, 
+        stack: err?.stack,
+        isUserNotFound: err?.message?.startsWith?.('USER_NOT_FOUND')
+      }, true);
 
-      if (this.debug) {
-        console.log('[TursoAdapter] Turso client initialized successfully');
+      // Re-throw user not found errors - these should stop the system
+      if (err?.message?.startsWith?.('USER_NOT_FOUND')) {
+        throw err;
       }
 
-      this.initialized = true;
-    } catch (error) {
-      // Check if it's a user not found error
-      if (error instanceof Error && error.message.startsWith('USER_NOT_FOUND:')) {
-        throw error; // Re-throw silently
-      }
-
-      console.error('[TursoAdapter] Failed to initialize:', error);
-      // Other Turso errors are optional, don't throw
-      this.initialized = true;
+      // Other errors are logged but not thrown (offline mode)
+      console.error('[TursoAdapter] Error during initialization:', err?.message);
+      this.initialized = true; // Mark as initialized even on error (offline mode)
     }
   }
 

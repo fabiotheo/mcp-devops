@@ -39,6 +39,13 @@ interface UIState {
   cursorPosition: number;
 }
 
+interface SessionState {
+  startTime: number;
+  lastCommandTime: number;
+  successCount: number;
+  failedCount: number;
+}
+
 interface CoreActions {
   setInput: (value: string) => void;
   setStatus: (value: AppStatus) => void;
@@ -78,16 +85,25 @@ interface RequestManagement {
   dbAbortControllerRef: MutableRefObject<AbortController | null>;
 }
 
+interface SessionActions {
+  setSessionStartTime: (value: number) => void;
+  setLastCommandTime: (value: number) => void;
+  incrementSuccessCount: () => void;
+  incrementFailedCount: () => void;
+}
+
 interface AppContextValue {
   state: {
     core: CoreState;
     history: HistoryState;
     ui: UIState;
+    session: SessionState;
   };
   actions: {
     core: CoreActions;
     history: HistoryActions;
     ui: UIActions;
+    session: SessionActions;
   };
   services: Services;
   requests: RequestManagement;
@@ -148,6 +164,15 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
   const [lastCtrlC, setLastCtrlC] = useState<number>(0);
   const [lastEsc, setLastEsc] = useState<number>(0);
   const [cursorPosition, setCursorPosition] = useState<number>(0);
+
+  // ========== Session State ==========
+  const [sessionStartTime, setSessionStartTime] = useState<number>(Date.now());
+  const [lastCommandTime, setLastCommandTime] = useState<number>(Date.now());
+  const [successCount, setSuccessCount] = useState<number>(0);
+  const [failedCount, setFailedCount] = useState<number>(0);
+
+  const incrementSuccessCount = () => setSuccessCount(prev => prev + 1);
+  const incrementFailedCount = () => setFailedCount(prev => prev + 1);
 
   // Config state
   const [configState, setConfigState] = useState<BackendConfig>(config);
@@ -211,6 +236,12 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
         lastCtrlC,
         lastEsc,
         cursorPosition
+      },
+      session: {
+        startTime: sessionStartTime,
+        lastCommandTime,
+        successCount,
+        failedCount
       }
     },
 
@@ -238,6 +269,12 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
         setLastCtrlC,
         setLastEsc,
         setCursorPosition
+      },
+      session: {
+        setSessionStartTime,
+        setLastCommandTime,
+        incrementSuccessCount,
+        incrementFailedCount
       }
     },
 
@@ -262,12 +299,14 @@ export function AppProvider({ children, config = {} }: AppProviderProps) {
     // Dependencies for useMemo - all state and refs that are used
     input, status, response, error, isProcessing, isCancelled, executionLog,
     commandHistory, fullHistory, history, historyIndex,
-    lastCtrlC, lastEsc,
+    lastCtrlC, lastEsc, cursorPosition,
+    sessionStartTime, lastCommandTime, successCount, failedCount,
     currentRequestId,
     setInput, setStatus, setResponse, setError, setIsProcessing, setIsCancelled, setConfigState,
     setExecutionLog, addExecutionLog, clearExecutionLog,
     setCommandHistory, setFullHistory, setHistory, setHistoryIndex,
-    setLastCtrlC, setLastEsc,
+    setLastCtrlC, setLastEsc, setCursorPosition,
+    setSessionStartTime, setLastCommandTime, incrementSuccessCount, incrementFailedCount,
     orchestrator, patternMatcher, tursoAdapter,
     activeRequests, aiAbortControllerRef, dbAbortControllerRef,
     appConfig

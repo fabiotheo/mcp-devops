@@ -44,6 +44,7 @@ import {
   disableBracketedPasteMode
 } from './utils/pasteDetection.js';
 import {parseMarkdownToElements} from "./components/MarkdownParser.js";
+import { parseSpecialCommand, formatEnhancedStatusMessage } from './utils/specialCommands.js';
 
 // @ts-ignore - import.meta is available in ES modules
 const __filename: string = fileURLToPath(import.meta.url);
@@ -226,18 +227,92 @@ const MCPInkAppInner: React.FC = () => {
   }, [response, setResponse, actions.ui]);
 
   // Detect "/" to show command selector
+  // Keep selector open while input starts with "/"
   useEffect(() => {
-    if (input === '/' && !isProcessing && status === 'ready') {
+    if (input.startsWith('/') && !isProcessing && status === 'ready') {
       setShowCommandSelector(true);
-      setInput(''); // Clear the "/" from input
+    } else if (showCommandSelector && !input.startsWith('/')) {
+      setShowCommandSelector(false);
     }
-  }, [input, isProcessing, status, setInput]);
+  }, [input, isProcessing, status, showCommandSelector]);
 
   // Handler for command selection
   const handleCommandSelect = (commandValue: string) => {
     setShowCommandSelector(false);
-    // Execute the selected command
-    processCommand(`/${commandValue}`);
+    const command = `/${commandValue}`;
+
+    // Parse special command to get action
+    const action = parseSpecialCommand(command, {
+      commandHistory,
+      status,
+      hasOrchestrator: !!orchestrator?.current,
+      hasPatternMatcher: !!patternMatcher?.current,
+      isDebug: debugMode,
+      hasConfig: !!config,
+      userName: currentUser,
+      sessionStartTime: state.session?.startTime,
+      lastCommandTime: state.session?.lastCommandTime,
+      commandCount: commandHistory.length,
+      successCount: state.session?.successCount || commandHistory.length,
+      failedCount: state.session?.failedCount || 0
+    });
+
+    if (action) {
+      // Handle the action
+      switch (action.type) {
+        case 'SHOW_HELP':
+          setResponse(action.payload.text);
+          setHistory([...history, `❯ ${command}`, formatResponse(action.payload.text, debug)]);
+          break;
+
+        case 'CLEAR_HISTORY':
+          setHistory([]);
+          setResponse('');
+          break;
+
+        case 'SHOW_HISTORY':
+          const historyText = action.payload.commands.join('\n') || 'No command history';
+          setResponse(historyText);
+          setHistory([...history, `❯ ${command}`, formatResponse(historyText, debug)]);
+          break;
+
+        case 'SHOW_STATUS':
+          // Use enhanced status message with system metrics
+          const enhancedStatusText = formatEnhancedStatusMessage({
+            commandHistory,
+            status,
+            hasOrchestrator: !!orchestrator?.current,
+            hasPatternMatcher: !!patternMatcher?.current,
+            isDebug: debugMode,
+            hasConfig: !!config,
+            userName: currentUser,
+            sessionStartTime: state.session?.startTime,
+            lastCommandTime: state.session?.lastCommandTime,
+            commandCount: commandHistory.length,
+            successCount: state.session?.successCount || commandHistory.length,
+            failedCount: state.session?.failedCount || 0
+          });
+          setResponse(enhancedStatusText);
+          setHistory([...history, `❯ ${command}`, formatResponse(enhancedStatusText, debug)]);
+          break;
+
+        case 'TOGGLE_DEBUG':
+          // Debug toggle is handled by the original implementation
+          // We don't handle it here in the command selector
+          setResponse('Debug mode toggle not supported from command selector');
+          break;
+
+        case 'EXIT_APPLICATION':
+          exit();
+          break;
+
+        case 'UNKNOWN_COMMAND':
+          const errorText = `Unknown command: /${action.payload.command}`;
+          setResponse(errorText);
+          setHistory([...history, `❯ ${command}`, formatResponse(errorText, debug)]);
+          break;
+      }
+    }
   };
 
   // Handler for command selector cancel
@@ -597,7 +672,8 @@ const MCPInkAppInner: React.FC = () => {
           : showCommandSelector
           ? React.createElement(CommandSelector, {
               onSelect: handleCommandSelect,
-              onCancel: handleCommandCancel
+              onCancel: handleCommandCancel,
+              filterText: input.startsWith('/') ? input.slice(1) : ''
             })
           : React.createElement(MultilineInput, {
               value: input,

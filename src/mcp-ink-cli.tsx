@@ -276,7 +276,7 @@ const MCPInkAppInner: React.FC = () => {
           break;
 
         case 'SHOW_HISTORY':
-          const historyText = formatHistoryMessage(action.payload.commands);
+          const historyText = formatHistoryMessage(action.payload.commands, terminalWidth);
           setResponse(historyText);
           setHistory([...history, `❯ ${command}`, formatResponse(historyText, debug)]);
           break;

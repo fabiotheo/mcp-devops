@@ -192,35 +192,57 @@ Config: ${statusPayload.config}`;
  * Enhanced with numbering, borders, and better UX
  *
  * @param {Array} commands - Command history
+ * @param {number} terminalWidth - Terminal width for responsive borders (default: 80)
  * @returns {string} Formatted history message with visual elements
  */
-export function formatHistoryMessage(commands: string[]): string {
+export function formatHistoryMessage(commands: string[], terminalWidth: number = 80): string {
+  // Create clean separator lines
+  const separator = '─'.repeat(terminalWidth);
+
   if (commands.length === 0) {
-    return `╭─────────────────── Command History ──────────────────╮
-│                                                       │
-│  No command history yet.                              │
-│  Start by asking a question!                          │
-│                                                       │
-╰───────────────────────────────────────────────────────╯`;
+    return [
+      separator,
+      '',
+      '  📜 Command History',
+      '',
+      '  No command history yet.',
+      '  Start by asking a question!',
+      '',
+      separator
+    ].join('\n');
   }
 
-  // Format each command with numbering
+  // Format each command with numbering and truncation
+  const maxNumWidth = commands.length.toString().length;
   const formattedCommands = commands
     .map((cmd, index) => {
-      const num = (index + 1).toString().padStart(2, ' ');
-      return `  ${num}. ${cmd}`;
+      const num = (index + 1).toString().padStart(maxNumWidth, ' ');
+      const prefix = `  ${num}. `;
+      const maxCmdWidth = terminalWidth - prefix.length - 2; // -2 for safety margin
+
+      // Truncate command if too long
+      let displayCmd = cmd;
+      if (cmd.length > maxCmdWidth) {
+        displayCmd = cmd.substring(0, maxCmdWidth - 3) + '...';
+      }
+
+      return prefix + displayCmd;
     })
     .join('\n');
 
   // Build the complete history display
-  const totalText = `Total: ${commands.length} command${commands.length !== 1 ? 's' : ''}`;
+  const totalText = `📝 Total: ${commands.length} command${commands.length !== 1 ? 's' : ''}`;
 
   return [
-    '╭─────────────────── Command History ──────────────────╮',
-    formattedCommands,
-    '╰───────────────────────────────────────────────────────╯',
+    separator,
     '',
-    `📝 ${totalText}`
+    '  📜 Command History',
+    '',
+    formattedCommands,
+    '',
+    `  ${totalText}`,
+    '',
+    separator
   ].join('\n');
 }
 

@@ -1527,8 +1527,8 @@ configurator.run().catch(error => {
         console.log(`📊 Nova versão: ${this.version}`);
 
         if (currentVersion === this.version) {
-          console.log('\n✅ Você já está na versão mais recente!');
-          return;
+          console.log('\n⚠️  Mesma versão detectada, mas continuando atualização para garantir arquivos corretos...');
+          // Don't return - continue with update to ensure all files are up to date
         }
 
         // Executar migrações se necessário

@@ -9,6 +9,7 @@
 import { createClient, type Client, type InArgs, type InValue } from '@libsql/client';
 import MachineIdentityManager from './machine-identity.js';
 import * as crypto from 'crypto';
+import { debugLog } from '../utils/debugLogger.js';
 
 /**
  * Configuration interface
@@ -101,20 +102,25 @@ export default class TursoHistoryClient {
    * Inicializa o cliente Turso e registra a máquina
    */
   async initialize() {
-    if (this.debug) console.log('[TursoClient] initialize() called');
+    debugLog('[TursoClient] initialize() called', {}, true);
     try {
       // Validar configuração
-      if (this.debug) console.log('[TursoClient] Validating config...');
+      debugLog('[TursoClient] Validating config...', {}, true);
       if (!this.config.turso_url || !this.config.turso_token) {
         throw new Error(
           'Turso URL and token are required. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN',
         );
       }
 
-      if (this.debug) console.log('[TursoClient] Creating client...');
+      debugLog('[TursoClient] Creating client...', {
+        url: this.config.turso_url?.substring(0, 30) + '...',
+        hasToken: !!this.config.turso_token,
+        hasSyncUrl: !!this.config.turso_sync_url
+      }, true);
+
       // Criar cliente Turso
       if (this.config.turso_sync_url) {
-        if (this.debug) console.log('[TursoClient] Using sync mode');
+        debugLog('[TursoClient] Using sync mode', {}, true);
         // Modo com embedded replica (suporte offline)
         this.client = createClient({
           url: this.config.turso_url,
@@ -123,17 +129,17 @@ export default class TursoHistoryClient {
           syncInterval: this.config.turso_sync_interval,
         });
       } else {
-        if (this.debug) console.log('[TursoClient] Using online-only mode');
+        debugLog('[TursoClient] Using online-only mode', {}, true);
         // Modo online apenas
         this.client = createClient({
           url: this.config.turso_url,
           authToken: this.config.turso_token,
         });
       }
-      if (this.debug) console.log('[TursoClient] Client created');
+      debugLog('[TursoClient] Client created', {}, true);
 
       // Testar conexão com timeout
-      if (this.debug) console.log('[TursoClient] Testing connection...');
+      debugLog('[TursoClient] Testing connection with SELECT 1...', {}, true);
       const testPromise = this.client.execute('SELECT 1');
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Connection test timeout')), 5000)
@@ -141,36 +147,35 @@ export default class TursoHistoryClient {
 
       try {
         await Promise.race([testPromise, timeoutPromise]);
-        if (this.debug) console.log('[TursoClient] Connection test successful');
-      } catch (err) {
-        if (this.debug) console.error('[TursoClient] Connection test failed:', err.message);
+        debugLog('[TursoClient] Connection test successful', {}, true);
+      } catch (err: any) {
+        debugLog('[TursoClient] Connection test failed', { error: err?.message }, true);
         throw err;
       }
 
       // Obter ID da máquina
-      if (this.debug) console.log('[TursoClient] Getting machine ID...');
+      debugLog('[TursoClient] Getting machine ID...', {}, true);
       this.machineId = await this.machineManager.getMachineId();
-      if (this.debug) console.log('[TursoClient] Machine ID:', this.machineId);
+      debugLog('[TursoClient] Machine ID obtained', { machineId: this.machineId }, true);
 
       // SKIP SCHEMA CREATION - Tables are created via migrations
       // await this.ensureSchema();
 
       // Registrar máquina
-      if (this.debug) console.log('[TursoClient] Registering machine...');
+      debugLog('[TursoClient] Registering machine...', {}, true);
       await this.registerMachine();
-      if (this.debug) console.log('[TursoClient] Machine registered');
+      debugLog('[TursoClient] Machine registered successfully', {}, true);
 
       // Gerar session ID
       this.sessionId = this.generateSessionId();
 
-      if (this.config.debug) {
-        console.log('TursoHistoryClient initialized successfully');
-        console.log('Mode:', this.mode);
-        console.log('Machine ID:', this.machineId);
-        console.log('Session ID:', this.sessionId);
-      }
-    } catch (error) {
-      console.error('Failed to initialize TursoHistoryClient:', error);
+      debugLog('[TursoClient] Initialization complete', {
+        mode: this.mode,
+        machineId: this.machineId,
+        sessionId: this.sessionId
+      }, true);
+    } catch (error: any) {
+      debugLog('[TursoClient] Initialization FAILED', { error: error?.message, stack: error?.stack }, true);
       throw error;
     }
   }

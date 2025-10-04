@@ -177,7 +177,9 @@
       "Bash(MCP_USER=aristides-fabio timeout 10 node ~/.mcp-terminal/src/mcp-ink-cli.js --debug)",
       "Bash(/tmp/test-auto-exit.sh:*)",
       "Bash(/tmp/test-user-not-found-msg.sh:*)",
-      "Bash(./test-setup-flow.sh:*)"
+      "Bash(./test-setup-flow.sh:*)",
+      "Bash(pnpm build:*)",
+      "Bash(MCP_USER=fabio-teste timeout 8 node dist/mcp-ink-cli.js --debug)"
     ],
     "deny": [],
     "ask": []

@@ -278,7 +278,12 @@ export async function createTursoAdapter(user: string, isDebug: boolean = false)
   });
 
   try {
+    debugLog('[createTursoAdapter] Calling tursoAdapter.initialize()', { user }, isDebug);
     await tursoAdapter.initialize();
+    debugLog('[createTursoAdapter] tursoAdapter.initialize() completed', { 
+      isConnected: tursoAdapter.isConnected(),
+      user 
+    }, isDebug);
 
     if (isDebug) {
       if (tursoAdapter.isConnected()) {
@@ -288,8 +293,15 @@ export async function createTursoAdapter(user: string, isDebug: boolean = false)
       }
     }
   } catch (err) {
+    debugLog('[createTursoAdapter] Error caught', { 
+      error: err instanceof Error ? err.message : String(err),
+      isUserNotFound: err instanceof Error && err.message.startsWith('USER_NOT_FOUND:'),
+      user
+    }, isDebug);
+
     // Re-throw user not found errors to prevent system from starting
     if (err instanceof Error && err.message.startsWith('USER_NOT_FOUND:')) {
+      debugLog('[createTursoAdapter] Re-throwing USER_NOT_FOUND error', { user }, isDebug);
       throw err;
     }
 
@@ -300,6 +312,7 @@ export async function createTursoAdapter(user: string, isDebug: boolean = false)
     }
   }
 
+  debugLog('[createTursoAdapter] Returning adapter', { user }, isDebug);
   return tursoAdapter as unknown as TursoAdapter;
 }
 

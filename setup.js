@@ -665,46 +665,8 @@ class MCPSetup {
       }
     }
 
-    // Copiar arquivos de modelos de IA
-    console.log('  📂 Copiando arquivos de modelos de IA...');
-    const aiModelsDir = path.join(this.mcpDir, 'ai_models');
-
-    try {
-      await fs.mkdir(aiModelsDir, { recursive: true });
-
-      const sourceDir = path.join(process.cwd(), 'dist', 'ai_models');
-
-      // Verificar se o diretório de origem existe
-      try {
-        await fs.access(sourceDir);
-
-        const sourceFiles = [
-          'base_model.js',
-          'claude_model.js',
-          'gemini_model.js',
-          'model_factory.js',
-        ];
-
-        for (const file of sourceFiles) {
-          try {
-            const content = await fs.readFile(
-              path.join(sourceDir, file),
-              'utf8',
-            );
-            await fs.writeFile(path.join(aiModelsDir, file), content);
-            console.log(`  ✓ Arquivo ${file} copiado`);
-          } catch (err) {
-            console.log(`  ⚠ Não foi possível copiar ${file}: ${err.message}`);
-          }
-        }
-
-        console.log('  ✓ Arquivos de modelo copiados');
-      } catch (err) {
-        console.log(`  ⚠ Diretório ai_models não encontrado em dist/: ${err.message}`);
-      }
-    } catch (error) {
-      console.log(`  ⚠ Aviso: ${error.message}`);
-    }
+    // NÃO copiar ai_models aqui - será copiado automaticamente com dist/ completo em makeExecutable()
+    console.log('  ✓ Preparação concluída (arquivos serão copiados a seguir)');
   }
 
   async configureAPI() {

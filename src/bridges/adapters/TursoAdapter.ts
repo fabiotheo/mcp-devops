@@ -160,7 +160,7 @@ class TursoAdapter {
     this.configPath = path.join(
       os.homedir(),
       '.mcp-terminal',
-      'turso-config.json',
+      'config.json',
     );
     this.tursoClient = null;
     this.initialized = false;

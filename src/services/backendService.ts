@@ -288,6 +288,12 @@ export async function createTursoAdapter(user: string, isDebug: boolean = false)
       }
     }
   } catch (err) {
+    // Re-throw user not found errors to prevent system from starting
+    if (err instanceof Error && err.message.startsWith('USER_NOT_FOUND:')) {
+      throw err;
+    }
+
+    // Other Turso errors are optional (offline mode)
     if (isDebug) {
       console.log('  ⚠ Turso initialization failed, using local history');
       console.error('Turso error:', err);

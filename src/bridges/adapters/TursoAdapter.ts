@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import os from 'os';
 import fs from 'fs/promises';
 import type { Row, InValue } from '@libsql/client';
+import { debugLog } from '../../utils/debugLogger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -155,7 +156,7 @@ class TursoAdapter {
     this.userId = options.userId || 'default';
     this.tursoClientPath =
       options.tursoClientPath ||
-      path.join(__dirname, '..', '..', 'libs', 'turso-client.ts');
+      path.join(__dirname, '..', '..', 'libs', 'turso-client.js');
     this.configPath = path.join(
       os.homedir(),
       '.mcp-terminal',
@@ -171,67 +172,62 @@ class TursoAdapter {
    * @throws {Error} Se falhar ao carregar o cliente
    */
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    debugLog('[TursoAdapter] initialize() called', {
+      userId: this.userId,
+      initialized: this.initialized
+    }, true); // Always log this
+
+    if (this.initialized) {
+      debugLog('[TursoAdapter] Already initialized, skipping...', {}, true);
+      return;
+    }
 
     try {
       // Check if Turso is configured
+      debugLog('[TursoAdapter] Checking config...', {}, true);
       const configExists = await this.checkConfig();
+      debugLog('[TursoAdapter] Config exists', { configExists }, true);
 
       if (!configExists) {
-        if (this.debug) {
-          console.log(
-            '[TursoAdapter] Turso not configured, running in offline mode',
-          );
-        }
+        debugLog('[TursoAdapter] Turso not configured, running in offline mode', {}, true);
         this.initialized = true;
         return;
       }
 
       // Load Turso client
+      debugLog('[TursoAdapter] Loading Turso client module...', {}, true);
       const module = await import(this.tursoClientPath) as { default?: unknown; TursoHistoryClient?: unknown };
       const TursoHistoryClient = module.default || module.TursoHistoryClient;
+      debugLog('[TursoAdapter] Turso client module loaded', {}, true);
 
       // Load configuration
+      debugLog('[TursoAdapter] Loading configuration...', {}, true);
       const config: TursoConfig = JSON.parse(await fs.readFile(this.configPath, 'utf8'));
+      debugLog('[TursoAdapter] Configuration loaded', {}, true);
 
       // Initialize client
+      debugLog('[TursoAdapter] Creating TursoClient instance...', {}, true);
       this.tursoClient = new (TursoHistoryClient as unknown as new (config: TursoConfig) => TursoHistoryClientModule)({
         ...config,
         debug: this.debug,
       });
+      debugLog('[TursoAdapter] TursoClient instance created', {}, true);
 
       // Simple initialization without timeout
-      if (this.debug) {
-        console.log('[TursoAdapter] Initializing TursoClient...');
-      }
-
+      debugLog('[TursoAdapter] Initializing TursoClient...', {}, true);
       await this.tursoClient.initialize();
+      debugLog('[TursoAdapter] ✓ TursoClient initialized successfully', {}, true);
 
-      if (this.debug) {
-        console.log('[TursoAdapter] ✓ TursoClient initialized successfully');
-      }
-
-      // Set the user using the proper method that maps username to ID
+      // Set the user - this will throw if user doesn't exist
+      debugLog('[TursoAdapter] About to set user', { userId: this.userId }, true);
       if (this.userId && this.userId !== 'default') {
-        try {
-          const userInfo = await this.tursoClient.setUser(this.userId);
-          if (userInfo) {
-            if (this.debug) {
-              console.log(`[TursoAdapter] User set successfully:`, userInfo);
-            }
-          } else {
-            if (this.debug) {
-              console.log(
-                `[TursoAdapter] User "${this.userId}" not found in database`,
-              );
-            }
-          }
-        } catch (err) {
-          if (this.debug) {
-            console.error(`[TursoAdapter] Error setting user:`, err);
-          }
-        }
+        debugLog('[TursoAdapter] Calling setUser...', { userId: this.userId }, true);
+        await this.tursoClient.setUser(this.userId);
+        debugLog('[TursoAdapter] User set successfully', { userId: this.userId }, true);
+      } else {
+        debugLog('[TursoAdapter] Skipping setUser (default user or empty)', { userId: this.userId }, true);
       }
+
       this.enabled = true;
 
       if (this.debug) {
@@ -240,8 +236,13 @@ class TursoAdapter {
 
       this.initialized = true;
     } catch (error) {
+      // Check if it's a user not found error
+      if (error instanceof Error && error.message.startsWith('USER_NOT_FOUND:')) {
+        throw error; // Re-throw silently
+      }
+
       console.error('[TursoAdapter] Failed to initialize:', error);
-      // Turso is optional, don't throw
+      // Other Turso errors are optional, don't throw
       this.initialized = true;
     }
   }

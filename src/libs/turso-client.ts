@@ -101,20 +101,20 @@ export default class TursoHistoryClient {
    * Inicializa o cliente Turso e registra a máquina
    */
   async initialize() {
-    console.log('[TursoClient] initialize() called');
+    if (this.debug) console.log('[TursoClient] initialize() called');
     try {
       // Validar configuração
-      console.log('[TursoClient] Validating config...');
+      if (this.debug) console.log('[TursoClient] Validating config...');
       if (!this.config.turso_url || !this.config.turso_token) {
         throw new Error(
           'Turso URL and token are required. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN',
         );
       }
 
-      console.log('[TursoClient] Creating client...');
+      if (this.debug) console.log('[TursoClient] Creating client...');
       // Criar cliente Turso
       if (this.config.turso_sync_url) {
-        console.log('[TursoClient] Using sync mode');
+        if (this.debug) console.log('[TursoClient] Using sync mode');
         // Modo com embedded replica (suporte offline)
         this.client = createClient({
           url: this.config.turso_url,
@@ -123,17 +123,17 @@ export default class TursoHistoryClient {
           syncInterval: this.config.turso_sync_interval,
         });
       } else {
-        console.log('[TursoClient] Using online-only mode');
+        if (this.debug) console.log('[TursoClient] Using online-only mode');
         // Modo online apenas
         this.client = createClient({
           url: this.config.turso_url,
           authToken: this.config.turso_token,
         });
       }
-      console.log('[TursoClient] Client created');
+      if (this.debug) console.log('[TursoClient] Client created');
 
       // Testar conexão com timeout
-      console.log('[TursoClient] Testing connection...');
+      if (this.debug) console.log('[TursoClient] Testing connection...');
       const testPromise = this.client.execute('SELECT 1');
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Connection test timeout')), 5000)
@@ -141,24 +141,24 @@ export default class TursoHistoryClient {
 
       try {
         await Promise.race([testPromise, timeoutPromise]);
-        console.log('[TursoClient] Connection test successful');
+        if (this.debug) console.log('[TursoClient] Connection test successful');
       } catch (err) {
-        console.error('[TursoClient] Connection test failed:', err.message);
+        if (this.debug) console.error('[TursoClient] Connection test failed:', err.message);
         throw err;
       }
 
       // Obter ID da máquina
-      console.log('[TursoClient] Getting machine ID...');
+      if (this.debug) console.log('[TursoClient] Getting machine ID...');
       this.machineId = await this.machineManager.getMachineId();
-      console.log('[TursoClient] Machine ID:', this.machineId);
+      if (this.debug) console.log('[TursoClient] Machine ID:', this.machineId);
 
       // SKIP SCHEMA CREATION - Tables are created via migrations
       // await this.ensureSchema();
 
       // Registrar máquina
-      console.log('[TursoClient] Registering machine...');
+      if (this.debug) console.log('[TursoClient] Registering machine...');
       await this.registerMachine();
-      console.log('[TursoClient] Machine registered');
+      if (this.debug) console.log('[TursoClient] Machine registered');
 
       // Gerar session ID
       this.sessionId = this.generateSessionId();
@@ -421,32 +421,43 @@ export default class TursoHistoryClient {
    * Define o usuário atual
    */
   async setUser(username: string): Promise<void> {
+    // Write directly to debug log file
+    const fs = await import('fs/promises');
+    const logMsg = (msg: string) => {
+      const timestamp = new Date().toISOString();
+      const logLine = `\n[${timestamp}] ${msg}\n${'='.repeat(60)}\n`;
+      fs.appendFile('/tmp/mcp-debug.log', logLine).catch(() => {});
+    };
+
+    logMsg(`[turso-client] setUser called with username: ${username}`);
+
     if (!username) {
+      logMsg('[turso-client] Empty username, setting to global mode');
       this.userId = null;
       this.mode = 'global';
       return;
     }
 
-    try {
-      const result = await this.client!.execute(
-        'SELECT id, name, email FROM users WHERE username = ? AND is_active = 1',
-        [username]
-      );
+    logMsg('[turso-client] Executing SELECT query...');
+    const result = await this.client!.execute(
+      'SELECT id, name, email FROM users WHERE username = ? AND is_active = 1',
+      [username]
+    );
 
-      if (result.rows.length > 0) {
-        this.userId = result.rows[0].id as string;
-        this.mode = 'user';
-        if (this.config.debug) {
-          console.log(`User set: ${username} (${this.userId})`);
-        }
-        return;
-      } else {
-        throw new Error(
-          `User ${username} not found. Create with: ipcom-chat user create --username ${username}`,
-        );
-      }
-    } catch (error) {
-      console.error('Error setting user:', error);
+    logMsg(`[turso-client] Query returned ${result.rows.length} rows`);
+    logMsg(`[turso-client] Result: ${JSON.stringify(result.rows)}`);
+
+    if (result.rows.length > 0) {
+      this.userId = result.rows[0].id as string;
+      this.mode = 'user';
+      logMsg(`[turso-client] User found! Setting userId: ${this.userId}`);
+      return;
+    } else {
+      logMsg(`[turso-client] User NOT found, throwing error...`);
+      const error = new Error(
+        `USER_NOT_FOUND:${username}`
+      );
+      error.name = 'UserNotFoundError';
       throw error;
     }
   }

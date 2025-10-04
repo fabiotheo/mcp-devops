@@ -34,6 +34,7 @@ import { useStatusProcessor } from './hooks/useStatusProcessor.js';
 
 // Import components
 import StatusLine from './components/StatusLine.js';
+import CommandSelector from './components/CommandSelector.js';
 
 // Import utilities
 import { formatResponse } from './utils/responseFormatter.js';
@@ -100,6 +101,9 @@ const MCPInkAppInner: React.FC = () => {
   const { isDebug: debugMode, isTTY, user: currentUser } = config;
 
   const terminalWidth = stdout?.columns || 80;
+
+  // Command selector state - for showing slash commands menu
+  const [showCommandSelector, setShowCommandSelector] = React.useState(false);
 
   // Process execution log for StatusLine display
   const statusData = useStatusProcessor({
@@ -220,6 +224,27 @@ const MCPInkAppInner: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [response, setResponse, actions.ui]);
+
+  // Detect "/" to show command selector
+  useEffect(() => {
+    if (input === '/' && !isProcessing && status === 'ready') {
+      setShowCommandSelector(true);
+      setInput(''); // Clear the "/" from input
+    }
+  }, [input, isProcessing, status, setInput]);
+
+  // Handler for command selection
+  const handleCommandSelect = (commandValue: string) => {
+    setShowCommandSelector(false);
+    // Execute the selected command
+    processCommand(`/${commandValue}`);
+  };
+
+  // Handler for command selector cancel
+  const handleCommandCancel = () => {
+    setShowCommandSelector(false);
+    setInput(''); // Reset input to empty
+  };
 
   // Show loading screen during initialization - centered and beautiful
   if (status !== 'ready' && status !== 'error' && status !== 'processing') {
@@ -556,7 +581,7 @@ const MCPInkAppInner: React.FC = () => {
           '─'.repeat(terminalWidth)
         )
       ),
-      // Input prompt
+      // Input prompt - show CommandSelector when "/" is typed
       React.createElement(
         Box,
         {
@@ -569,12 +594,17 @@ const MCPInkAppInner: React.FC = () => {
               React.createElement(Text, { color: 'yellow' }, '❯ Processing '),
               React.createElement(Spinner, { type: 'dots' })
             )
+          : showCommandSelector
+          ? React.createElement(CommandSelector, {
+              onSelect: handleCommandSelect,
+              onCancel: handleCommandCancel
+            })
           : React.createElement(MultilineInput, {
               value: input,
               onChange: setInput,
-              placeholder: 'Type your question...',
+              placeholder: 'Type your question or / for commands...',
               showCursor: true,
-              isActive: status === 'ready',
+              isActive: status === 'ready' && !showCommandSelector,
               cursorPosition: cursorPosition,
             })
       ),

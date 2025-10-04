@@ -527,8 +527,9 @@ class MCPSetup {
       chalk: '^5.3.0',
       commander: '^14.0.1',
       react: '^18.2.0',
-      ink: '^4.4.1',
+      ink: '^6.3.1',
       'ink-spinner': '^5.0.0',
+      '@inkjs/ui': '^2.0.0',
       marked: '^14.1.2',
       'marked-terminal': '^7.3.0',
     };

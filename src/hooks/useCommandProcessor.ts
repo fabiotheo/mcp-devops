@@ -175,14 +175,12 @@ export function useCommandProcessor(
       debug('  - has isConnected method:', tursoAdapter.current ? !!tursoAdapter.current.isConnected : false);
       debug('  - isConnected():', tursoAdapter.current?.isConnected ? tursoAdapter.current.isConnected() : false);
       debug('  - user:', user);
-      debug('  - user !== default:', user !== 'default');
     }
 
     const canSaveToTurso =
       tursoAdapter.current &&
       tursoAdapter.current.isConnected &&
-      tursoAdapter.current.isConnected() &&
-      user !== 'default';
+      tursoAdapter.current.isConnected();
 
     if (debug) {
       debug('  - canSaveToTurso:', canSaveToTurso);
@@ -399,8 +397,7 @@ export function useCommandProcessor(
         // Update Turso with the response and status 'completed'
         if (
           tursoAdapter.current?.isConnected() &&
-          currentTursoEntryId.current &&
-          user !== 'default'
+          currentTursoEntryId.current
         ) {
           try {
             if (debug) {
@@ -480,8 +477,7 @@ export function useCommandProcessor(
       // Update Turso with error status
       if (
         tursoAdapter.current?.isConnected() &&
-        currentTursoEntryId.current &&
-        user !== 'default'
+        currentTursoEntryId.current
       ) {
         try {
           await tursoAdapter.current.updateWithResponseAndStatus(

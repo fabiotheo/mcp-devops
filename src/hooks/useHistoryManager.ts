@@ -171,8 +171,7 @@ export function useHistoryManager({
       // Save to Turso if connected
       if (
         tursoAdapter.current &&
-        tursoAdapter.current.isConnected() &&
-        user !== 'default'
+        tursoAdapter.current.isConnected()
       ) {
         await tursoAdapter.current.addToHistory(command, response);
         if (isDebug) {

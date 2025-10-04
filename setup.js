@@ -66,6 +66,112 @@ class MCPSetup {
     ];
   }
 
+
+  async detectPackageManagers() {
+    const managers = [];
+    const { execSync } = await import('child_process');
+    
+    // Check for pnpm
+    try {
+      execSync('pnpm --version', { stdio: 'ignore' });
+      managers.push('pnpm');
+    } catch {}
+    
+    // Check for yarn
+    try {
+      execSync('yarn --version', { stdio: 'ignore' });
+      managers.push('yarn');
+    } catch {}
+    
+    // npm is always available (comes with Node.js)
+    managers.push('npm');
+    
+    return managers;
+  }
+
+  async selectPackageManager(autoMode = false) {
+    const availableManagers = await this.detectPackageManagers();
+    
+    // Check if already configured
+    const configPath = path.join(this.mcpDir, 'config.json');
+    try {
+      const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+      if (config.packageManager && availableManagers.includes(config.packageManager)) {
+        console.log(`\n📦 Usando gerenciador configurado: ${config.packageManager}`);
+        return config.packageManager;
+      }
+    } catch {
+      // Config doesn't exist or is invalid, continue with selection
+    }
+    
+    if (autoMode) {
+      // Prefer pnpm > yarn > npm
+      const preferred = availableManagers.includes('pnpm') ? 'pnpm' : 
+                       availableManagers.includes('yarn') ? 'yarn' : 'npm';
+      console.log(`\n📦 Modo automático: usando ${preferred}`);
+      return preferred;
+    }
+    
+    const readline = await import('readline');
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    return new Promise((resolve) => {
+      console.log('\n📦 Selecione o gerenciador de pacotes:');
+      availableManagers.forEach((manager, index) => {
+        console.log(`  ${index + 1}. ${manager}`);
+      });
+      
+      rl.question('\nEscolha (1-' + availableManagers.length + '): ', (answer) => {
+        rl.close();
+        const choice = parseInt(answer) - 1;
+        if (choice >= 0 && choice < availableManagers.length) {
+          resolve(availableManagers[choice]);
+        } else {
+          console.log('⚠️  Opção inválida, usando npm');
+          resolve('npm');
+        }
+      });
+    });
+  }
+
+  async runPackageManagerCommand(manager, command, description) {
+    const { execSync } = await import('child_process');
+    
+    console.log(`\n${description}...`);
+    
+    const commands = {
+      npm: {
+        install: 'npm install',
+        build: 'npm run build'
+      },
+      pnpm: {
+        install: 'pnpm install',
+        build: 'pnpm build'
+      },
+      yarn: {
+        install: 'yarn install',
+        build: 'yarn build'
+      }
+    };
+    
+    const fullCommand = commands[manager][command];
+    
+    try {
+      execSync(fullCommand, { 
+        stdio: 'inherit',
+        cwd: process.cwd()
+      });
+      console.log(`✅ ${description} concluído`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Erro ao executar ${fullCommand}:`, error.message);
+      return false;
+    }
+  }
+
   async setup() {
     console.log(
       '\n══════════════════════════════════════════════════════════════════',
@@ -406,6 +512,9 @@ class MCPSetup {
   async setupDependencies() {
     console.log('\n📦 Configurando dependências...');
 
+    // Selecionar package manager
+    const packageManager = await this.selectPackageManager(this.auto);
+    
     const packageJsonPath = path.join(this.mcpDir, 'package.json');
 
     // Dependências obrigatórias
@@ -431,7 +540,7 @@ class MCPSetup {
       // Verificar se existe e ler conteúdo
       const content = await fs.readFile(packageJsonPath, 'utf8');
       packageJson = JSON.parse(content);
-      console.log('  ✓ package.json já existe');
+      console.log('  ✓ package.json já existe no destino');
 
       // Verificar se tem todas as dependências necessárias
       if (!packageJson.dependencies) {
@@ -477,26 +586,82 @@ class MCPSetup {
       console.log('  ✓ package.json criado');
     }
 
-    // Instalar dependências
-    console.log('  📦 Instalando dependências npm...');
+    // Salvar escolha do package manager no config
+    const configPath = path.join(this.mcpDir, 'config.json');
     try {
-      // Tentar primeiro sem flags
-      execSync('npm install', {
-        cwd: this.mcpDir,
-        stdio: 'inherit',
-      });
-      console.log('  ✓ Dependências instaladas');
+      let config = {};
+      try {
+        config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+      } catch {
+        // Config ainda não existe
+      }
+      config.packageManager = packageManager;
+      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+      console.log(`  ✓ Package manager '${packageManager}' salvo na configuração`);
     } catch (error) {
-      // Se falhar, tentar com --legacy-peer-deps
-      console.log('  ⚠ Tentando instalação com --legacy-peer-deps...');
+      console.log(`  ⚠ Não foi possível salvar package manager no config: ${error.message}`);
+    }
+
+    // Executar install e build no diretório do PROJETO (não no destino)
+    const projectDir = process.cwd();
+    
+    // Instalar dependências do projeto
+    const { execSync } = await import('child_process');
+    console.log('\n📦 Instalando dependências do projeto...');
+    
+    const installCommands = {
+      npm: 'npm install',
+      pnpm: 'pnpm install',
+      yarn: 'yarn install'
+    };
+    
+    try {
+      execSync(installCommands[packageManager], { 
+        stdio: 'inherit',
+        cwd: projectDir
+      });
+      console.log('✅ Dependências instaladas');
+    } catch (error) {
+      throw new Error(`Falha ao instalar dependências com ${packageManager}`);
+    }
+    
+    // Fazer build do projeto
+    console.log('\n🔨 Compilando projeto TypeScript...');
+    
+    const buildCommands = {
+      npm: 'npm run build',
+      pnpm: 'pnpm build',
+      yarn: 'yarn build'
+    };
+    
+    try {
+      execSync(buildCommands[packageManager], { 
+        stdio: 'inherit',
+        cwd: projectDir
+      });
+      console.log('✅ Build concluído');
+    } catch (error) {
+      throw new Error(`Falha ao fazer build com ${packageManager}`);
+    }
+
+    // Agora instalar dependências no destino (~/.mcp-terminal)
+    console.log('\n📦 Instalando dependências no diretório de instalação...');
+    try {
+      execSync(installCommands[packageManager], { 
+        stdio: 'inherit',
+        cwd: this.mcpDir
+      });
+      console.log('✅ Dependências instaladas no destino');
+    } catch (error) {
+      console.log('  ⚠ Tentando com --legacy-peer-deps...');
       try {
         execSync('npm install --legacy-peer-deps', {
-          cwd: this.mcpDir,
           stdio: 'inherit',
+          cwd: this.mcpDir
         });
-        console.log('  ✓ Dependências instaladas com --legacy-peer-deps');
+        console.log('✅ Dependências instaladas com --legacy-peer-deps');
       } catch (error2) {
-        throw new Error('Falha ao instalar dependências npm');
+        throw new Error('Falha ao instalar dependências no destino');
       }
     }
 
@@ -535,284 +700,7 @@ class MCPSetup {
 
         console.log('  ✓ Arquivos de modelo copiados');
       } catch (err) {
-        console.log(`  ⚠ Diretório ai_models não encontrado: ${err.message}`);
-
-        // Criar arquivos de modelo padrão
-        console.log('  📝 Criando arquivos de modelo padrão...');
-
-        // base_model.ts
-        await fs.writeFile(
-          path.join(aiModelsDir, 'base_model.ts'),
-          `// ~/.mcp-terminal/ai_models/base_model.js
-// Classe base para todos os modelos de IA
-
-export default class BaseAIModel {
-    constructor(config) {
-        this.config = config;
-    }
-
-    // Método para inicializar o cliente da API
-    async initialize() {
-        throw new Error('Método initialize() deve ser implementado pela classe filha');
-    }
-
-    // Método para analisar comando com falha
-    async analyzeCommand(commandData) {
-        throw new Error('Método analyzeCommand() deve ser implementado pela classe filha');
-    }
-
-    // Método para responder perguntas sobre comandos
-    async askCommand(question, systemContext) {
-        throw new Error('Método askCommand() deve ser implementado pela classe filha');
-    }
-
-    // Retorna o nome do provedor
-    getProviderName() {
-        throw new Error('Método getProviderName() deve ser implementado pela classe filha');
-    }
-
-    // Retorna o nome do modelo atual
-    getModelName() {
-        throw new Error('Método getModelName() deve ser implementado pela classe filha');
-    }
-
-    // Método para validar API key (retorna true se válida)
-    async validateApiKey() {
-        throw new Error('Método validateApiKey() deve ser implementado pela classe filha');
-    }
-}`,
-        );
-
-        // claude_model.ts
-        await fs.writeFile(
-          path.join(aiModelsDir, 'claude_model.ts'),
-          `// ~/.mcp-terminal/ai_models/claude_model.ts
-// Implementação do modelo Claude da Anthropic
-
-import { Anthropic } from '@anthropic-ai/sdk';
-import BaseAIModel from './base_model.ts';
-
-export default class ClaudeModel extends BaseAIModel {
-    constructor(config) {
-        super(config);
-        this.apiKey = config.anthropic_api_key;
-        this.modelName = config.claude_model || 'claude-3-7-sonnet-20250219';
-        this.client = null;
-    }
-
-    async initialize() {
-        if (!this.apiKey) {
-            throw new Error('Chave de API da Anthropic não configurada');
-        }
-
-        this.client = new Anthropic({
-            apiKey: this.apiKey
-        });
-
-        return this;
-    }
-
-    async analyzeCommand(commandData) {
-        try {
-            const { command, exitCode, stdout, stderr, duration, systemContext } = commandData;
-
-            const prompt = \`Você é um especialista em Linux que analisa comandos que falharam.
-
-SISTEMA:
-- OS: \${systemContext.os}
-- Distribuição: \${systemContext.distro} \${systemContext.version}
-- Package Manager: \${systemContext.packageManager}
-- Shell: \${systemContext.shell}
-
-COMANDO EXECUTADO: \${command}
-EXIT CODE: \${exitCode}
-TEMPO DE EXECUÇÃO: \${duration}s
-
-STDOUT:
-\${stdout || '(vazio)'}
-
-STDERR:
-\${stderr || '(vazio)'}
-
-ANÁLISE NECESSÁRIA:
-1. Identifique o problema principal
-2. Explique a causa do erro
-3. Forneça uma solução específica para este sistema Linux
-4. Sugira um comando para corrigir (se aplicável)
-5. Inclua comandos preventivos se relevante
-
-FORMATO DA RESPOSTA:
-🔍 PROBLEMA: [Descrição clara do problema]
-🛠️  SOLUÇÃO: [Explicação da solução]
-💻 COMANDO: [Comando específico para corrigir, se aplicável]
-⚠️  PREVENÇÃO: [Como evitar no futuro]
-
-Seja conciso e específico para o sistema detectado.\`;
-
-            const response = await this.client.messages.create({
-                model: this.modelName,
-                max_tokens: 1500,
-                messages: [{
-                    role: 'user',
-                    content: prompt
-                }]
-            });
-
-            const analysis = response.content[0].text;
-
-            // Extrai comando sugerido da resposta
-            const commandMatch = analysis.match(/💻 COMANDO: (.+?)(?:\\n|$)/);
-            const suggestedCommand = commandMatch ? commandMatch[1].replace(/\`/g, '').trim() : null;
-
-            return {
-                description: analysis,
-                command: suggestedCommand,
-                confidence: 0.8,
-                category: 'llm_analysis',
-                source: 'anthropic_claude'
-            };
-
-        } catch (error) {
-            console.error('Erro na análise com Claude:', error);
-            return null;
-        }
-    }
-
-    async askCommand(question, systemContext) {
-        try {
-            const prompt = \`Você é um assistente especializado em Linux/Unix que ajuda usuários a encontrar o comando correto para suas tarefas.
-
-INFORMAÇÕES DO SISTEMA:
-- OS: \${systemContext.os}
-- Distribuição: \${systemContext.distro}
-- Versão: \${systemContext.version}
-- Package Manager: \${systemContext.packageManager}
-- Shell: \${systemContext.shell}
-- Arquitetura: \${systemContext.architecture}
-- Kernel: \${systemContext.kernel}
-- Capacidades: \${systemContext.capabilities.join(', ')}
-
-COMANDOS DISPONÍVEIS NESTE SISTEMA:
-\${JSON.stringify(systemContext.commands, null, 2)}
-
-PERGUNTA DO USUÁRIO: \${question}
-
-INSTRUÇÕES:
-1. Analise a pergunta considerando o sistema específico do usuário
-2. Forneça o comando exato para a distribuição/sistema detectado
-3. Explique brevemente o que o comando faz
-4. Se houver variações por distribuição, mencione isso
-5. Inclua opções úteis do comando
-6. Se apropriado, sugira comandos relacionados
-
-FORMATO DA RESPOSTA:
-🔧 COMANDO:
-\\\`comando exato aqui\\\`
-
-📝 EXPLICAÇÃO:
-[Explicação clara do que faz]
-
-💡 OPÇÕES ÚTEIS:
-[Variações ou opções importantes]
-
-⚠️ OBSERVAÇÕES:
-[Avisos ou considerações especiais]
-
-Responda de forma direta e prática.\`;
-
-            const response = await this.client.messages.create({
-                model: this.modelName,
-                max_tokens: 2000,
-                messages: [{
-                    role: 'user',
-                    content: prompt
-                }]
-            });
-
-            return response.content[0].text;
-        } catch (error) {
-            console.error('Erro ao consultar Claude:', error);
-            return \`❌ Erro ao conectar com o assistente Claude. Verifique sua configuração da API Anthropic.\`;
-        }
-    }
-
-    getProviderName() {
-        return 'Claude (Anthropic)';
-    }
-
-    getModelName() {
-        return this.modelName;
-    }
-
-    async validateApiKey() {
-        try {
-            // Tenta fazer uma chamada simples para validar a API key
-            const response = await this.client.messages.create({
-                model: this.modelName,
-                max_tokens: 10,
-                messages: [{
-                    role: 'user',
-                    content: 'Hello'
-                }]
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Erro ao validar API key do Claude:', error);
-            return false;
-        }
-    }
-}`,
-        );
-
-        // model_factory.ts
-        await fs.writeFile(
-          path.join(aiModelsDir, 'model_factory.ts'),
-          `// ~/.mcp-terminal/ai_models/model_factory.js
-// Factory para criar a instância do modelo de IA adequado
-
-import ClaudeModel from './claude_model.js';
-
-export default class ModelFactory {
-    // Cria e inicializa uma instância do modelo de IA apropriado com base na configuração
-    static async createModel(config) {
-        const provider = config.ai_provider || 'claude';
-
-        let model;
-
-        // Por enquanto, apenas suporta Claude
-        model = new ClaudeModel(config);
-
-        try {
-            return await model.initialize();
-        } catch (error) {
-            console.error(\`Erro ao inicializar modelo \${provider}:\`, error.message);
-            throw error;
-        }
-    }
-
-    // Retorna os modelos suportados
-    static getSupportedProviders() {
-        return [
-            {
-                id: 'claude',
-                name: 'Claude (Anthropic)',
-                models: [
-                    'claude-3-7-sonnet-20250219',
-                    'claude-3-5-sonnet-20240620',
-                    'claude-3-haiku-20240307'
-                ]
-            }
-        ];
-    }
-
-    // Retorna as dependências npm necessárias para cada provedor
-    static getDependencies(provider) {
-        return ['@anthropic-ai/sdk'];
-    }
-}`,
-        );
-        console.log('  ✓ Arquivos de modelo básicos criados');
+        console.log(`  ⚠ Diretório ai_models não encontrado em dist/: ${err.message}`);
       }
     } catch (error) {
       console.log(`  ⚠ Aviso: ${error.message}`);
@@ -1248,139 +1136,65 @@ export default class ModelFactory {
     // Track checksums for integrity validation
     const checksums = {};
 
-    // Lista de arquivos a serem copiados
-    const filesToCopy = [
-      // CLI principal com comandos (compilado de TypeScript)
-      { src: 'dist/ipcom-chat-cli.js', dest: 'ipcom-chat-cli.js' },
-
-      // Interface Ink (compilado de TypeScript)
-      { src: 'dist/mcp-ink-cli.js', dest: 'mcp-ink-cli.js' },
-
-      // Orquestradores e libs essenciais (agora de dist/)
-      { src: 'dist/ai_orchestrator.js', dest: 'ai_orchestrator.js' },
-      { src: 'dist/ai_orchestrator_bash.js', dest: 'ai_orchestrator_bash.js' },
-
-      // Arquivos de configuração (agora de dist/)
-      { src: 'dist/configure-ai.js', dest: 'configure-ai.js' },
-
-      // Scripts shell (não compilados, mantém original)
-      { src: 'scripts/zsh_integration.sh', dest: 'zsh_integration.sh' },
-
-      // Mantém deploy para Linux
-      { src: 'scripts/deploy-linux.sh', dest: 'deploy-linux.sh' },
-    ];
-
-    // Copiar arquivos principais
-    for (const file of filesToCopy) {
-      try {
-        const srcPath = path.join(process.cwd(), file.src);
-        const destPath = path.join(this.mcpDir, file.dest);
-
-        try {
-          let content = await fs.readFile(srcPath, 'utf8');
-          // Ajusta os imports para a estrutura instalada
-          content = this.adjustImportsForInstallation(content, file.src);
-          await fs.writeFile(destPath, content);
-
-          // Generate checksum for integrity validation
-          checksums[file.dest] = await this.generateChecksum(destPath);
-
-          console.log(`  ✓ Arquivo ${file.dest} copiado`);
-        } catch (err) {
-          console.log(
-            `  ⚠ Não foi possível copiar ${file.src}: ${err.message}`,
-          );
+    // Função auxiliar para copiar recursivamente
+    const copyRecursive = async (src, dest) => {
+      const stats = await fs.stat(src);
+      if (stats.isDirectory()) {
+        await fs.mkdir(dest, { recursive: true });
+        const files = await fs.readdir(src);
+        for (const file of files) {
+          await copyRecursive(path.join(src, file), path.join(dest, file));
         }
-      } catch (error) {
-        console.log(`  ⚠ Erro ao processar ${file.src}: ${error.message}`);
+      } else {
+        const content = await fs.readFile(src);
+        await fs.writeFile(dest, content);
       }
-    }
+    };
 
-    // Copiar libs (agora de dist/)
+    // Copiar TODO o diretório dist/ recursivamente para src/
     try {
-      const libsDir = path.join(process.cwd(), 'dist', 'libs');
-      const destLibsDir = path.join(this.mcpDir, 'libs');
+      const distDir = path.join(process.cwd(), 'dist');
+      const destSrcDir = path.join(this.mcpDir, 'src');
 
-      // Criar diretório libs se não existir
-      try {
-        await fs.access(destLibsDir);
-      } catch {
-        await fs.mkdir(destLibsDir, { recursive: true });
-      }
-
-      const libFiles = await fs.readdir(libsDir);
-      for (const file of libFiles) {
-        if (file.endsWith('.js')) {
-          const srcPath = path.join(libsDir, file);
-          const destPath = path.join(destLibsDir, file);
-          const content = await fs.readFile(srcPath, 'utf8');
-          await fs.writeFile(destPath, content);
-        }
-      }
-      console.log(`  ✓ Arquivos de libs copiados`);
-    } catch (error) {
-      // Silenciosamente ignora se não existir libs
-      // console.log(`  ⚠ Diretório libs não encontrado (normal em versões antigas)`);
-    }
-
-    // Copiar components da dist (necessário para a v2)
-    try {
-      const componentsDir = path.join(process.cwd(), 'dist', 'components');
-      const destComponentsDir = path.join(this.mcpDir, 'components');
-
-      // Criar diretório components se não existir
-      try {
-        await fs.access(destComponentsDir);
-      } catch {
-        await fs.mkdir(destComponentsDir, { recursive: true });
-      }
-
-      const componentFiles = await fs.readdir(componentsDir);
-      for (const file of componentFiles) {
-        const srcPath = path.join(componentsDir, file);
-        const destPath = path.join(destComponentsDir, file);
-        const content = await fs.readFile(srcPath);
-        await fs.writeFile(destPath, content);
-      }
-      console.log(`  ✓ Componentes da interface copiados`);
-    } catch (error) {
-      console.log(`  ⚠ Erro ao copiar components: ${error.message}`);
-    }
-
-    // Copiar src (Nova interface Ink) - agora de dist/
-    try {
-      const interfaceV2Dir = path.join(process.cwd(), 'dist');
-      const destInterfaceV2Dir = path.join(this.mcpDir, 'src');
-
+      console.log('  📦 Copiando dist/ completo para instalação...');
+      
       // Criar diretório src se não existir
       try {
-        await fs.access(destInterfaceV2Dir);
+        await fs.access(destSrcDir);
       } catch {
-        await fs.mkdir(destInterfaceV2Dir, { recursive: true });
+        await fs.mkdir(destSrcDir, { recursive: true });
       }
 
-      // Copiar todos os arquivos da src
-      const copyRecursive = async (src, dest) => {
-        const stats = await fs.stat(src);
-        if (stats.isDirectory()) {
-          await fs.mkdir(dest, { recursive: true });
-          const files = await fs.readdir(src);
-          for (const file of files) {
-            await copyRecursive(path.join(src, file), path.join(dest, file));
-          }
-        } else {
-          const content = await fs.readFile(src);
-          await fs.writeFile(dest, content);
-        }
-      };
-
-      await copyRecursive(interfaceV2Dir, destInterfaceV2Dir);
-      console.log(`  ✓ Nova interface Ink (src) copiada`);
+      await copyRecursive(distDir, destSrcDir);
+      console.log('  ✓ Diretório dist/ completo copiado para src/');
     } catch (error) {
-      console.log(`  ⚠ Interface-v2 não encontrada (${error.message})`);
+      console.log(`  ❌ Erro ao copiar dist/: ${error.message}`);
+      throw new Error('Não foi possível copiar os arquivos compilados. Certifique-se de que o build foi executado.');
     }
 
-    // ai_models agora é copiado junto com src
+    // Copiar scripts shell que não são compilados
+    try {
+      const shellScripts = [
+        { src: 'scripts/zsh_integration.sh', dest: 'zsh_integration.sh' },
+        { src: 'scripts/deploy-linux.sh', dest: 'deploy-linux.sh' },
+      ];
+
+      for (const script of shellScripts) {
+        try {
+          const srcPath = path.join(process.cwd(), script.src);
+          const destPath = path.join(this.mcpDir, script.dest);
+          const content = await fs.readFile(srcPath);
+          await fs.writeFile(destPath, content);
+          console.log(`  ✓ Script ${script.dest} copiado`);
+        } catch (err) {
+          console.log(`  ⚠ Não foi possível copiar ${script.src}: ${err.message}`);
+        }
+      }
+    } catch (error) {
+      console.log(`  ⚠ Erro ao copiar scripts shell: ${error.message}`);
+    }
+
+    // ai_models agora é copiado junto com dist/src
     // Criar link simbólico para ai_models na raiz para compatibilidade
     try {
       const srcAiModelsDir = path.join(this.mcpDir, 'src', 'ai_models');
@@ -1421,6 +1235,8 @@ await import('./src/ipcom-chat-cli.js');`;
       await fs.writeFile(ipcomChatPath, ipcomChatContent);
       await fs.chmod(ipcomChatPath, 0o755);
       console.log('  ✓ Launcher ipcom-chat criado');
+      
+      checksums['ipcom-chat'] = await this.generateChecksum(ipcomChatPath);
     } catch (error) {
       console.log(`  ⚠ Erro ao criar ipcom-chat: ${error.message}`);
     }
@@ -1430,7 +1246,7 @@ await import('./src/ipcom-chat-cli.js');`;
       const mcpConfigureContent = `#!/usr/bin/env node
 
 // Simple wrapper to run the AI configurator
-import AIConfigurator from './configure-ai.js';
+import AIConfigurator from './src/configure-ai.js';
 
 const configurator = new AIConfigurator();
 configurator.run().catch(error => {
@@ -1442,6 +1258,8 @@ configurator.run().catch(error => {
       await fs.writeFile(mcpConfigurePath, mcpConfigureContent);
       await fs.chmod(mcpConfigurePath, 0o755);
       console.log('  ✓ Launcher mcp-configure criado');
+      
+      checksums['mcp-configure'] = await this.generateChecksum(mcpConfigurePath);
     } catch (error) {
       console.log(`  ⚠ Erro ao criar mcp-configure: ${error.message}`);
     }
@@ -1450,7 +1268,6 @@ configurator.run().catch(error => {
     // Users should refer to the project repository for documentation
 
     const scripts = [
-      'configure-ai.js',
       'mcp-configure',
       'ipcom-chat',
     ];

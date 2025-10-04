@@ -44,7 +44,7 @@ import {
   disableBracketedPasteMode
 } from './utils/pasteDetection.js';
 import {parseMarkdownToElements} from "./components/MarkdownParser.js";
-import { parseSpecialCommand, formatEnhancedStatusMessage } from './utils/specialCommands.js';
+import { parseSpecialCommand, formatEnhancedStatusMessage, formatHistoryMessage } from './utils/specialCommands.js';
 
 // @ts-ignore - import.meta is available in ES modules
 const __filename: string = fileURLToPath(import.meta.url);
@@ -200,7 +200,8 @@ const MCPInkAppInner: React.FC = () => {
     processCommand,
     cleanupRequest,
     formatResponse,
-    exit
+    exit,
+    showCommandSelector
   });
 
   // Disable bracketed paste mode to prevent escape codes in input
@@ -241,6 +242,10 @@ const MCPInkAppInner: React.FC = () => {
     setShowCommandSelector(false);
     const command = `/${commandValue}`;
 
+    // Clear input and cursor position
+    setInput('');
+    actions.ui.setCursorPosition(0);
+
     // Parse special command to get action
     const action = parseSpecialCommand(command, {
       commandHistory,
@@ -271,7 +276,7 @@ const MCPInkAppInner: React.FC = () => {
           break;
 
         case 'SHOW_HISTORY':
-          const historyText = action.payload.commands.join('\n') || 'No command history';
+          const historyText = formatHistoryMessage(action.payload.commands);
           setResponse(historyText);
           setHistory([...history, `❯ ${command}`, formatResponse(historyText, debug)]);
           break;
@@ -319,6 +324,7 @@ const MCPInkAppInner: React.FC = () => {
   const handleCommandCancel = () => {
     setShowCommandSelector(false);
     setInput(''); // Reset input to empty
+    actions.ui.setCursorPosition(0); // Reset cursor position
   };
 
   // Show loading screen during initialization - centered and beautiful
@@ -656,12 +662,14 @@ const MCPInkAppInner: React.FC = () => {
           '─'.repeat(terminalWidth)
         )
       ),
-      // Input prompt - show CommandSelector when "/" is typed
+      // Input prompt - always show input, overlay CommandSelector when "/" is typed
       React.createElement(
         Box,
         {
           paddingLeft: 1,
+          flexDirection: 'column'
         },
+        // Always show input field AND keep it active so user can continue typing
         isProcessing
           ? React.createElement(
               Box,
@@ -669,20 +677,22 @@ const MCPInkAppInner: React.FC = () => {
               React.createElement(Text, { color: 'yellow' }, '❯ Processing '),
               React.createElement(Spinner, { type: 'dots' })
             )
-          : showCommandSelector
-          ? React.createElement(CommandSelector, {
-              onSelect: handleCommandSelect,
-              onCancel: handleCommandCancel,
-              filterText: input.startsWith('/') ? input.slice(1) : ''
-            })
           : React.createElement(MultilineInput, {
               value: input,
               onChange: setInput,
               placeholder: 'Type your question or / for commands...',
               showCursor: true,
-              isActive: status === 'ready' && !showCommandSelector,
+              isActive: status === 'ready', // ALWAYS active when ready (CommandSelector handles Enter separately)
               cursorPosition: cursorPosition,
+            }),
+        // Overlay CommandSelector when active
+        showCommandSelector && !isProcessing
+          ? React.createElement(CommandSelector, {
+              onSelect: handleCommandSelect,
+              onCancel: handleCommandCancel,
+              filterText: input.startsWith('/') ? input.slice(1) : ''
             })
+          : null
       ),
       // Bottom separator line
       React.createElement(

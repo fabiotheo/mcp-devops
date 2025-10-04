@@ -189,12 +189,39 @@ Config: ${statusPayload.config}`;
 
 /**
  * Format history message from history payload
+ * Enhanced with numbering, borders, and better UX
  *
  * @param {Array} commands - Command history
- * @returns {string} Formatted history message
+ * @returns {string} Formatted history message with visual elements
  */
 export function formatHistoryMessage(commands: string[]): string {
-  return commands.join('\n') || 'No command history';
+  if (commands.length === 0) {
+    return `╭─────────────────── Command History ──────────────────╮
+│                                                       │
+│  No command history yet.                              │
+│  Start by asking a question!                          │
+│                                                       │
+╰───────────────────────────────────────────────────────╯`;
+  }
+
+  // Format each command with numbering
+  const formattedCommands = commands
+    .map((cmd, index) => {
+      const num = (index + 1).toString().padStart(2, ' ');
+      return `  ${num}. ${cmd}`;
+    })
+    .join('\n');
+
+  // Build the complete history display
+  const totalText = `Total: ${commands.length} command${commands.length !== 1 ? 's' : ''}`;
+
+  return [
+    '╭─────────────────── Command History ──────────────────╮',
+    formattedCommands,
+    '╰───────────────────────────────────────────────────────╯',
+    '',
+    `📝 ${totalText}`
+  ].join('\n');
 }
 
 /**

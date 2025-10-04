@@ -226,8 +226,8 @@ export function useCommandProcessor(
       return;
     }
 
-    // Add to command history IMMEDIATELY before processing
-    setCommandHistory(prev => [...prev, command]);
+    // NOTE: commandHistory is now managed in useInputHandler
+    // to filter out slash commands. Only real user queries go to history.
 
     // Add user message to fullHistory
     setFullHistory(prev => [

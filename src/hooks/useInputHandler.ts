@@ -25,12 +25,14 @@ import { parseSpecialCommand, formatEnhancedStatusMessage } from '../utils/speci
  * @param {Function} params.cleanupRequest - Function to cleanup/cancel requests
  * @param {Function} params.formatResponse - Response formatter function
  * @param {Function} params.exit - Function to exit application
+ * @param {boolean} params.showCommandSelector - Whether the command selector is active
  */
 export function useInputHandler({
   processCommand,
   cleanupRequest,
   formatResponse,
-  exit
+  exit,
+  showCommandSelector
 }) {
   // Get all needed values from context
   const { state, actions, services, requests, config } = useAppContext();
@@ -62,6 +64,13 @@ export function useInputHandler({
   }
 
   useInput(async (char, key) => {
+    // CRITICAL: When CommandSelector is active, only block command submission (Enter)
+    // Allow normal typing to continue so the filter updates dynamically
+    if (showCommandSelector && key.return) {
+      // Block Enter key - let CommandSelector handle it
+      return;
+    }
+
     // Handle Ctrl+C FIRST - double tap to exit
     // IMPORTANT: exitOnCtrlC is disabled in render(), so we must handle it here
     if (key.ctrl && char === 'c') {
@@ -213,68 +222,13 @@ export function useInputHandler({
 
       const command = input.trim();
 
-      if (command.startsWith('/')) {
-        // Parse special command to get action
-        const action = parseSpecialCommand(command, {
-          commandHistory,
-          status,
-          hasOrchestrator: !!orchestrator?.current,
-          hasPatternMatcher: !!patternMatcher?.current,
-          isDebug,
-          hasConfig: !!config
-        });
-
-        if (action) {
-          // Handle the action
-          switch (action.type) {
-            case 'SHOW_HELP':
-              setResponse(action.payload.text);
-              setHistory([...history, `❯ ${command}`, formatResponse(action.payload.text, debug)]);
-              break;
-
-            case 'CLEAR_HISTORY':
-              setHistory([]);
-              setResponse('');
-              break;
-
-            case 'SHOW_HISTORY':
-              const historyText = action.payload.commands.join('\n') || 'No command history';
-              setResponse(historyText);
-              setHistory([...history, `❯ ${command}`, formatResponse(historyText, debug)]);
-              break;
-
-            case 'SHOW_STATUS':
-              // Use enhanced status message with system metrics
-              const enhancedStatusText = formatEnhancedStatusMessage({
-                commandHistory,
-                status,
-                hasOrchestrator: !!orchestrator?.current,
-                hasPatternMatcher: !!patternMatcher?.current,
-                isDebug,
-                hasConfig: !!config,
-                userName: config?.user || 'default',
-                sessionStartTime: state.session?.startTime,
-                lastCommandTime: state.session?.lastCommandTime,
-                commandCount: commandHistory.length,
-                successCount: state.session?.successCount || commandHistory.length,
-                failedCount: state.session?.failedCount || 0
-              });
-              setResponse(enhancedStatusText);
-              setHistory([...history, `❯ ${command}`, formatResponse(enhancedStatusText, debug)]);
-              break;
-
-            case 'EXIT_APPLICATION':
-              exit();
-              break;
-
-            case 'UNKNOWN_COMMAND':
-              const errorText = `Unknown command: /${action.payload.command}`;
-              setResponse(errorText);
-              setHistory([...history, `❯ ${command}`, formatResponse(errorText, debug)]);
-              break;
-          }
+      if (command) {
+        // Add to command history ONLY if it's not a slash command
+        // Slash commands (/help, /status, etc.) should not pollute navigation history
+        if (!command.startsWith('/')) {
+          setCommandHistory([...commandHistory, command]);
         }
-      } else if (command) {
+
         // Debug: Log that we're about to process command
         const fs = await import('fs/promises');
         await fs.appendFile('/tmp/turso-debug.log',

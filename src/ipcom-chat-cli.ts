@@ -146,7 +146,7 @@ async function initTursoClient(): Promise<TursoHistoryClient> {
   const configPath = path.join(
     os.homedir(),
     '.mcp-terminal',
-    'turso-config.json',
+    'config.json',
   );
 
   if (!existsSync(configPath)) {

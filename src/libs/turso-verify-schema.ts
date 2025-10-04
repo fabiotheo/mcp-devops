@@ -42,7 +42,7 @@ class TursoSchemaVerifier {
 
   constructor() {
     this.configDir = path.join(os.homedir(), '.mcp-terminal');
-    this.configPath = path.join(this.configDir, 'turso-config.json');
+    this.configPath = path.join(this.configDir, 'config.json');
     this.client = null;
     this.config = null;
     this.errors = [];

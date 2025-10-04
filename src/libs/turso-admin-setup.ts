@@ -26,7 +26,7 @@ class TursoAdminSetup {
 
   constructor() {
     this.configDir = path.join(os.homedir(), '.mcp-terminal');
-    this.configPath = path.join(this.configDir, 'turso-config.json');
+    this.configPath = path.join(this.configDir, 'config.json');
     this.adminMarkerPath = path.join(this.configDir, '.turso-admin-setup-done');
     this.client = null;
   }

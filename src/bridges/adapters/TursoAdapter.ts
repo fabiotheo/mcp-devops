@@ -211,11 +211,20 @@ class TursoAdapter {
         configKeys: Object.keys(config).filter(k => k.toLowerCase().includes('turso') || k.toLowerCase().includes('database') || k.toLowerCase().includes('auth'))
       }, true);
 
-      // Initialize client
-      debugLog('[TursoAdapter] Creating TursoClient instance...', { debug: this.debug }, true);
+      // Initialize client with appropriate mode
+      // For 'default' user, use machine mode (no user validation)
+      // For specific users, use user mode (with validation)
+      const historyMode = (this.userId && this.userId !== 'default') ? 'user' : 'machine';
+      debugLog('[TursoAdapter] Creating TursoClient instance...', { 
+        debug: this.debug,
+        historyMode,
+        userId: this.userId
+      }, true);
+      
       this.tursoClient = new (TursoHistoryClient as unknown as new (config: TursoConfig) => TursoHistoryClientModule)({
         ...config,
         debug: this.debug,
+        history_mode: historyMode,
       });
       debugLog('[TursoAdapter] TursoClient instance created', { 
         hasInitialize: typeof this.tursoClient.initialize === 'function',

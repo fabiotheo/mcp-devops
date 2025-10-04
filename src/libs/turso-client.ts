@@ -983,11 +983,21 @@ export default class TursoHistoryClient {
         break;
 
       case 'machine':
-        sql = `SELECT * FROM history_machine
-                       WHERE machine_id = ?
-                       ORDER BY timestamp ASC
-                       LIMIT ? OFFSET ?`;
-        args = [this.machineId, limit, offset];
+        // When userId is NULL (default user), only get machine history without user_id
+        // When userId is set, get machine history for that specific user
+        if (this.userId) {
+          sql = `SELECT * FROM history_machine
+                         WHERE machine_id = ? AND user_id = ?
+                         ORDER BY timestamp ASC
+                         LIMIT ? OFFSET ?`;
+          args = [this.machineId, this.userId, limit, offset];
+        } else {
+          sql = `SELECT * FROM history_machine
+                         WHERE machine_id = ? AND user_id IS NULL
+                         ORDER BY timestamp ASC
+                         LIMIT ? OFFSET ?`;
+          args = [this.machineId, limit, offset];
+        }
         break;
 
       case 'hybrid':

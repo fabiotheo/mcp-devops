@@ -186,7 +186,12 @@
       "Bash(/dev/null)",
       "Bash(if [ -f /tmp/mcp-debug.log ])",
       "Bash(then)",
-      "Bash(else)"
+      "Bash(else)",
+      "WebFetch(domain:orm.drizzle.team)",
+      "WebFetch(domain:www.answeroverflow.com)",
+      "Bash(turso db:*)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(npm run:*)"
     ],
     "deny": [],
     "ask": []

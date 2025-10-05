@@ -158,8 +158,10 @@ export default class TursoHistoryClient {
       this.machineId = await this.machineManager.getMachineId();
       debugLog('[TursoClient] Machine ID obtained', { machineId: this.machineId }, this.debug);
 
-      // SKIP SCHEMA CREATION - Tables are created via migrations
-      // await this.ensureSchema();
+      // Garantir que schema existe (cria tabelas se necessário)
+      debugLog('[TursoClient] Ensuring schema...', {}, this.debug);
+      await this.ensureSchema();
+      debugLog('[TursoClient] Schema ensured', {}, this.debug);
 
       // Registrar máquina
       debugLog('[TursoClient] Registering machine...', {}, this.debug);
@@ -193,6 +195,10 @@ export default class TursoHistoryClient {
 
       if (result.rows.length > 0) {
         console.log('[TursoClient] Tables already exist, skipping schema creation');
+
+        // Migração incremental: criar conversation_summaries se não existir
+        await this.ensureConversationSummariesTable();
+
         return;
       }
     } catch (err) {
@@ -326,6 +332,7 @@ export default class TursoHistoryClient {
                 FOREIGN KEY (machine_id) REFERENCES machines(machine_id),
                 FOREIGN KEY (user_id) REFERENCES users(id)
             );
+
         `;
 
     // Executar cada statement separadamente com timeout
@@ -351,6 +358,62 @@ export default class TursoHistoryClient {
       }
     }
     console.log('[TursoClient] Schema statements executed');
+
+    // Chamar função centralizada para criar tabela de resumos
+    await this.ensureConversationSummariesTable();
+  }
+
+  /**
+   * Garante que a tabela conversation_summaries existe
+   *
+   * Fonte única de verdade para o schema da tabela de resumos.
+   * Usado tanto para novas instalações quanto para migração incremental.
+   */
+  async ensureConversationSummariesTable(): Promise<void> {
+    try {
+      // Verificar se tabela já existe
+      const checkTable = await this.client!.execute(`
+        SELECT name FROM sqlite_master
+        WHERE type='table' AND name='conversation_summaries'
+      `);
+
+      if (checkTable.rows.length > 0) {
+        if (this.config.debug) {
+          console.log('[TursoClient] Table conversation_summaries already exists');
+        }
+        return;
+      }
+
+      console.log('[TursoClient] Creating conversation_summaries table...');
+
+      // Criar tabela (ÚNICA FONTE DE VERDADE)
+      await this.client!.execute(`
+        CREATE TABLE conversation_summaries (
+          id TEXT PRIMARY KEY DEFAULT (hex(randomblob(16))),
+          user_id TEXT,
+          machine_id TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          summarized_up_to_message_id TEXT NOT NULL,
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+          message_count INTEGER,
+          UNIQUE(user_id, machine_id)
+        )
+      `);
+
+      // Criar índice
+      await this.client!.execute(`
+        CREATE INDEX idx_conv_summaries_user_machine
+        ON conversation_summaries(user_id, machine_id)
+      `);
+
+      console.log('[TursoClient] ✅ Table conversation_summaries created successfully');
+    } catch (error) {
+      if (this.config.debug) {
+        console.error('[TursoClient] Error creating conversation_summaries:', error.message);
+      }
+      // Não lançar erro - tabela pode já existir
+    }
   }
 
   /**

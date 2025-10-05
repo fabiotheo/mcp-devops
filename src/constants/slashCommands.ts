@@ -40,5 +40,10 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     label: '/exit',
     value: 'exit',
     description: 'Exit the application'
+  },
+  {
+    label: '/compact',
+    value: 'compact',
+    description: 'Compact conversation history into a summary (saves tokens)'
   }
 ];

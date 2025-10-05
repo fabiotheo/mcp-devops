@@ -45,6 +45,11 @@ import {
 } from './utils/pasteDetection.js';
 import {parseMarkdownToElements} from "./components/MarkdownParser.js";
 import { parseSpecialCommand, formatEnhancedStatusMessage, formatHistoryMessage } from './utils/specialCommands.js';
+import HistorySummarizer from './services/historySummarizer.js';
+import os from 'os';
+import fs from 'fs/promises';
+import { randomUUID } from 'crypto';
+import MachineIdentityManager from './libs/machine-identity.js';
 
 // @ts-ignore - import.meta is available in ES modules
 const __filename: string = fileURLToPath(import.meta.url);
@@ -381,6 +386,81 @@ const MCPInkAppInner: React.FC = () => {
             : '✓ Debug mode disabled - Logging stopped';
           setResponse(debugMsg);
           setHistory([...history, `❯ ${command}`, formatResponse(debugMsg, debug)]);
+          break;
+
+        case 'COMPACT_HISTORY':
+          (async () => {
+            try {
+              // Mostrar mensagem de processamento
+              setResponse('⏳ Compactando histórico...');
+              setHistory([...history, `❯ ${command}`, formatResponse('⏳ Compactando histórico...', debug)]);
+
+              // Obter API key do config com validação de existência
+              const configPath = path.join(process.env.HOME || os.homedir(), '.mcp-terminal', 'config.json');
+              let configData;
+
+              try {
+                const configContent = await fs.readFile(configPath, 'utf8');
+                configData = JSON.parse(configContent);
+              } catch (fileError: any) {
+                if (fileError.code === 'ENOENT') {
+                  throw new Error('Arquivo de configuração não encontrado. Execute o setup primeiro.');
+                }
+                throw new Error(`Erro ao ler configuração: ${fileError.message}`);
+              }
+
+              const apiKey = configData.anthropic_api_key;
+              if (!apiKey || apiKey.trim().length === 0) {
+                throw new Error('API key não configurada no arquivo de configuração.');
+              }
+
+              // Criar instância do summarizer
+              const summarizer = new HistorySummarizer({
+                apiKey,
+                debug: debugMode
+              });
+
+              // Obter machine_id com tratamento específico
+              let machineId: string;
+              try {
+                const machineManager = new MachineIdentityManager({ debug: debugMode });
+                machineId = await machineManager.getMachineId();
+              } catch (machineError: any) {
+                throw new Error(`Falha ao obter ID da máquina: ${machineError.message}`);
+              }
+
+              // Converter histórico para formato com IDs
+              // Filtrar mensagens 'system' pois não fazem parte da conversa do usuário
+              const historyWithIds = fullHistory
+                .filter(entry => entry.role !== 'system')
+                .map(entry => ({
+                  ...entry,
+                  id: entry.id || randomUUID(),
+                  role: entry.role as 'user' | 'assistant'
+                }));
+
+              // Executar compactação
+              const result = await summarizer.handleCompactCommand(
+                historyWithIds,
+                currentUser,
+                machineId
+              );
+
+              if (result.success && result.savings) {
+                // Mostrar resultado com verificação explícita de savings
+                const successMsg = `${result.message}\n\n📊 Estatísticas:\n- Redução: ${result.savings.percentReduction}%\n- Tokens economizados: ~${result.savings.estimatedTokensSaved}\n- Original: ${result.savings.originalChars} chars\n- Resumo: ${result.savings.summaryChars} chars`;
+                setResponse(successMsg);
+                setHistory([...history.slice(0, -1), formatResponse(successMsg, debug)]);
+              } else {
+                setResponse(result.message);
+                setHistory([...history.slice(0, -1), formatResponse(result.message, debug)]);
+              }
+            } catch (error: any) {
+              const errMsg = `❌ Erro ao compactar: ${error.message}`;
+              setResponse(errMsg);
+              setHistory([...history.slice(0, -1), formatResponse(errMsg, debug)]);
+            }
+          })();
           break;
 
         case 'EXIT_APPLICATION':

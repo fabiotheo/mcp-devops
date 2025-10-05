@@ -164,6 +164,7 @@ export interface AskCommandOptions {
  * History entry in conversation
  */
 export interface HistoryEntry {
+  id?: string;                       // UUID da mensagem (opcional)
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: number; // Unix timestamp in milliseconds

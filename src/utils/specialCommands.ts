@@ -71,6 +71,10 @@ interface UnknownCommandAction {
   };
 }
 
+interface CompactHistoryAction {
+  type: 'COMPACT_HISTORY';
+}
+
 type SpecialCommandAction =
   | ShowHelpAction
   | ClearHistoryAction
@@ -78,7 +82,8 @@ type SpecialCommandAction =
   | ShowStatusAction
   | ToggleDebugAction
   | ExitApplicationAction
-  | UnknownCommandAction;
+  | UnknownCommandAction
+  | CompactHistoryAction;
 
 /**
  * Parse special slash commands and return actions
@@ -121,6 +126,7 @@ export function parseSpecialCommand(command: string, data: CommandData = {}): Sp
 /history  - Show command history
 /status   - Show system status
 /debug    - Toggle debug mode
+/compact  - Compact history into summary (saves tokens)
 /exit     - Exit application
 
 For Linux/Unix help, just type your question!`
@@ -155,6 +161,11 @@ For Linux/Unix help, just type your question!`
     case 'debug':
       return {
         type: 'TOGGLE_DEBUG'
+      };
+
+    case 'compact':
+      return {
+        type: 'COMPACT_HISTORY'
       };
 
     case 'exit':

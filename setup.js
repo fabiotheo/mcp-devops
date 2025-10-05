@@ -459,6 +459,54 @@ class MCPSetup {
     console.log(`  ✓ Versão ${this.version} registrada`);
   }
 
+  async ensureTursoSchema() {
+    try {
+      console.log('\n📊 Verificando schema do Turso...');
+
+      // Verificar se config existe
+      if (!existsSync(this.configPath)) {
+        console.log('   ⚠️  Configuração não encontrada - pulando');
+        return;
+      }
+
+      // Ler config
+      const configContent = await fs.readFile(this.configPath, 'utf8');
+      const config = JSON.parse(configContent);
+
+      // Verificar se Turso está configurado
+      if (!config.turso_url || !config.turso_token) {
+        console.log('   ℹ️  Turso não configurado - pulando');
+        return;
+      }
+
+      console.log('   🔄 Executando migrations do banco de dados...');
+
+      // Executar script de migrations do Drizzle
+      const scriptPath = path.join(this.mcpDir, 'src', 'scripts', 'run-migrations.js');
+
+      if (!existsSync(scriptPath)) {
+        console.log('   ⚠️  Script de migrations não encontrado - migrations serão executadas na primeira execução');
+        return;
+      }
+
+      // Executar com node
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      await execAsync(`node ${scriptPath}`, {
+        cwd: this.mcpDir,
+        env: { ...process.env }
+      });
+
+      console.log('   ✅ Schema do Turso atualizado');
+
+    } catch (error) {
+      console.log(`   ⚠️  Aviso: ${error.message}`);
+      console.log('   💡 Schema será criado automaticamente na primeira execução');
+    }
+  }
+
   async runMigrations(fromVersion) {
     console.log(
       `🔄 Executando migrações necessárias de v${fromVersion} para v${this.version}...`,
@@ -1135,6 +1183,21 @@ class MCPSetup {
       throw new Error('Não foi possível copiar os arquivos compilados. Certifique-se de que o build foi executado.');
     }
 
+    // Copiar diretório drizzle (schemas e migrations)
+    try {
+      const drizzleDir = path.join(process.cwd(), 'drizzle');
+      const destDrizzleDir = path.join(this.mcpDir, 'drizzle');
+
+      if (existsSync(drizzleDir)) {
+        console.log('  📦 Copiando diretório drizzle/ (migrations e schemas)...');
+        await copyRecursive(drizzleDir, destDrizzleDir);
+        console.log('  ✓ Diretório drizzle/ copiado');
+      }
+    } catch (error) {
+      console.log(`  ⚠️  Aviso ao copiar drizzle/: ${error.message}`);
+      // Não é erro fatal, apenas aviso
+    }
+
     // Copiar scripts shell que não são compilados
     try {
       const shellScripts = [
@@ -1661,6 +1724,9 @@ configurator.run().catch(error => {
 
       // 7. Salvar versão atual
       await this.saveVersion();
+
+      // 8. Garantir schema do Turso (cria tabela conversation_summaries se necessário)
+      await this.ensureTursoSchema();
 
       console.log(
         `\n✅ ${isUpgrade ? 'Atualização' : 'Instalação'} automática concluída com sucesso!`,

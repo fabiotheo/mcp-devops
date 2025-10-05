@@ -102,10 +102,10 @@ export default class TursoHistoryClient {
    * Inicializa o cliente Turso e registra a máquina
    */
   async initialize() {
-    debugLog('[TursoClient] initialize() called', {}, true);
+    debugLog('[TursoClient] initialize() called', {}, this.debug);
     try {
       // Validar configuração
-      debugLog('[TursoClient] Validating config...', {}, true);
+      debugLog('[TursoClient] Validating config...', {}, this.debug);
       if (!this.config.turso_url || !this.config.turso_token) {
         throw new Error(
           'Turso URL and token are required. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN',
@@ -116,11 +116,11 @@ export default class TursoHistoryClient {
         url: this.config.turso_url?.substring(0, 30) + '...',
         hasToken: !!this.config.turso_token,
         hasSyncUrl: !!this.config.turso_sync_url
-      }, true);
+      }, this.debug);
 
       // Criar cliente Turso
       if (this.config.turso_sync_url) {
-        debugLog('[TursoClient] Using sync mode', {}, true);
+        debugLog('[TursoClient] Using sync mode', {}, this.debug);
         // Modo com embedded replica (suporte offline)
         this.client = createClient({
           url: this.config.turso_url,
@@ -129,17 +129,17 @@ export default class TursoHistoryClient {
           syncInterval: this.config.turso_sync_interval,
         });
       } else {
-        debugLog('[TursoClient] Using online-only mode', {}, true);
+        debugLog('[TursoClient] Using online-only mode', {}, this.debug);
         // Modo online apenas
         this.client = createClient({
           url: this.config.turso_url,
           authToken: this.config.turso_token,
         });
       }
-      debugLog('[TursoClient] Client created', {}, true);
+      debugLog('[TursoClient] Client created', {}, this.debug);
 
       // Testar conexão com timeout
-      debugLog('[TursoClient] Testing connection with SELECT 1...', {}, true);
+      debugLog('[TursoClient] Testing connection with SELECT 1...', {}, this.debug);
       const testPromise = this.client.execute('SELECT 1');
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Connection test timeout')), 5000)
@@ -147,24 +147,24 @@ export default class TursoHistoryClient {
 
       try {
         await Promise.race([testPromise, timeoutPromise]);
-        debugLog('[TursoClient] Connection test successful', {}, true);
+        debugLog('[TursoClient] Connection test successful', {}, this.debug);
       } catch (err: any) {
-        debugLog('[TursoClient] Connection test failed', { error: err?.message }, true);
+        debugLog('[TursoClient] Connection test failed', { error: err?.message }, this.debug);
         throw err;
       }
 
       // Obter ID da máquina
-      debugLog('[TursoClient] Getting machine ID...', {}, true);
+      debugLog('[TursoClient] Getting machine ID...', {}, this.debug);
       this.machineId = await this.machineManager.getMachineId();
-      debugLog('[TursoClient] Machine ID obtained', { machineId: this.machineId }, true);
+      debugLog('[TursoClient] Machine ID obtained', { machineId: this.machineId }, this.debug);
 
       // SKIP SCHEMA CREATION - Tables are created via migrations
       // await this.ensureSchema();
 
       // Registrar máquina
-      debugLog('[TursoClient] Registering machine...', {}, true);
+      debugLog('[TursoClient] Registering machine...', {}, this.debug);
       await this.registerMachine();
-      debugLog('[TursoClient] Machine registered successfully', {}, true);
+      debugLog('[TursoClient] Machine registered successfully', {}, this.debug);
 
       // Gerar session ID
       this.sessionId = this.generateSessionId();
@@ -173,9 +173,9 @@ export default class TursoHistoryClient {
         mode: this.mode,
         machineId: this.machineId,
         sessionId: this.sessionId
-      }, true);
+      }, this.debug);
     } catch (error: any) {
-      debugLog('[TursoClient] Initialization FAILED', { error: error?.message, stack: error?.stack }, true);
+      debugLog('[TursoClient] Initialization FAILED', { error: error?.message, stack: error?.stack }, this.debug);
       throw error;
     }
   }
@@ -426,39 +426,33 @@ export default class TursoHistoryClient {
    * Define o usuário atual
    */
   async setUser(username: string): Promise<void> {
-    // Write directly to debug log file
-    const fs = await import('fs/promises');
-    const logMsg = (msg: string) => {
-      const timestamp = new Date().toISOString();
-      const logLine = `\n[${timestamp}] ${msg}\n${'='.repeat(60)}\n`;
-      fs.appendFile('/tmp/mcp-debug.log', logLine).catch(() => {});
-    };
-
-    logMsg(`[turso-client] setUser called with username: ${username}`);
+    debugLog('[turso-client] setUser called', { username }, this.debug);
 
     if (!username) {
-      logMsg('[turso-client] Empty username, setting to global mode');
+      debugLog('[turso-client] Empty username, setting to global mode', {}, this.debug);
       this.userId = null;
       this.mode = 'global';
       return;
     }
 
-    logMsg('[turso-client] Executing SELECT query...');
+    debugLog('[turso-client] Executing SELECT query...', {}, this.debug);
     const result = await this.client!.execute(
       'SELECT id, name, email FROM users WHERE username = ? AND is_active = 1',
       [username]
     );
 
-    logMsg(`[turso-client] Query returned ${result.rows.length} rows`);
-    logMsg(`[turso-client] Result: ${JSON.stringify(result.rows)}`);
+    debugLog('[turso-client] Query result', {
+      rowCount: result.rows.length,
+      rows: result.rows
+    }, this.debug);
 
     if (result.rows.length > 0) {
       this.userId = result.rows[0].id as string;
       this.mode = 'user';
-      logMsg(`[turso-client] User found! Setting userId: ${this.userId}`);
+      debugLog('[turso-client] User found', { userId: this.userId }, this.debug);
       return;
     } else {
-      logMsg(`[turso-client] User NOT found, throwing error...`);
+      debugLog('[turso-client] User NOT found, throwing error', { username }, this.debug);
       const error = new Error(
         `USER_NOT_FOUND:${username}`
       );

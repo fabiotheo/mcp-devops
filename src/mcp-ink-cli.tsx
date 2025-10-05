@@ -50,10 +50,6 @@ import { parseSpecialCommand, formatEnhancedStatusMessage, formatHistoryMessage 
 const __filename: string = fileURLToPath(import.meta.url);
 const __dirname: string = path.dirname(__filename);
 
-// Module-level variables
-const isDebug: boolean = process.argv.includes('--debug');
-const debug = createDebugLogger(isDebug);
-
 // Process --user argument or use environment variable
 const getUserFromArgs = (): string => {
   // Check for --user=value format
@@ -72,7 +68,6 @@ const getUserFromArgs = (): string => {
 };
 
 const user: string = getUserFromArgs();
-debug('User', user);
 console.log(`[mcp-ink-cli] User from args: "${user}"`);
 
 /**
@@ -102,6 +97,12 @@ const MCPInkAppInner: React.FC = () => {
   const { isDebug: debugMode, isTTY, user: currentUser } = config;
 
   const terminalWidth = stdout?.columns || 80;
+
+  // Create reactive debug logger based on config
+  const debug = React.useMemo(
+    () => createDebugLogger(config.isDebug || false),
+    [config.isDebug]
+  );
 
   // Command selector state - for showing slash commands menu
   const [showCommandSelector, setShowCommandSelector] = React.useState(false);
@@ -211,6 +212,11 @@ const MCPInkAppInner: React.FC = () => {
         request.status = 'cancelled';
         debug('[Global ESC Handler] Marked request as cancelled', { requestId: requestIdToCancel });
       }
+
+      // Show cancellation message immediately in UI
+      const cancelMessage = '⚠️  Operation cancelled by user (ESC pressed)';
+      setHistory([...history, cancelMessage]);
+      setResponse('');
 
       // CRITICAL: Wait for cleanup to finish (includes Turso update)
       await cleanupRequest(requestIdToCancel, 'Operation cancelled by user', true);
@@ -367,9 +373,13 @@ const MCPInkAppInner: React.FC = () => {
           break;
 
         case 'TOGGLE_DEBUG':
-          // Debug toggle is handled by the original implementation
-          // We don't handle it here in the command selector
-          setResponse('Debug mode toggle not supported from command selector');
+          const newIsDebug = !config.isDebug;
+          setConfig({ ...config, isDebug: newIsDebug });
+          const debugMsg = newIsDebug
+            ? '🐛 Debug mode enabled - Logs will be saved to /tmp/mcp-debug.log'
+            : '✓ Debug mode disabled - Logging stopped';
+          setResponse(debugMsg);
+          setHistory([...history, `❯ ${command}`, formatResponse(debugMsg, debug)]);
           break;
 
         case 'EXIT_APPLICATION':
@@ -789,9 +799,10 @@ const MCPInkAppInner: React.FC = () => {
 // Main component wrapped with AppProvider
 const MCPInkApp: React.FC = () => {
   const isTTY: boolean = !!process.stdin.isTTY;
+  const initialIsDebug: boolean = process.argv.includes('--debug');
 
   const config: BackendConfig = {
-    isDebug,
+    isDebug: initialIsDebug,
     isTTY,
     user
   };

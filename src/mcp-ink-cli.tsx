@@ -14,7 +14,7 @@
 
 import * as React from 'react';
 const { useEffect } = React;
-import { Box, render, Text, useApp, useStdout, Static } from 'ink';
+import { Box, render, Text, useApp, useStdout, Static, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import MultilineInput from './components/MultilineInput.js';
 import * as path from 'node:path';
@@ -194,6 +194,71 @@ const MCPInkAppInner: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [status, exit]);
+
+  // Global keyboard handler for cancellation keys (ESC, Ctrl+C)
+  // This runs independently of MultilineInput state to ensure ESC always works
+  // Multiple useInput hooks can coexist - Ink sends events to all of them
+  useInput(async (char, key) => {
+    // Handle ESC for cancellation during processing
+    if (key.escape && isProcessing) {
+      debug('[Global ESC Handler] ESC pressed during processing', { isProcessing });
+
+      setIsCancelled(true);
+      const requestIdToCancel = currentRequestId.current;
+      const request = activeRequests.current.get(requestIdToCancel);
+
+      if (request) {
+        request.status = 'cancelled';
+        debug('[Global ESC Handler] Marked request as cancelled', { requestId: requestIdToCancel });
+      }
+
+      // CRITICAL: Wait for cleanup to finish (includes Turso update)
+      await cleanupRequest(requestIdToCancel, 'Operation cancelled by user', true);
+
+      // Add cancellation marker to command history for context
+      const newHistory = [
+        ...commandHistory,
+        '[User pressed ESC - Previous message was interrupted]',
+      ].slice(-100);
+      setCommandHistory(newHistory);
+
+      // Reset cancellation flag after cleanup
+      setTimeout(() => {
+        setIsCancelled(false);
+        debug('[Global ESC Handler] Cancellation complete', {});
+      }, 100);
+      return;
+    }
+
+    // Handle Ctrl+C double-tap for exit
+    if (key.ctrl && char === 'c') {
+      const now = Date.now();
+      const lastCtrlC = state.ui.lastCtrlC;
+
+      if (lastCtrlC > 0 && now - lastCtrlC < 2000) {
+        // Second Ctrl+C within 2 seconds - exit
+        if (!debugMode) {
+          console.clear();
+        }
+        console.log('\n\x1b[33mGoodbye!\x1b[0m\n');
+        exit();
+      } else {
+        // First Ctrl+C - show message
+        actions.ui.setLastCtrlC(now);
+        const exitMessage = '⚠️  Press Ctrl+C again within 2 seconds to exit';
+        setHistory([...history, exitMessage]);
+        setResponse(exitMessage);
+
+        // Clear message after 2 seconds
+        setTimeout(() => {
+          setResponse('');
+          actions.ui.setLastCtrlC(0);
+          setHistory(history.filter(msg => msg !== exitMessage));
+        }, 2000);
+      }
+      return;
+    }
+  });
 
   // Initialize input handler with minimal parameters
   useInputHandler({
@@ -669,22 +734,25 @@ const MCPInkAppInner: React.FC = () => {
           paddingLeft: 1,
           flexDirection: 'column'
         },
-        // Always show input field AND keep it active so user can continue typing
+        // Render MultilineInput - handles typing and text editing
+        // Note: ESC and Ctrl+C are handled by global useInput hook above
+        React.createElement(MultilineInput, {
+          value: input,
+          onChange: setInput,
+          placeholder: isProcessing ? '' : 'Type your question or / for commands...',
+          showCursor: !isProcessing, // Hide cursor during processing
+          isActive: status === 'ready', // Only active when ready for new input
+          cursorPosition: cursorPosition,
+        }),
+        // Overlay Processing spinner when active (render AFTER input to appear on top)
         isProcessing
           ? React.createElement(
               Box,
-              null,
+              { marginTop: -1 }, // Negative margin to overlay on input line
               React.createElement(Text, { color: 'yellow' }, '❯ Processing '),
               React.createElement(Spinner, { type: 'dots' })
             )
-          : React.createElement(MultilineInput, {
-              value: input,
-              onChange: setInput,
-              placeholder: 'Type your question or / for commands...',
-              showCursor: true,
-              isActive: status === 'ready', // ALWAYS active when ready (CommandSelector handles Enter separately)
-              cursorPosition: cursorPosition,
-            }),
+          : null,
         // Overlay CommandSelector when active
         showCommandSelector && !isProcessing
           ? React.createElement(CommandSelector, {

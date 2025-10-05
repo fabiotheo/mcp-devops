@@ -181,7 +181,8 @@
       "Bash(pnpm build:*)",
       "Bash(MCP_USER=fabio-teste timeout 8 node dist/mcp-ink-cli.js --debug)",
       "Bash(/tmp/test-default-history.sh:*)",
-      "Bash(MCP_USER=default timeout 5 node ~/.mcp-terminal/src/mcp-ink-cli.js --debug)"
+      "Bash(MCP_USER=default timeout 5 node ~/.mcp-terminal/src/mcp-ink-cli.js --debug)",
+      "Bash(MCP_USER=fabio gtimeout 15 node src/mcp-ink-cli.tsx --debug)"
     ],
     "deny": [],
     "ask": []

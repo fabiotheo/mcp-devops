@@ -621,15 +621,27 @@ class TursoAdapter {
    */
   async updateStatusByRequestId(requestId: string, status: string): Promise<boolean> {
     if (!this.enabled || !this.tursoClient || !this.tursoClient.client) {
+      debugLog('[TursoAdapter] updateStatusByRequestId - Not enabled or no client', {
+        enabled: this.enabled,
+        hasClient: !!this.tursoClient?.client
+      }, this.debug);
       return false;
     }
 
     try {
+      debugLog('[TursoAdapter] updateStatusByRequestId called', {
+        requestId,
+        status,
+        userId: this.userId,
+        hasClient: !!this.tursoClient.client
+      }, this.debug);
+
       const updateTime = Math.floor(Date.now() / 1000);
       const updates = [];
 
       // Update all tables that might have this request_id
       if (this.userId && this.userId !== 'default') {
+        debugLog('[TursoAdapter] Adding UPDATE for history_user table', { userId: this.userId }, this.debug);
         // If we have a user, update user table
         updates.push(
           this.tursoClient.client.execute({
@@ -640,6 +652,7 @@ class TursoAdapter {
       }
 
       // Always update global and machine tables for default users
+      debugLog('[TursoAdapter] Adding UPDATE for history_global table', {}, this.debug);
       updates.push(
         this.tursoClient.client.execute({
           sql: 'UPDATE history_global SET status = ?, updated_at = ? WHERE request_id = ?',
@@ -647,6 +660,7 @@ class TursoAdapter {
         })
       );
 
+      debugLog('[TursoAdapter] Adding UPDATE for history_machine table', {}, this.debug);
       updates.push(
         this.tursoClient.client.execute({
           sql: 'UPDATE history_machine SET status = ?, updated_at = ? WHERE request_id = ?',
@@ -654,25 +668,30 @@ class TursoAdapter {
         })
       );
 
+      debugLog('[TursoAdapter] Executing UPDATE queries', { count: updates.length }, this.debug);
       const results: SqlExecuteResult[] = await Promise.all(updates);
+
+      debugLog('[TursoAdapter] UPDATE results', {
+        results: results.map((r, i) => ({
+          index: i,
+          rowsAffected: r.rowsAffected
+        }))
+      }, this.debug);
 
       // Return true only if at least one row was updated
       const success = results.some(r => r.rowsAffected > 0);
 
-      if (this.debug && !success) {
-        console.log(
-          `[TursoAdapter] No rows updated for request_id: ${requestId}`,
-        );
+      if (!success) {
+        debugLog('[TursoAdapter] WARNING: No rows updated for request_id', { requestId }, this.debug);
+      } else {
+        debugLog('[TursoAdapter] Successfully updated status', { status, requestId }, this.debug);
       }
 
       return success;
     } catch (error) {
-      if (this.debug) {
-        console.error(
-          '[TursoAdapter] Error updating status by request_id:',
-          error,
-        );
-      }
+      debugLog('[TursoAdapter] Error updating status by request_id', {
+        error: error instanceof Error ? error.message : String(error)
+      }, this.debug);
       return false;
     }
   }

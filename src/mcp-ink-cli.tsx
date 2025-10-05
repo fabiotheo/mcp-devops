@@ -14,7 +14,7 @@
 
 import * as React from 'react';
 const { useEffect } = React;
-import { Box, render, Text, useApp, useStdout, Static } from 'ink';
+import { Box, render, Text, useApp, useStdout, Static, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import MultilineInput from './components/MultilineInput.js';
 import * as path from 'node:path';
@@ -50,10 +50,6 @@ import { parseSpecialCommand, formatEnhancedStatusMessage, formatHistoryMessage 
 const __filename: string = fileURLToPath(import.meta.url);
 const __dirname: string = path.dirname(__filename);
 
-// Module-level variables
-const isDebug: boolean = process.argv.includes('--debug');
-const debug = createDebugLogger(isDebug);
-
 // Process --user argument or use environment variable
 const getUserFromArgs = (): string => {
   // Check for --user=value format
@@ -72,7 +68,6 @@ const getUserFromArgs = (): string => {
 };
 
 const user: string = getUserFromArgs();
-debug('User', user);
 console.log(`[mcp-ink-cli] User from args: "${user}"`);
 
 /**
@@ -102,6 +97,12 @@ const MCPInkAppInner: React.FC = () => {
   const { isDebug: debugMode, isTTY, user: currentUser } = config;
 
   const terminalWidth = stdout?.columns || 80;
+
+  // Create reactive debug logger based on config
+  const debug = React.useMemo(
+    () => createDebugLogger(config.isDebug || false),
+    [config.isDebug]
+  );
 
   // Command selector state - for showing slash commands menu
   const [showCommandSelector, setShowCommandSelector] = React.useState(false);
@@ -195,6 +196,76 @@ const MCPInkAppInner: React.FC = () => {
     }
   }, [status, exit]);
 
+  // Global keyboard handler for cancellation keys (ESC, Ctrl+C)
+  // This runs independently of MultilineInput state to ensure ESC always works
+  // Multiple useInput hooks can coexist - Ink sends events to all of them
+  useInput(async (char, key) => {
+    // Handle ESC for cancellation during processing
+    if (key.escape && isProcessing) {
+      debug('[Global ESC Handler] ESC pressed during processing', { isProcessing });
+
+      setIsCancelled(true);
+      const requestIdToCancel = currentRequestId.current;
+      const request = activeRequests.current.get(requestIdToCancel);
+
+      if (request) {
+        request.status = 'cancelled';
+        debug('[Global ESC Handler] Marked request as cancelled', { requestId: requestIdToCancel });
+      }
+
+      // Show cancellation message immediately in UI
+      const cancelMessage = '⚠️  Operation cancelled by user (ESC pressed)';
+      setHistory([...history, cancelMessage]);
+      setResponse('');
+
+      // CRITICAL: Wait for cleanup to finish (includes Turso update)
+      await cleanupRequest(requestIdToCancel, 'Operation cancelled by user', true);
+
+      // Add cancellation marker to command history for context
+      const newHistory = [
+        ...commandHistory,
+        '[User pressed ESC - Previous message was interrupted]',
+      ].slice(-100);
+      setCommandHistory(newHistory);
+
+      // Reset cancellation flag after cleanup
+      setTimeout(() => {
+        setIsCancelled(false);
+        debug('[Global ESC Handler] Cancellation complete', {});
+      }, 100);
+      return;
+    }
+
+    // Handle Ctrl+C double-tap for exit
+    if (key.ctrl && char === 'c') {
+      const now = Date.now();
+      const lastCtrlC = state.ui.lastCtrlC;
+
+      if (lastCtrlC > 0 && now - lastCtrlC < 2000) {
+        // Second Ctrl+C within 2 seconds - exit
+        if (!debugMode) {
+          console.clear();
+        }
+        console.log('\n\x1b[33mGoodbye!\x1b[0m\n');
+        exit();
+      } else {
+        // First Ctrl+C - show message
+        actions.ui.setLastCtrlC(now);
+        const exitMessage = '⚠️  Press Ctrl+C again within 2 seconds to exit';
+        setHistory([...history, exitMessage]);
+        setResponse(exitMessage);
+
+        // Clear message after 2 seconds
+        setTimeout(() => {
+          setResponse('');
+          actions.ui.setLastCtrlC(0);
+          setHistory(history.filter(msg => msg !== exitMessage));
+        }, 2000);
+      }
+      return;
+    }
+  });
+
   // Initialize input handler with minimal parameters
   useInputHandler({
     processCommand,
@@ -272,6 +343,7 @@ const MCPInkAppInner: React.FC = () => {
 
         case 'CLEAR_HISTORY':
           setHistory([]);
+          setFullHistory([]); // Clear AI context - next message will be cold session (no context)
           setResponse('');
           break;
 
@@ -302,9 +374,13 @@ const MCPInkAppInner: React.FC = () => {
           break;
 
         case 'TOGGLE_DEBUG':
-          // Debug toggle is handled by the original implementation
-          // We don't handle it here in the command selector
-          setResponse('Debug mode toggle not supported from command selector');
+          const newIsDebug = !config.isDebug;
+          setConfig({ ...config, isDebug: newIsDebug });
+          const debugMsg = newIsDebug
+            ? '🐛 Debug mode enabled - Logs will be saved to /tmp/mcp-debug.log'
+            : '✓ Debug mode disabled - Logging stopped';
+          setResponse(debugMsg);
+          setHistory([...history, `❯ ${command}`, formatResponse(debugMsg, debug)]);
           break;
 
         case 'EXIT_APPLICATION':
@@ -669,22 +745,25 @@ const MCPInkAppInner: React.FC = () => {
           paddingLeft: 1,
           flexDirection: 'column'
         },
-        // Always show input field AND keep it active so user can continue typing
+        // Render MultilineInput - handles typing and text editing
+        // Note: ESC and Ctrl+C are handled by global useInput hook above
+        React.createElement(MultilineInput, {
+          value: input,
+          onChange: setInput,
+          placeholder: isProcessing ? '' : 'Type your question or / for commands...',
+          showCursor: !isProcessing, // Hide cursor during processing
+          isActive: status === 'ready', // Only active when ready for new input
+          cursorPosition: cursorPosition,
+        }),
+        // Overlay Processing spinner when active (render AFTER input to appear on top)
         isProcessing
           ? React.createElement(
               Box,
-              null,
+              { marginTop: -1 }, // Negative margin to overlay on input line
               React.createElement(Text, { color: 'yellow' }, '❯ Processing '),
               React.createElement(Spinner, { type: 'dots' })
             )
-          : React.createElement(MultilineInput, {
-              value: input,
-              onChange: setInput,
-              placeholder: 'Type your question or / for commands...',
-              showCursor: true,
-              isActive: status === 'ready', // ALWAYS active when ready (CommandSelector handles Enter separately)
-              cursorPosition: cursorPosition,
-            }),
+          : null,
         // Overlay CommandSelector when active
         showCommandSelector && !isProcessing
           ? React.createElement(CommandSelector, {
@@ -721,9 +800,10 @@ const MCPInkAppInner: React.FC = () => {
 // Main component wrapped with AppProvider
 const MCPInkApp: React.FC = () => {
   const isTTY: boolean = !!process.stdin.isTTY;
+  const initialIsDebug: boolean = process.argv.includes('--debug');
 
   const config: BackendConfig = {
-    isDebug,
+    isDebug: initialIsDebug,
     isTTY,
     user
   };

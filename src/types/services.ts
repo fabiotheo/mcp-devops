@@ -166,6 +166,7 @@ export interface AskCommandOptions {
 export interface HistoryEntry {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  timestamp?: number; // Unix timestamp in milliseconds
 }
 
 /**

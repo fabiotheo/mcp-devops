@@ -176,91 +176,91 @@ class TursoAdapter {
     debugLog('[TursoAdapter] initialize() called', {
       userId: this.userId,
       initialized: this.initialized
-    }, true); // Always log this
+    }, this.debug);
 
     if (this.initialized) {
-      debugLog('[TursoAdapter] Already initialized, skipping...', {}, true);
+      debugLog('[TursoAdapter] Already initialized, skipping...', {}, this.debug);
       return;
     }
 
     try {
       // Check if Turso is configured
-      debugLog('[TursoAdapter] Checking config...', {}, true);
+      debugLog('[TursoAdapter] Checking config...', {}, this.debug);
       const configExists = await this.checkConfig();
-      debugLog('[TursoAdapter] Config exists', { configExists }, true);
+      debugLog('[TursoAdapter] Config exists', { configExists }, this.debug);
 
       if (!configExists) {
-        debugLog('[TursoAdapter] Turso not configured, running in offline mode', {}, true);
+        debugLog('[TursoAdapter] Turso not configured, running in offline mode', {}, this.debug);
         this.initialized = true;
         return;
       }
 
       // Load Turso client
-      debugLog('[TursoAdapter] Loading Turso client module...', { path: this.tursoClientPath }, true);
+      debugLog('[TursoAdapter] Loading Turso client module...', { path: this.tursoClientPath }, this.debug);
       const module = await import(this.tursoClientPath) as { default?: unknown; TursoHistoryClient?: unknown };
       const TursoHistoryClient = module.default || module.TursoHistoryClient;
-      debugLog('[TursoAdapter] Turso client module loaded', { hasDefault: !!module.default, hasNamed: !!module.TursoHistoryClient }, true);
+      debugLog('[TursoAdapter] Turso client module loaded', { hasDefault: !!module.default, hasNamed: !!module.TursoHistoryClient }, this.debug);
 
       // Load configuration
-      debugLog('[TursoAdapter] Loading configuration...', {}, true);
+      debugLog('[TursoAdapter] Loading configuration...', {}, this.debug);
       const config: TursoConfig = JSON.parse(await fs.readFile(this.configPath, 'utf8'));
-      debugLog('[TursoAdapter] Configuration loaded', { 
+      debugLog('[TursoAdapter] Configuration loaded', {
         hasTursoUrl: !!config.turso_url,
         hasTursoToken: !!config.turso_token,
         hasDatabaseUrl: !!config.databaseUrl,
         hasAuthToken: !!config.authToken,
         configKeys: Object.keys(config).filter(k => k.toLowerCase().includes('turso') || k.toLowerCase().includes('database') || k.toLowerCase().includes('auth'))
-      }, true);
+      }, this.debug);
 
       // Initialize client with appropriate mode
       // For 'default' user, use machine mode (no user validation)
       // For specific users, use user mode (with validation)
       const historyMode = (this.userId && this.userId !== 'default') ? 'user' : 'machine';
-      debugLog('[TursoAdapter] Creating TursoClient instance...', { 
+      debugLog('[TursoAdapter] Creating TursoClient instance...', {
         debug: this.debug,
         historyMode,
         userId: this.userId
-      }, true);
-      
+      }, this.debug);
+
       this.tursoClient = new (TursoHistoryClient as unknown as new (config: TursoConfig) => TursoHistoryClientModule)({
         ...config,
         debug: this.debug,
         history_mode: historyMode,
       });
-      debugLog('[TursoAdapter] TursoClient instance created', { 
+      debugLog('[TursoAdapter] TursoClient instance created', {
         hasInitialize: typeof this.tursoClient.initialize === 'function',
-        clientType: this.tursoClient.constructor.name 
-      }, true);
+        clientType: this.tursoClient.constructor.name
+      }, this.debug);
 
       // Initialize with timeout to prevent hanging
-      debugLog('[TursoAdapter] Initializing TursoClient...', {}, true);
+      debugLog('[TursoAdapter] Initializing TursoClient...', {}, this.debug);
       await Promise.race([
         this.tursoClient.initialize(),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Turso initialization timeout after 5s')), 5000)
         )
       ]);
-      debugLog('[TursoAdapter] ✓ TursoClient initialized successfully', {}, true);
+      debugLog('[TursoAdapter] ✓ TursoClient initialized successfully', {}, this.debug);
 
       // Set the user - this will throw if user doesn't exist
-      debugLog('[TursoAdapter] About to set user', { userId: this.userId }, true);
+      debugLog('[TursoAdapter] About to set user', { userId: this.userId }, this.debug);
       if (this.userId && this.userId !== 'default') {
-        debugLog('[TursoAdapter] Calling setUser...', { userId: this.userId }, true);
+        debugLog('[TursoAdapter] Calling setUser...', { userId: this.userId }, this.debug);
         await this.tursoClient.setUser(this.userId);
-        debugLog('[TursoAdapter] User set successfully', { userId: this.userId }, true);
+        debugLog('[TursoAdapter] User set successfully', { userId: this.userId }, this.debug);
       } else {
-        debugLog('[TursoAdapter] Skipping setUser (default user or empty)', { userId: this.userId }, true);
+        debugLog('[TursoAdapter] Skipping setUser (default user or empty)', { userId: this.userId }, this.debug);
       }
 
       this.initialized = true;
       this.enabled = true;
-      debugLog('[TursoAdapter] Adapter fully initialized', { enabled: this.enabled }, true);
+      debugLog('[TursoAdapter] Adapter fully initialized', { enabled: this.enabled }, this.debug);
     } catch (err: any) {
-      debugLog('[TursoAdapter] Initialization failed', { 
-        error: err?.message, 
+      debugLog('[TursoAdapter] Initialization failed', {
+        error: err?.message,
         stack: err?.stack,
         isUserNotFound: err?.message?.startsWith?.('USER_NOT_FOUND')
-      }, true);
+      }, this.debug);
 
       // Re-throw user not found errors - these should stop the system
       if (err?.message?.startsWith?.('USER_NOT_FOUND')) {
@@ -621,15 +621,27 @@ class TursoAdapter {
    */
   async updateStatusByRequestId(requestId: string, status: string): Promise<boolean> {
     if (!this.enabled || !this.tursoClient || !this.tursoClient.client) {
+      debugLog('[TursoAdapter] updateStatusByRequestId - Not enabled or no client', {
+        enabled: this.enabled,
+        hasClient: !!this.tursoClient?.client
+      }, this.debug);
       return false;
     }
 
     try {
+      debugLog('[TursoAdapter] updateStatusByRequestId called', {
+        requestId,
+        status,
+        userId: this.userId,
+        hasClient: !!this.tursoClient.client
+      }, this.debug);
+
       const updateTime = Math.floor(Date.now() / 1000);
       const updates = [];
 
       // Update all tables that might have this request_id
       if (this.userId && this.userId !== 'default') {
+        debugLog('[TursoAdapter] Adding UPDATE for history_user table', { userId: this.userId }, this.debug);
         // If we have a user, update user table
         updates.push(
           this.tursoClient.client.execute({
@@ -640,6 +652,7 @@ class TursoAdapter {
       }
 
       // Always update global and machine tables for default users
+      debugLog('[TursoAdapter] Adding UPDATE for history_global table', {}, this.debug);
       updates.push(
         this.tursoClient.client.execute({
           sql: 'UPDATE history_global SET status = ?, updated_at = ? WHERE request_id = ?',
@@ -647,6 +660,7 @@ class TursoAdapter {
         })
       );
 
+      debugLog('[TursoAdapter] Adding UPDATE for history_machine table', {}, this.debug);
       updates.push(
         this.tursoClient.client.execute({
           sql: 'UPDATE history_machine SET status = ?, updated_at = ? WHERE request_id = ?',
@@ -654,25 +668,30 @@ class TursoAdapter {
         })
       );
 
+      debugLog('[TursoAdapter] Executing UPDATE queries', { count: updates.length }, this.debug);
       const results: SqlExecuteResult[] = await Promise.all(updates);
+
+      debugLog('[TursoAdapter] UPDATE results', {
+        results: results.map((r, i) => ({
+          index: i,
+          rowsAffected: r.rowsAffected
+        }))
+      }, this.debug);
 
       // Return true only if at least one row was updated
       const success = results.some(r => r.rowsAffected > 0);
 
-      if (this.debug && !success) {
-        console.log(
-          `[TursoAdapter] No rows updated for request_id: ${requestId}`,
-        );
+      if (!success) {
+        debugLog('[TursoAdapter] WARNING: No rows updated for request_id', { requestId }, this.debug);
+      } else {
+        debugLog('[TursoAdapter] Successfully updated status', { status, requestId }, this.debug);
       }
 
       return success;
     } catch (error) {
-      if (this.debug) {
-        console.error(
-          '[TursoAdapter] Error updating status by request_id:',
-          error,
-        );
-      }
+      debugLog('[TursoAdapter] Error updating status by request_id', {
+        error: error instanceof Error ? error.message : String(error)
+      }, this.debug);
       return false;
     }
   }

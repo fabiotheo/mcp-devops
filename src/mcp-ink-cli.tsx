@@ -343,6 +343,7 @@ const MCPInkAppInner: React.FC = () => {
 
         case 'CLEAR_HISTORY':
           setHistory([]);
+          setFullHistory([]); // Clear AI context - next message will be cold session (no context)
           setResponse('');
           break;
 

@@ -22,6 +22,25 @@ import type {
 import type { UseRequestManagerReturn } from './useRequestManager.js';
 import type { ProgressEvent } from '../ai_orchestrator_bash.js';
 
+// ============== CONFIGURAÇÃO DE HISTÓRICO ==============
+
+/**
+ * Session timeout in milliseconds (10 minutes)
+ * If the last message is older than this, the session is considered expired
+ */
+const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Number of messages to include when session is active (< 10 minutes)
+ */
+const ACTIVE_HISTORY_COUNT = 10; // 5 exchanges (question + answer)
+
+/**
+ * Number of messages to include when session is expired (> 10 minutes)
+ * Setting to 0 means start fresh conversation
+ */
+const COLD_HISTORY_COUNT = 0; // No history for cold sessions
+
 // ============== INTERFACES E TIPOS ==============
 
 /**
@@ -235,6 +254,7 @@ export function useCommandProcessor(
       {
         role: 'user',
         content: command,
+        timestamp: Date.now(),
       },
     ]);
 
@@ -267,21 +287,54 @@ export function useCommandProcessor(
         return;
       }
 
-      // Limit history to last 20 messages (10 exchanges) to provide sufficient context
-      const recentHistory = fullHistory.slice(-20);
+      // Smart history selection based on session recency
+      let recentHistory: HistoryEntry[] = [];
+      let sessionState: 'active' | 'cold' = 'cold';
+
+      if (fullHistory.length > 0) {
+        // Get the last message timestamp
+        const lastMessage = fullHistory[fullHistory.length - 1];
+        const lastTimestamp = lastMessage.timestamp || 0;
+        const now = Date.now();
+        const timeSinceLastMessage = now - lastTimestamp;
+
+        // Determine if session is active or cold
+        const isSessionActive = timeSinceLastMessage < SESSION_TIMEOUT_MS;
+        sessionState = isSessionActive ? 'active' : 'cold';
+
+        // Select history based on session state
+        const historyCount = isSessionActive ? ACTIVE_HISTORY_COUNT : COLD_HISTORY_COUNT;
+        recentHistory = historyCount > 0 ? fullHistory.slice(-historyCount) : [];
+
+        if (debug) {
+          debug('[CommandProcessor] Session analysis', {
+            sessionState,
+            timeSinceLastMessage: `${Math.round(timeSinceLastMessage / 1000)}s`,
+            sessionTimeout: `${SESSION_TIMEOUT_MS / 1000}s`,
+            totalHistoryLength: fullHistory.length,
+            selectedHistoryLength: recentHistory.length,
+            requestId
+          });
+        }
+      }
 
       if (debug) {
         debug('[CommandProcessor] Calling orchestrator', {
           command,
           historyLength: fullHistory.length,
           recentHistoryLength: recentHistory.length,
+          sessionState,
           requestId
         });
       }
+
+      // Remove timestamp before sending to API (API only accepts role and content)
+      const cleanHistory = recentHistory.map(({ role, content }) => ({ role, content }));
+
       const result = await orchestrator.current.askCommand(
         command,
         {
-          conversationHistory: recentHistory,
+          conversationHistory: cleanHistory,
           abort: controller,
           onStream: chunk => {
             // Check if this request is still active
@@ -391,6 +444,7 @@ export function useCommandProcessor(
           {
             role: 'assistant',
             content: responseContent,
+            timestamp: Date.now(),
           },
         ]);
 
@@ -436,10 +490,12 @@ export function useCommandProcessor(
         setHistory(prev => [...prev, timeoutMsg, '─'.repeat(80)]);
         setFullHistory(prev => [...prev, {
           role: 'user' as const,
-          content: command
+          content: command,
+          timestamp: Date.now()
         }, {
           role: 'assistant' as const,
-          content: timeoutMsg
+          content: timeoutMsg,
+          timestamp: Date.now()
         }]);
       }
     } catch (err) {

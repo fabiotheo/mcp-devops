@@ -8,7 +8,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { HistoryEntry } from '../types/history.js';
+import { HistoryEntry } from '../types/services.js';
 import TursoHistoryClient from '../libs/turso-client.js';
 
 /**
@@ -55,6 +55,8 @@ interface SummarizerConfig {
   model?: string;
   maxTokens?: number;
   debug?: boolean;
+  turso_url?: string;
+  turso_token?: string;
 }
 
 /**
@@ -230,14 +232,50 @@ export class HistorySummarizer {
    * @param history - Histórico completo da conversação
    * @param userId - ID do usuário (opcional)
    * @param machineId - ID da máquina (obrigatório)
-   * @param minMessages - Número mínimo de mensagens para compactar (padrão: 30)
+   * @param minMessages - Número mínimo de mensagens para compactar (padrão: 20)
    * @returns Objeto com sucesso, mensagem e estatísticas
    */
+  /**
+   * Helper function to convert Turso query rows to HistoryEntry[]
+   * 
+   * @param rows - Array of rows from Turso query (with command and response fields)
+   * @returns Array of HistoryEntry objects (user + assistant messages)
+   */
+  private convertToHistoryEntries(rows: any[]): HistoryEntry[] {
+    const entries: HistoryEntry[] = [];
+
+    for (const row of rows) {
+      // Add user message (command)
+      if (row.command) {
+        entries.push({
+          id: `${row.id}-user`,
+          role: 'user',
+          content: row.command,
+          timestamp: row.timestamp
+        });
+      }
+
+      // Add assistant message (response)
+      if (row.response) {
+        entries.push({
+          id: `${row.id}-assistant`,
+          role: 'assistant',
+          content: row.response,
+          timestamp: row.timestamp
+        });
+      }
+    }
+
+    // Return all entries (already filtered to user/assistant only)
+    return entries;
+  }
+
   async handleCompactCommand(
-    history: HistoryEntry[],
     userId: string | null,
     machineId: string,
-    minMessages: number = 30
+    sessionId: string,
+    currentSessionHistory: HistoryEntry[],
+    minMessages: number = 10
   ): Promise<{
     success: boolean;
     message: string;
@@ -246,54 +284,123 @@ export class HistorySummarizer {
     messageCount?: number;
   }> {
     try {
-      // Validar histórico
-      if (!history || history.length === 0) {
+      // Initialize Turso client with user_id
+      const tursoClient = new TursoHistoryClient({
+        debug: this.config.debug,
+        turso_url: this.config.turso_url,
+        turso_token: this.config.turso_token,
+        user_id: userId || undefined // Pass user_id if it exists
+      });
+      await tursoClient.initialize();
+
+      if (this.config.debug) {
+        console.log(`[handleCompactCommand] Starting compact for session: ${sessionId}`);
+      }
+
+      // Determine which history table to use based on user_id
+      const historyTable = userId ? 'history_user' : 'history_machine';
+
+      if (this.config.debug) {
+        console.log(`[handleCompactCommand] Using table: ${historyTable}`);
+      }
+
+      // SCENARIO DETECTION: Check for existing summary
+      const existingSummaryResult = await tursoClient.execute(
+        `SELECT summarized_up_to_message_id FROM conversation_summaries
+         WHERE user_id ${userId ? '= ?' : 'IS NULL'} AND machine_id = ?`,
+        userId ? [userId, machineId] : [machineId]
+      ) as { rows?: Array<{ summarized_up_to_message_id: string }> };
+
+      let messagesToCompact: HistoryEntry[] = [];
+      let scenario: 'A' | 'B1' | 'B2' = 'A';
+
+      // Use current session history (in-memory) instead of querying Turso
+      // Messages in current session haven't been saved to Turso yet
+      messagesToCompact = currentSessionHistory;
+
+      if (this.config.debug) {
+        console.log(`[handleCompactCommand] Using ${messagesToCompact.length} messages from current session (in-memory)`);
+      }
+
+      // Determine scenario based on whether a summary exists
+      if (existingSummaryResult.rows && existingSummaryResult.rows.length > 0) {
+        // Summary exists - this is at least scenario B1 (could be B2 if same session)
+        // For now, we treat all as B1 since we're compacting current session
+        // B2 would only happen if user runs /compact twice in same session
+        scenario = 'B1';
+
+        if (this.config.debug) {
+          console.log(`[handleCompactCommand] Scenario B1: Summary exists from previous session`);
+        }
+      } else {
+        // SCENARIO A: No existing summary - first time compacting
+        scenario = 'A';
+
+        if (this.config.debug) {
+          console.log(`[handleCompactCommand] Scenario A: First compact ever`);
+        }
+      }
+
+      // VALIDATION: Check minimum message count
+      if (!messagesToCompact || messagesToCompact.length === 0) {
+        await tursoClient.close();
         return {
           success: false,
-          message: '❌ Histórico vazio - nada para compactar'
+          message: '❌ Nenhuma mensagem encontrada na sessão atual'
         };
       }
 
-      // Validar tamanho mínimo
-      if (!this.canSummarize(history, minMessages)) {
+      if (messagesToCompact.length < minMessages) {
+        await tursoClient.close();
         return {
           success: false,
-          message: `❌ Histórico muito pequeno (${history.length} msgs). Mínimo: ${minMessages} mensagens`
+          message: `ℹ️ Histórico da sessão muito pequeno (${messagesToCompact.length} mensagens). Mínimo: ${minMessages} mensagens`
         };
       }
 
       if (this.config.debug) {
-        console.log(`[handleCompactCommand] Compactando ${history.length} mensagens...`);
+        console.log(`[handleCompactCommand] Found ${messagesToCompact.length} messages to compact (scenario ${scenario})`);
       }
 
-      // Gerar resumo
-      const summary = await this.generateSummary(history);
+      // DIVISION STRATEGY: Last 2 complete + rest to summarize
+      const lastTwoMessages = messagesToCompact.slice(-2);
+      const messagesToSummarize = messagesToCompact.slice(0, -2);
 
-      // Calcular economia
-      const savings = this.calculateSavings(history, summary);
-
-      // Salvar no Turso
-      const tursoClient = new TursoHistoryClient({ debug: this.config.debug });
-      await tursoClient.initialize();
-
-      // Pegar ID da última mensagem para rastreamento
-      const lastMessage = history[history.length - 1];
-      const lastMessageId = lastMessage?.id;
-
-      if (!lastMessageId) {
-        // Se não houver ID, não podemos rastrear o ponto de sumarização
+      if (messagesToSummarize.length === 0) {
         await tursoClient.close();
-        throw new Error('A última mensagem do histórico não possui um ID para rastreamento.');
+        return {
+          success: false,
+          message: 'ℹ️ Nada para compactar (apenas 2 mensagens recentes)'
+        };
       }
 
-      // Validar tamanho do resumo (limite de 50KB para evitar problemas no DB)
+      if (this.config.debug) {
+        console.log(`[handleCompactCommand] Dividing: ${messagesToSummarize.length} to summarize + ${lastTwoMessages.length} complete`);
+      }
+
+      // GENERATE SUMMARY
+      const summary = await this.generateSummary(messagesToSummarize);
+
+      // CALCULATE SAVINGS
+      const savings = this.calculateSavings(messagesToSummarize, summary);
+
+      // GET LAST SUMMARIZED MESSAGE ID
+      const lastSummarizedMessage = messagesToSummarize[messagesToSummarize.length - 1];
+      const lastSummarizedMessageId = lastSummarizedMessage?.id;
+
+      if (!lastSummarizedMessageId) {
+        await tursoClient.close();
+        throw new Error('A última mensagem resumida não possui um ID para rastreamento.');
+      }
+
+      // VALIDATE SUMMARY SIZE
       const MAX_SUMMARY_SIZE = 50000; // 50KB
       if (summary.length > MAX_SUMMARY_SIZE) {
         await tursoClient.close();
         throw new Error(`Resumo muito grande (${summary.length} chars). Máximo: ${MAX_SUMMARY_SIZE} chars`);
       }
 
-      // Inserir ou atualizar resumo (UPSERT)
+      // SAVE TO DATABASE (UPSERT - replaces old summary)
       await tursoClient.execute(
         `INSERT INTO conversation_summaries
          (user_id, machine_id, summary, summarized_up_to_message_id, message_count, updated_at)
@@ -303,21 +410,21 @@ export class HistorySummarizer {
            summarized_up_to_message_id = excluded.summarized_up_to_message_id,
            updated_at = excluded.updated_at,
            message_count = excluded.message_count`,
-        [userId, machineId, summary, lastMessageId, history.length]
+        [userId, machineId, summary, lastSummarizedMessageId, messagesToSummarize.length]
       );
 
       await tursoClient.close();
 
       if (this.config.debug) {
-        console.log('[handleCompactCommand] ✅ Resumo salvo no Turso');
+        console.log('[handleCompactCommand] ✅ Summary saved to Turso');
       }
 
       return {
         success: true,
-        message: `✅ Histórico compactado! ${history.length} mensagens → resumo de ${summary.length} chars`,
+        message: `✅ Histórico compactado! ${messagesToSummarize.length} mensagens → resumo (${lastTwoMessages.length} mensagens recentes mantidas completas)`,
         summary,
         savings,
-        messageCount: history.length
+        messageCount: messagesToSummarize.length
       };
 
     } catch (error: any) {

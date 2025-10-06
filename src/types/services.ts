@@ -238,6 +238,7 @@ export interface TursoHistoryEntry {
  * Turso Adapter interface
  */
 export interface TursoAdapter {
+  sessionId: string | null;
   isConnected: () => boolean;
   getHistory: (limit: number) => Promise<TursoHistoryEntry[]>;
   addToHistory: (command: string, response: string | null) => Promise<void>;
@@ -275,6 +276,8 @@ export interface BackendConfig {
   isTTY?: boolean;
   web_search_enabled?: boolean;
   firecrawl_api_key?: string;
+  turso_url?: string;
+  turso_token?: string;
   [key: string]: string | boolean | number | undefined;
 }
 

@@ -20,6 +20,7 @@ interface TursoConfig {
   turso_sync_url?: string;
   turso_sync_interval?: number;
   history_mode?: string;
+  user_id?: string;
   debug?: boolean;
   fallback_enabled?: boolean;
   cache_ttl?: number;
@@ -82,6 +83,7 @@ export default class TursoHistoryClient {
       turso_sync_url: config.turso_sync_url || process.env.TURSO_SYNC_URL,
       turso_sync_interval: config.turso_sync_interval || 60,
       history_mode: config.history_mode || 'global',
+      user_id: config.user_id,
       debug: config.debug || false,
       fallback_enabled: config.fallback_enabled !== false,
       cache_ttl: config.cache_ttl || 3600,
@@ -89,7 +91,7 @@ export default class TursoHistoryClient {
 
     this.client = null;
     this.machineId = null;
-    this.userId = null;
+    this.userId = config.user_id || null;
     this.mode = this.config.history_mode || 'global';
     this.sessionId = null;
     this.machineManager = new MachineIdentityManager({

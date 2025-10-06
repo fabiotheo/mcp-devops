@@ -68,71 +68,28 @@ export function useHistoryManager({
         tursoAdapter.current &&
         tursoAdapter.current.isConnected()
       ) {
-        // Load from Turso (user history if user is set, machine history if default)
-        const userHistory = await tursoAdapter.current.getHistory(100); // Get last 100 commands
+        // DON'T load history from previous sessions - start fresh every time
+        // Only keep command history for up/down arrow navigation
+        const userHistory = await tursoAdapter.current.getHistory(100);
         const commands: string[] = [];
 
-        // Store full conversation history (not just commands)
-        const fullConversationHistory: HistoryEntry[] = [];
-
-        // Process history to include both questions and responses
+        // Process ONLY commands (for navigation), NOT for conversation context
         userHistory.forEach((h: TursoHistoryEntry) => {
           if (h.command && h.command.trim()) {
-            // Add the user's command
             commands.push(h.command);
-            fullConversationHistory.push({
-              role: 'user',
-              content: h.command,
-            });
-
-            // Add the response or cancellation marker
-            if (h.status === 'cancelled') {
-              // For cancelled messages, only add to fullConversationHistory for AI context
-              // Don't add to commands array to keep navigation clean
-              fullConversationHistory.push({
-                role: 'assistant',
-                content:
-                  '[Message processing was interrupted - no response generated]',
-              });
-            } else if (h.response && h.response.trim()) {
-              // Add the actual response
-              fullConversationHistory.push({
-                role: 'assistant',
-                content: h.response,
-              });
-            }
           }
         });
 
         // Store command history for navigation (up/down arrows)
         setCommandHistory(commands);
 
-        // Load conversation history to provide context to AI
-        // Preserve any messages from current session and prepend old history
-        setFullHistory((prev: HistoryEntry[]) => {
-          // If there are messages in the current session, keep them
-          // Otherwise, just load the history
-          if (prev && prev.length > 0) {
-            // Current session has messages, prepend history before them
-            return [...fullConversationHistory, ...prev];
-          } else {
-            // No messages in current session, just load history
-            return fullConversationHistory;
-          }
-        });
+        // DON'T load fullHistory - start each session fresh
+        // fullHistory will only contain messages from current session
+        setFullHistory([]);
+
         if (isDebug) {
           console.log(
-            `[Debug] Loaded ${userHistory.length} entries from Turso for user ${user}`,
-          );
-          console.log(
-            `[Debug] Processed into ${commands.length} command history items (including cancellation markers)`,
-          );
-          console.log(
-            `[Debug] Full conversation history has ${fullConversationHistory.length} messages`,
-          );
-          console.log(
-            `[Debug] Full history:`,
-            JSON.stringify(fullConversationHistory, null, 2),
+            `[Debug] Loaded ${commands.length} commands for navigation (no conversation history loaded - fresh session)`,
           );
         }
         return;

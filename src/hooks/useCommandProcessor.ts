@@ -25,21 +25,11 @@ import type { ProgressEvent } from '../ai_orchestrator_bash.js';
 // ============== CONFIGURAÇÃO DE HISTÓRICO ==============
 
 /**
- * Session timeout in milliseconds (10 minutes)
- * If the last message is older than this, the session is considered expired
+ * Number of messages to send to API Claude as context
+ * This is always active within the same session (no timeout)
+ * 10 messages = 5 exchanges (5 questions + 5 answers)
  */
-const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-
-/**
- * Number of messages to include when session is active (< 10 minutes)
- */
-const ACTIVE_HISTORY_COUNT = 10; // 5 exchanges (question + answer)
-
-/**
- * Number of messages to include when session is expired (> 10 minutes)
- * Setting to 0 means start fresh conversation
- */
-const COLD_HISTORY_COUNT = 0; // No history for cold sessions
+const CONTEXT_HISTORY_COUNT = 10;
 
 // ============== INTERFACES E TIPOS ==============
 
@@ -160,6 +150,9 @@ export function useCommandProcessor(
     const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     currentRequestId.current = requestId;
 
+    // Generate temporary ID for user message (will be replaced with Turso ID)
+    const userMessageId = `temp_user_${requestId}`;
+
     // Cancel any previous AI request (but not DB operations)
     if (aiAbortControllerRef.current) {
       aiAbortControllerRef.current.abort();
@@ -223,6 +216,13 @@ export function useCommandProcessor(
           req.tursoId = entryId;
         }
 
+        // Update fullHistory with the real Turso ID
+        if (entryId) {
+          setFullHistory(prev => prev.map(msg =>
+            msg.id === userMessageId ? { ...msg, id: entryId } : msg
+          ));
+        }
+
         if (debug) {
           debug(`[TURSO SAVE] ✓ Question saved to Turso with id: ${entryId}`);
         }
@@ -248,15 +248,25 @@ export function useCommandProcessor(
     // NOTE: commandHistory is now managed in useInputHandler
     // to filter out slash commands. Only real user queries go to history.
 
-    // Add user message to fullHistory
-    setFullHistory(prev => [
-      ...prev,
-      {
-        role: 'user',
-        content: command,
-        timestamp: Date.now(),
-      },
-    ]);
+    // Add user message to fullHistory with memory management
+    // Keep only the last 40 messages to prevent memory issues
+    const MAX_HISTORY_SIZE = 40;
+
+    setFullHistory(prev => {
+      const newHistory = [
+        ...prev,
+        {
+          id: userMessageId,
+          role: 'user' as const,
+          content: command,
+          timestamp: Date.now(),
+        },
+      ];
+      // Keep only the last MAX_HISTORY_SIZE messages
+      return newHistory.length > MAX_HISTORY_SIZE
+        ? newHistory.slice(-MAX_HISTORY_SIZE)
+        : newHistory;
+    });
 
     try {
       if (
@@ -287,43 +297,16 @@ export function useCommandProcessor(
         return;
       }
 
-      // Smart history selection based on session recency
-      let recentHistory: HistoryEntry[] = [];
-      let sessionState: 'active' | 'cold' = 'cold';
-
-      if (fullHistory.length > 0) {
-        // Get the last message timestamp
-        const lastMessage = fullHistory[fullHistory.length - 1];
-        const lastTimestamp = lastMessage.timestamp || 0;
-        const now = Date.now();
-        const timeSinceLastMessage = now - lastTimestamp;
-
-        // Determine if session is active or cold
-        const isSessionActive = timeSinceLastMessage < SESSION_TIMEOUT_MS;
-        sessionState = isSessionActive ? 'active' : 'cold';
-
-        // Select history based on session state
-        const historyCount = isSessionActive ? ACTIVE_HISTORY_COUNT : COLD_HISTORY_COUNT;
-        recentHistory = historyCount > 0 ? fullHistory.slice(-historyCount) : [];
-
-        if (debug) {
-          debug('[CommandProcessor] Session analysis', {
-            sessionState,
-            timeSinceLastMessage: `${Math.round(timeSinceLastMessage / 1000)}s`,
-            sessionTimeout: `${SESSION_TIMEOUT_MS / 1000}s`,
-            totalHistoryLength: fullHistory.length,
-            selectedHistoryLength: recentHistory.length,
-            requestId
-          });
-        }
-      }
+      // Select recent history to send to API
+      // Always send the last CONTEXT_HISTORY_COUNT messages (no timeout logic)
+      const recentHistory: HistoryEntry[] = fullHistory.length > 0
+        ? fullHistory.slice(-CONTEXT_HISTORY_COUNT)
+        : [];
 
       if (debug) {
-        debug('[CommandProcessor] Calling orchestrator', {
-          command,
-          historyLength: fullHistory.length,
-          recentHistoryLength: recentHistory.length,
-          sessionState,
+        debug('[CommandProcessor] Preparing context for API', {
+          totalHistoryInMemory: fullHistory.length,
+          contextToSend: recentHistory.length,
           requestId
         });
       }
@@ -438,15 +421,23 @@ export function useCommandProcessor(
           formatResponse(formattedResponse, debug),
         ]);
 
-        // Add AI response to fullHistory
-        setFullHistory(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: responseContent,
-            timestamp: Date.now(),
-          },
-        ]);
+        // Add AI response to fullHistory with memory management
+        // Use the same Turso entry ID as the question (responses update the same row)
+        setFullHistory(prev => {
+          const newHistory = [
+            ...prev,
+            {
+              id: currentTursoEntryId.current || `temp_assistant_${requestId}`,
+              role: 'assistant' as const,
+              content: responseContent,
+              timestamp: Date.now(),
+            },
+          ];
+          // Keep only the last MAX_HISTORY_SIZE messages
+          return newHistory.length > MAX_HISTORY_SIZE
+            ? newHistory.slice(-MAX_HISTORY_SIZE)
+            : newHistory;
+        });
 
         // Update Turso with the response and status 'completed'
         if (
@@ -488,15 +479,23 @@ export function useCommandProcessor(
         setResponse(timeoutMsg);
         // Command was already added at the start, only add timeout message
         setHistory(prev => [...prev, timeoutMsg, '─'.repeat(80)]);
-        setFullHistory(prev => [...prev, {
-          role: 'user' as const,
-          content: command,
-          timestamp: Date.now()
-        }, {
-          role: 'assistant' as const,
-          content: timeoutMsg,
-          timestamp: Date.now()
-        }]);
+        setFullHistory(prev => {
+          const newHistory = [...prev, {
+            id: userMessageId,
+            role: 'user' as const,
+            content: command,
+            timestamp: Date.now()
+          }, {
+            id: `timeout_${requestId}`,
+            role: 'assistant' as const,
+            content: timeoutMsg,
+            timestamp: Date.now()
+          }];
+          // Keep only the last MAX_HISTORY_SIZE messages
+          return newHistory.length > MAX_HISTORY_SIZE
+            ? newHistory.slice(-MAX_HISTORY_SIZE)
+            : newHistory;
+        });
       }
     } catch (err) {
       const error = err as Error;

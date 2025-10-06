@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 // Import Context and Provider
 import { AppProvider, useAppContext } from './contexts/AppContext.js';
-import type { BackendConfig } from './types/services.js';
+import type { BackendConfig, HistoryEntry } from './types/services.js';
 
 // Import hooks
 import { useRequestManager } from './hooks/useRequestManager.js';
@@ -108,6 +108,9 @@ const MCPInkAppInner: React.FC = () => {
     () => createDebugLogger(config.isDebug || false),
     [config.isDebug]
   );
+
+  // Session ID from tursoAdapter (don't create a new one!)
+  const sessionId = tursoAdapter.current?.sessionId || null;
 
   // Command selector state - for showing slash commands menu
   const [showCommandSelector, setShowCommandSelector] = React.useState(false);
@@ -417,7 +420,9 @@ const MCPInkAppInner: React.FC = () => {
               // Criar instância do summarizer
               const summarizer = new HistorySummarizer({
                 apiKey,
-                debug: debugMode
+                debug: debugMode,
+                turso_url: configData.turso_url,
+                turso_token: configData.turso_token
               });
 
               // Obter machine_id com tratamento específico
@@ -429,36 +434,32 @@ const MCPInkAppInner: React.FC = () => {
                 throw new Error(`Falha ao obter ID da máquina: ${machineError.message}`);
               }
 
-              // Converter histórico para formato com IDs
-              // Filtrar mensagens 'system' pois não fazem parte da conversa do usuário
-              const historyWithIds = fullHistory
-                .filter(entry => entry.role !== 'system')
-                .map(entry => ({
-                  ...entry,
-                  id: entry.id || randomUUID(),
-                  role: entry.role as 'user' | 'assistant'
-                }));
+              // Verificar se temos sessionId
+              if (!sessionId) {
+                throw new Error('Session ID não disponível. Tente novamente após fazer uma pergunta.');
+              }
 
-              // Executar compactação
+              // Executar compactação com sessionId e histórico atual
               const result = await summarizer.handleCompactCommand(
-                historyWithIds,
                 currentUser,
-                machineId
+                machineId,
+                sessionId,
+                fullHistory // Pass current session history from memory
               );
 
               if (result.success && result.savings) {
                 // Mostrar resultado com verificação explícita de savings
                 const successMsg = `${result.message}\n\n📊 Estatísticas:\n- Redução: ${result.savings.percentReduction}%\n- Tokens economizados: ~${result.savings.estimatedTokensSaved}\n- Original: ${result.savings.originalChars} chars\n- Resumo: ${result.savings.summaryChars} chars`;
                 setResponse(successMsg);
-                setHistory([...history.slice(0, -1), formatResponse(successMsg, debug)]);
+                setHistory([...history, `❯ ${command}`, formatResponse(successMsg, debug)]);
               } else {
                 setResponse(result.message);
-                setHistory([...history.slice(0, -1), formatResponse(result.message, debug)]);
+                setHistory([...history, `❯ ${command}`, formatResponse(result.message, debug)]);
               }
             } catch (error: any) {
               const errMsg = `❌ Erro ao compactar: ${error.message}`;
               setResponse(errMsg);
-              setHistory([...history.slice(0, -1), formatResponse(errMsg, debug)]);
+              setHistory([...history, `❯ ${command}`, formatResponse(errMsg, debug)]);
             }
           })();
           break;
@@ -828,7 +829,7 @@ const MCPInkAppInner: React.FC = () => {
         // Render MultilineInput - handles typing and text editing
         // Note: ESC and Ctrl+C are handled by global useInput hook above
         React.createElement(MultilineInput, {
-          value: input,
+          value: isProcessing ? '' : input, // Clear input text during processing
           onChange: setInput,
           placeholder: isProcessing ? '' : 'Type your question or / for commands...',
           showCursor: !isProcessing, // Hide cursor during processing

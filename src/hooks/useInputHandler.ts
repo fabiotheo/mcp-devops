@@ -243,6 +243,12 @@ export function useInputHandler({
       // Force re-enable bracketed paste mode after clearing input
       enableBracketedPasteMode(isTTY, false);
     } else if (key.upArrow) {
+      // CRITICAL FIX: Don't navigate history when CommandSelector is active
+      // Let the Select component handle arrow navigation
+      if (showCommandSelector) {
+        return;
+      }
+
       // Navigate history up
       if (isDebug) {
         debug('History navigation UP', {
@@ -267,6 +273,12 @@ export function useInputHandler({
         setCursorPosition(historyText.length); // Move cursor to end
       }
     } else if (key.downArrow) {
+      // CRITICAL FIX: Don't navigate history when CommandSelector is active
+      // Let the Select component handle arrow navigation
+      if (showCommandSelector) {
+        return;
+      }
+
       // Navigate history down
       // Filter out ESC markers from navigation
       const navigableHistory = commandHistory.filter(

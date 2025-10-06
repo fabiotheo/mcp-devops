@@ -43,6 +43,10 @@ export interface TursoAdapterOptions {
   userId?: string;
   /** Caminho customizado para o cliente Turso */
   tursoClientPath?: string;
+  /** URL do banco de dados Turso */
+  turso_url?: string;
+  /** Token de autenticação do Turso */
+  turso_token?: string;
 }
 
 /**
@@ -152,6 +156,9 @@ class TursoAdapter {
   private initialized: boolean;
   private enabled: boolean;
 
+  private tursoUrl?: string;
+  private tursoToken?: string;
+
   constructor(options: TursoAdapterOptions = {}) {
     this.debug = options.debug || false;
     this.userId = options.userId || 'default';
@@ -166,6 +173,9 @@ class TursoAdapter {
     this.tursoClient = null;
     this.initialized = false;
     this.enabled = false;
+    // Store credentials if provided
+    this.tursoUrl = options.turso_url;
+    this.tursoToken = options.turso_token;
   }
 
   /**
@@ -201,9 +211,23 @@ class TursoAdapter {
       const TursoHistoryClient = module.default || module.TursoHistoryClient;
       debugLog('[TursoAdapter] Turso client module loaded', { hasDefault: !!module.default, hasNamed: !!module.TursoHistoryClient }, this.debug);
 
-      // Load configuration
+      // Load configuration - use credentials from constructor if available, otherwise from file
       debugLog('[TursoAdapter] Loading configuration...', {}, this.debug);
-      const config: TursoConfig = JSON.parse(await fs.readFile(this.configPath, 'utf8'));
+      let config: TursoConfig;
+
+      if (this.tursoUrl && this.tursoToken) {
+        // Use credentials passed via constructor
+        debugLog('[TursoAdapter] Using credentials from constructor', {}, this.debug);
+        config = {
+          turso_url: this.tursoUrl,
+          turso_token: this.tursoToken,
+        };
+      } else {
+        // Load from config file
+        debugLog('[TursoAdapter] Loading credentials from config file', {}, this.debug);
+        config = JSON.parse(await fs.readFile(this.configPath, 'utf8'));
+      }
+
       debugLog('[TursoAdapter] Configuration loaded', {
         hasTursoUrl: !!config.turso_url,
         hasTursoToken: !!config.turso_token,
@@ -853,6 +877,14 @@ class TursoAdapter {
    */
   isInitialized(): boolean {
     return this.initialized;
+  }
+
+  /**
+   * Get the current session ID from the Turso client
+   * @returns Session ID or null if not available
+   */
+  get sessionId(): string | null {
+    return this.tursoClient?.sessionId || null;
   }
 }
 

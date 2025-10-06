@@ -2,7 +2,7 @@
 // ~/.mcp-terminal/setup.js
 
 import fs from 'fs/promises';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import readline from 'node:readline';
@@ -665,11 +665,24 @@ class MCPSetup {
     };
     
     try {
-      execSync(installCommands[packageManager], { 
+      execSync(installCommands[packageManager], {
         stdio: 'inherit',
         cwd: projectDir
       });
       console.log('✅ Dependências instaladas');
+
+      // Se estiver usando pnpm, aprovar build scripts do esbuild
+      if (packageManager === 'pnpm') {
+        try {
+          execSync('pnpm approve-builds', {
+            stdio: 'inherit',
+            cwd: projectDir
+          });
+          console.log('✅ Build scripts aprovados');
+        } catch (error) {
+          console.log('  ℹ️  Aprovação de builds não necessária ou já concluída');
+        }
+      }
     } catch (error) {
       throw new Error(`Falha ao instalar dependências com ${packageManager}`);
     }
@@ -696,11 +709,24 @@ class MCPSetup {
     // Agora instalar dependências no destino (~/.mcp-terminal)
     console.log('\n📦 Instalando dependências no diretório de instalação...');
     try {
-      execSync(installCommands[packageManager], { 
+      execSync(installCommands[packageManager], {
         stdio: 'inherit',
         cwd: this.mcpDir
       });
       console.log('✅ Dependências instaladas no destino');
+
+      // Se estiver usando pnpm, aprovar build scripts do esbuild
+      if (packageManager === 'pnpm') {
+        try {
+          execSync('pnpm approve-builds', {
+            stdio: 'inherit',
+            cwd: this.mcpDir
+          });
+          console.log('✅ Build scripts aprovados no destino');
+        } catch (error) {
+          console.log('  ℹ️  Aprovação de builds não necessária ou já concluída');
+        }
+      }
     } catch (error) {
       console.log('  ⚠ Tentando com --legacy-peer-deps...');
       try {

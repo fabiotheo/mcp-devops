@@ -266,15 +266,18 @@ export async function createPatternMatcher(): Promise<PatternMatcher> {
 /**
  * Initialize Turso adapter
  * @param user - User identifier
+ * @param config - Configuration object with Turso credentials
  * @param isDebug - Whether debug mode is enabled
  * @returns Turso adapter instance or null
  */
-export async function createTursoAdapter(user: string, isDebug: boolean = false): Promise<TursoAdapter> {
+export async function createTursoAdapter(user: string, config: BackendConfig, isDebug: boolean = false): Promise<TursoAdapter> {
   debugLog('[createTursoAdapter] Creating adapter', { user, isDebug }, isDebug);
 
   const tursoAdapter = new TursoAdapterImpl({
     debug: isDebug,
     userId: user,
+    turso_url: config.turso_url,
+    turso_token: config.turso_token,
   });
 
   try {
@@ -348,7 +351,7 @@ export async function initializeBackend({
     const patternMatcher = await createPatternMatcher();
 
     // Initialize Turso adapter
-    const tursoAdapter = await createTursoAdapter(user, isDebug);
+    const tursoAdapter = await createTursoAdapter(user, config, isDebug);
 
     onStatusChange('ready');
 

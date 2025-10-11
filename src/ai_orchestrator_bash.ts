@@ -185,13 +185,27 @@ class BashSession extends EventEmitter {
     });
 
     this.process.stdout.on('data', (data: Buffer) => {
-      this.outputBuffer += data.toString();
-      this.emit('output', data.toString());
+      // Proteção contra buffer overflow - limitar tamanho acumulado
+      if (this.outputBuffer.length < this.config.maxOutputSize) {
+        this.outputBuffer += data.toString();
+        this.emit('output', data.toString());
+      } else if (this.outputBuffer.length === this.config.maxOutputSize) {
+        // Adicionar mensagem de truncamento uma única vez
+        this.outputBuffer += '\n\n... [Output truncated - exceeds maxOutputSize]';
+      }
+      // Se já passou do limite, ignora novos dados silenciosamente
     });
 
     this.process.stderr.on('data', (data: Buffer) => {
-      this.errorBuffer += data.toString();
-      this.emit('error', data.toString());
+      // Proteção contra buffer overflow - limitar tamanho acumulado
+      if (this.errorBuffer.length < this.config.maxOutputSize) {
+        this.errorBuffer += data.toString();
+        this.emit('error', data.toString());
+      } else if (this.errorBuffer.length === this.config.maxOutputSize) {
+        // Adicionar mensagem de truncamento uma única vez
+        this.errorBuffer += '\n\n... [Error output truncated - exceeds maxOutputSize]';
+      }
+      // Se já passou do limite, ignora novos dados silenciosamente
     });
 
     this.process.on('close', (code: number | null) => {
@@ -263,14 +277,17 @@ class BashSession extends EventEmitter {
   }
 
   async execute(command: string): Promise<BashExecutionResult> {
+    // Reescrever comando para proteção contra leitura de arquivos grandes
+    const safeCommand = this.rewriteSafeCommand(command);
+
     // Validação de segurança
-    const validation = this.validateCommand(command);
+    const validation = this.validateCommand(safeCommand);
     if (!validation.valid) {
       throw new Error(`Comando bloqueado: ${validation.reason}`);
     }
 
     // Executar comando
-    const result = await this.executeInternal(command);
+    const result = await this.executeInternal(safeCommand);
 
     // Truncar saída se necessário
     if (result.combined.length > this.config.maxOutputSize) {
@@ -280,6 +297,69 @@ class BashSession extends EventEmitter {
     }
 
     return result;
+  }
+
+  /**
+   * Reescreve comandos potencialmente perigosos para versões seguras
+   * Protege contra leitura de arquivos gigantes ou streams infinitos
+   *
+   * SECURITY LAYERS:
+   * 1. Reescreve cat/less/more para usar head (limita leitura)
+   * 2. Bloqueia streams infinitos (tail -f, /dev/zero, /dev/random)
+   * 3. Bloqueia grep recursivo (pode ler gigabytes)
+   * 4. Bloqueia find -exec com comandos de leitura
+   * 5. Alerta sobre wildcards (expansão pode gerar muitos arquivos)
+   */
+  private rewriteSafeCommand(command: string): string {
+    // IMPORTANTE: Ordem dos checks importa! Checks específicos devem vir ANTES dos genéricos
+
+    // 1. BLOQUEAR tail -f (stream infinito)
+    if (/\btail\s+-f\b/.test(command)) {
+      return `echo "❌ Erro: tail -f não é permitido (roda infinitamente). Use: tail -n 100 arquivo"`;
+    }
+
+    // 2. BLOQUEAR /dev/zero, /dev/random, /dev/urandom (stream infinito)
+    if (/\b(cat|head|tail|less|more)\s+.*\/dev\/(zero|random|urandom)/.test(command)) {
+      return `echo "❌ Erro: leitura de /dev/zero, /dev/random ou /dev/urandom não é permitida"`;
+    }
+
+    // 3. BLOQUEAR grep recursivo (pode ler gigabytes de logs)
+    if (/\bgrep\s+.*(-r|-R|--recursive)/.test(command)) {
+      return `echo "❌ Erro: grep recursivo (-r, -R, --recursive) não é permitido por razões de performance. Especifique os arquivos."`;
+    }
+
+    // 4. BLOQUEAR find -exec com comandos de leitura (bypass da proteção)
+    if (/\bfind\b.*-exec\s+(cat|less|more|head|tail|grep)/.test(command)) {
+      return `echo "❌ Erro: 'find -exec' com comandos de leitura não é permitido (pode ler muitos arquivos)."`;
+    }
+
+    // 5. ALERTAR sobre wildcards (expansão pode gerar centenas de arquivos)
+    // DEVE vir ANTES do check de cat/less/more genérico
+    if (/\b(cat|less|more|head|tail)\b.*[*?]/.test(command)) {
+      return `echo "⚠️  Aviso: Wildcards detectados. Se houver muitos arquivos, o comando pode demorar ou consumir muita memória. Considere especificar arquivos individuais."`;
+    }
+
+    // 6. PROTEGER cat/less/more (detecta flags, preserva quotes)
+    // DEVE ser o ÚLTIMO check para não interceptar casos específicos acima
+    // Exemplo: cat -n "file.log" → head -n 1000 -n "file.log" | head -c 100000
+    const fileReadRegex = /^\s*(cat|less|more)\s+(.+)$/;
+    const match = command.match(fileReadRegex);
+
+    if (match) {
+      const cmdName = match[1];
+      const args = match[2].trim();
+
+      // Rejeitar se já tiver pipes/redirects (deixar validação normal lidar)
+      if (args.includes('|') || args.includes('>') || args.includes('<') || args.includes(';') || args.includes('&')) {
+        return command; // Não reescrever, deixar validateCommand bloquear se necessário
+      }
+
+      // Reescrever para versão segura (preserva flags, quotes e argumentos)
+      return `head -n 1000 ${args} | head -c 100000`;
+    }
+
+    // Comando seguro, retornar original
+    return command;
   }
 
   validateCommand(command: string): CommandValidation {
@@ -343,8 +423,8 @@ export default class AICommandOrchestratorBash {
   constructor(aiModel: AIModel, config: OrchestratorConfig = {}) {
     this.ai = aiModel;
     this.config = {
-      maxIterations: config.maxIterations || 10,
-      maxExecutionTime: config.maxExecutionTime || 60000,
+      maxIterations: config.maxIterations || 20,
+      maxExecutionTime: config.maxExecutionTime || 180000,
       verboseLogging: config.verboseLogging || false,
       enableBash: config.enableBash !== false,
       bashConfig: config.bashConfig || {},

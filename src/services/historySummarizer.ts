@@ -14,38 +14,54 @@ import TursoHistoryClient from '../libs/turso-client.js';
 /**
  * Prompt usado para gerar resumos de histórico
  *
- * Instruções específicas para preservar informações técnicas essenciais:
- * - Comandos executados
- * - Paths e diretórios
- * - Decisões técnicas
- * - Erros e soluções
+ * Foco em AÇÕES, DECISÕES e RESULTADOS, não em comandos técnicos.
+ * Formato Markdown estruturado para melhor legibilidade.
  */
-const SUMMARY_PROMPT = `Você é um assistente técnico especializado em resumir conversas sobre comandos de terminal Linux/Unix.
+const SUMMARY_PROMPT = `Você é um assistente técnico especializado em resumir conversas sobre terminal Linux/Unix.
 
-Sua tarefa é criar um resumo CONCISO e TÉCNICO da conversa abaixo, preservando:
+Crie um resumo em **Markdown estruturado** focando no que ACONTECEU, não nos comandos usados.
 
-1. **Comandos importantes** executados ou discutidos
-2. **Paths e diretórios** mencionados
-3. **Decisões técnicas** tomadas
-4. **Problemas encontrados** e suas soluções
-5. **Contexto do projeto** (nome, tecnologias, estrutura)
+**O que incluir (em ordem de prioridade):**
+1. **AÇÕES EXECUTADAS** - Arquivos criados/deletados/modificados, instalações, configurações
+2. **DECISÕES TOMADAS** - Escolhas técnicas importantes feitas
+3. **PROBLEMAS RESOLVIDOS** - Erros encontrados e suas soluções
+4. **CONTEXTO IMPORTANTE** - Paths, projetos, estruturas mencionadas
+5. **RESULTADOS** - O que foi alcançado (espaço liberado, bugs corrigidos, etc.)
 
-**Formato do resumo:**
-- Use bullets (•) para listar itens
-- Máximo de 10-15 linhas
-- Foco em informações que seriam úteis para continuar a conversa
-- Omita saudações, confirmações genéricas e conversas não técnicas
+**O que NÃO incluir:**
+- ❌ Comandos específicos (du, ls, rm) - foque no resultado, não no comando
+- ❌ Saudações ou conversas genéricas
+- ❌ Perguntas sem resposta ou informações incompletas
 
-**Exemplo de bom resumo:**
-• Projeto: mcp-devops (CLI terminal assistant)
-• Estrutura: src/services/, src/libs/, tests/
-• Implementou tabela conversation_summaries no Turso
-• Criou types em src/types/history.ts (HistoryEntry, HistoryRecord)
-• Testes: 10/10 passando em test-phase1-types-only.js
-• Correções: centralizou schema SQL, adicionou NOT NULL a machine_id
-• Próximo: implementar serviço de resumo (Fase 2)
+**Formato Markdown (obrigatório):**
+- Use \`##\` para título principal (tema da conversa)
+- Use \`**Negrito**\` para destacar ações/decisões importantes
+- Use listas com \`-\` (hífen), não \`•\` (bullet)
+- Use \`\` para paths, nomes de arquivos e valores técnicos
+- Máximo 12-15 linhas
 
-Agora resuma a conversa abaixo seguindo essas diretrizes:`;
+**Exemplo de BOM resumo:**
+
+## Limpeza de Espaço - Downloads
+
+**Contexto**: Análise da pasta \`downloads/\` (2,6 GB total)
+
+**Maiores pastas identificadas**:
+- \`ADMINISTRATIVO\` (394 MB)
+- \`dawq0SEBnBce\` (300 MB)
+- \`sicoob-db\` (224 MB)
+
+**Ação Executada**:
+Deletados 3 vídeos de \`ADMINISTRATIVO\` datados de 17/01/2025:
+- \`VIDEO_APRESENTACAO_APP_CONSUFOR.mp4\` (278 MB)
+- \`REUNIAO_PREFEITURA.mp4\` (97 MB)
+- \`IMG_7726.MOV\` (18 MB)
+
+**Resultado**: Liberados 393 MB de espaço
+
+---
+
+Agora resuma a conversa abaixo seguindo EXATAMENTE esse formato:`;
 
 /**
  * Configuração do cliente Anthropic
